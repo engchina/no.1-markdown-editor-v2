@@ -12,6 +12,7 @@ Build the world's best Markdown editor.
 4. Support `Windows`, `macOS`, and `Linux`.
 5. Support `Japanese`, `English`, and `Chinese`.
 6. Choose the technology stack that is best suited to achieve the goals above, with strong bias toward product quality, maintainability, performance, and cross-platform consistency.
+7. 'references' folder contains the references for the product. You may study them and understand the product before making any changes. But you must not copy them and modify them directly. 
 
 ## Decision Standard
 
