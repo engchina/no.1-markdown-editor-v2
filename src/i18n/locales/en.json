@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "No.1 Markdown Editor",
+    "untitled": "Untitled"
+  },
+  "menu": {
+    "file": "File",
+    "edit": "Edit",
+    "view": "View",
+    "help": "Help",
+    "newFile": "New File",
+    "openFile": "Open File",
+    "saveFile": "Save",
+    "saveAs": "Save As",
+    "closeFile": "Close",
+    "recentFiles": "Recent Files",
+    "preferences": "Preferences",
+    "quit": "Quit"
+  },
+  "toolbar": {
+    "new": "New",
+    "open": "Open",
+    "save": "Save",
+    "bold": "Bold",
+    "italic": "Italic",
+    "strikethrough": "Strikethrough",
+    "code": "Inline Code",
+    "codeBlock": "Code Block",
+    "quote": "Blockquote",
+    "link": "Link",
+    "image": "Image",
+    "table": "Table",
+    "hr": "Horizontal Rule",
+    "ul": "Unordered List",
+    "ol": "Ordered List",
+    "task": "Task List",
+    "h1": "Heading 1",
+    "h2": "Heading 2",
+    "h3": "Heading 3",
+    "toggleSidebar": "Toggle Sidebar",
+    "viewMode": "View Mode",
+    "theme": "Toggle Theme",
+    "focusMode": "Focus Mode",
+    "typewriterMode": "Typewriter Mode"
+  },
+  "viewMode": {
+    "source": "Source",
+    "split": "Split",
+    "preview": "Preview",
+    "focus": "Focus"
+  },
+  "sidebar": {
+    "files": "Files",
+    "outline": "Outline",
+    "search": "Search",
+    "noOutline": "No headings found",
+    "noFiles": "No folder opened",
+    "openFolder": "Open Folder"
+  },
+  "statusbar": {
+    "words": "{{count}} words",
+    "chars": "{{count}} chars",
+    "lines": "Line {{line}}, Col {{col}}",
+    "encoding": "UTF-8",
+    "language": "Markdown"
+  },
+  "dialog": {
+    "unsavedChanges": "Unsaved Changes",
+    "unsavedMessage": "Do you want to save changes to \"{{name}}\"?",
+    "save": "Save",
+    "dontSave": "Don't Save",
+    "cancel": "Cancel"
+  },
+  "placeholder": "Start writing in Markdown...\n\n# Hello, World!\n\nThis is **No.1 Markdown Editor** — fast, beautiful, free forever."
+}

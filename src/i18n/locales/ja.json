@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "No.1 Markdownエディタ",
+    "untitled": "無題"
+  },
+  "menu": {
+    "file": "ファイル",
+    "edit": "編集",
+    "view": "表示",
+    "help": "ヘルプ",
+    "newFile": "新規ファイル",
+    "openFile": "ファイルを開く",
+    "saveFile": "保存",
+    "saveAs": "名前を付けて保存",
+    "closeFile": "閉じる",
+    "recentFiles": "最近のファイル",
+    "preferences": "設定",
+    "quit": "終了"
+  },
+  "toolbar": {
+    "new": "新規",
+    "open": "開く",
+    "save": "保存",
+    "bold": "太字",
+    "italic": "斜体",
+    "strikethrough": "取り消し線",
+    "code": "インラインコード",
+    "codeBlock": "コードブロック",
+    "quote": "引用",
+    "link": "リンク",
+    "image": "画像",
+    "table": "テーブル",
+    "hr": "水平線",
+    "ul": "箇条書きリスト",
+    "ol": "番号付きリスト",
+    "task": "タスクリスト",
+    "h1": "見出し1",
+    "h2": "見出し2",
+    "h3": "見出し3",
+    "toggleSidebar": "サイドバー切替",
+    "viewMode": "表示モード",
+    "theme": "テーマ切替",
+    "focusMode": "フォーカスモード",
+    "typewriterMode": "タイプライターモード"
+  },
+  "viewMode": {
+    "source": "ソース",
+    "split": "分割",
+    "preview": "プレビュー",
+    "focus": "フォーカス"
+  },
+  "sidebar": {
+    "files": "ファイル",
+    "outline": "アウトライン",
+    "search": "検索",
+    "noOutline": "見出しが見つかりません",
+    "noFiles": "フォルダが開かれていません",
+    "openFolder": "フォルダを開く"
+  },
+  "statusbar": {
+    "words": "{{count}}語",
+    "chars": "{{count}}文字",
+    "lines": "{{line}}行 {{col}}列",
+    "encoding": "UTF-8",
+    "language": "Markdown"
+  },
+  "dialog": {
+    "unsavedChanges": "未保存の変更",
+    "unsavedMessage": "「{{name}}」の変更を保存しますか？",
+    "save": "保存",
+    "dontSave": "保存しない",
+    "cancel": "キャンセル"
+  },
+  "placeholder": "Markdownで書き始めましょう...\n\n# こんにちは、世界！\n\nこれは **No.1 Markdownエディタ** です — 高速・美しい・永遠無料。"
+}

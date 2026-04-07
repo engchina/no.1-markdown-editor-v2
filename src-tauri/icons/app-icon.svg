@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="paper" x1="64" y1="56" x2="448" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF8"/>
+      <stop offset="1" stop-color="#F1E6D6"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="64" y1="40" x2="448" y2="88" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C94D2C"/>
+      <stop offset="1" stop-color="#E47A4A"/>
+    </linearGradient>
+    <filter id="shadow" x="28" y="28" width="456" height="456" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#6B4B3B" flood-opacity=".18"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="120" fill="#E7D8C4"/>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="40" width="432" height="432" rx="104" fill="url(#paper)"/>
+    <rect x="40" y="40" width="432" height="64" rx="104" fill="url(#accent)"/>
+    <path d="M40 104H472V144H40V104Z" fill="#E47A4A"/>
+    <circle cx="90" cy="92" r="12" fill="#FFF3E6"/>
+    <circle cx="128" cy="92" r="12" fill="#F7D1BD"/>
+    <circle cx="166" cy="92" r="12" fill="#F2B397"/>
+  </g>
+
+  <path d="M124 364V164H184L256 301L328 164H388V364H341V238L283 345H229L171 238V364H124Z" fill="#191919"/>
+  <rect x="402" y="174" width="18" height="188" rx="9" fill="#D45734"/>
+</svg>

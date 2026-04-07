@@ -1,0 +1,32 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+*.tsbuildinfo

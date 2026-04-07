@@ -1,0 +1,5 @@
+[build]
+# Windows file scanners can briefly lock Rust object files during highly
+# parallel builds. Keep the Tauri crate serialized until the environment
+# is hardened with exclusions or a separate target directory policy.
+jobs = 1

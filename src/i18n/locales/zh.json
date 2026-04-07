@@ -1,0 +1,75 @@
+{
+  "app": {
+    "name": "No.1 Markdown编辑器",
+    "untitled": "无标题"
+  },
+  "menu": {
+    "file": "文件",
+    "edit": "编辑",
+    "view": "视图",
+    "help": "帮助",
+    "newFile": "新建文件",
+    "openFile": "打开文件",
+    "saveFile": "保存",
+    "saveAs": "另存为",
+    "closeFile": "关闭",
+    "recentFiles": "最近文件",
+    "preferences": "偏好设置",
+    "quit": "退出"
+  },
+  "toolbar": {
+    "new": "新建",
+    "open": "打开",
+    "save": "保存",
+    "bold": "粗体",
+    "italic": "斜体",
+    "strikethrough": "删除线",
+    "code": "行内代码",
+    "codeBlock": "代码块",
+    "quote": "引用",
+    "link": "链接",
+    "image": "图片",
+    "table": "表格",
+    "hr": "分隔线",
+    "ul": "无序列表",
+    "ol": "有序列表",
+    "task": "任务列表",
+    "h1": "标题1",
+    "h2": "标题2",
+    "h3": "标题3",
+    "toggleSidebar": "切换侧边栏",
+    "viewMode": "视图模式",
+    "theme": "切换主题",
+    "focusMode": "专注模式",
+    "typewriterMode": "打字机模式"
+  },
+  "viewMode": {
+    "source": "源码",
+    "split": "分屏",
+    "preview": "预览",
+    "focus": "专注"
+  },
+  "sidebar": {
+    "files": "文件",
+    "outline": "大纲",
+    "search": "搜索",
+    "noOutline": "未找到标题",
+    "noFiles": "未打开文件夹",
+    "openFolder": "打开文件夹"
+  },
+  "statusbar": {
+    "words": "{{count}} 词",
+    "chars": "{{count}} 字符",
+    "lines": "第 {{line}} 行，第 {{col}} 列",
+    "encoding": "UTF-8",
+    "language": "Markdown"
+  },
+  "dialog": {
+    "unsavedChanges": "未保存的更改",
+    "unsavedMessage": "是否保存对「{{name}}」的更改？",
+    "save": "保存",
+    "dontSave": "不保存",
+    "cancel": "取消"
+  },
+  "placeholder": "开始用 Markdown 写作...\n\n# 你好，世界！\n\n这是 **No.1 Markdown编辑器** — 快速、美观、永久免费。"
+}
