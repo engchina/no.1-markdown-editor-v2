@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useActiveTab } from '../store/editor'
+import { renderClipboardHtmlFromMarkdown } from '../lib/clipboardHtml'
 import { pushErrorNotice, pushSuccessNotice } from '../lib/notices'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -159,7 +160,7 @@ export function useExport() {
 
     try {
       const mermaidTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'default'
-      const { bodyHtml } = await buildExportHtml(activeTab.content, activeTab.name, mermaidTheme)
+      const bodyHtml = await renderClipboardHtmlFromMarkdown(activeTab.content, mermaidTheme)
 
       let copied = false
       try {

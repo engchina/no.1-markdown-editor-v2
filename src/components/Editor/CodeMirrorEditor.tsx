@@ -17,6 +17,7 @@ import {
 import { applyFormat } from './formatCommands'
 import { getFormatActionFromShortcut } from './formatShortcuts'
 import { clipboardHasType, readClipboardString } from '../../lib/clipboard'
+import { buildPlainTextClipboardHtml, renderClipboardHtmlFromMarkdown } from '../../lib/clipboardHtml'
 import {
   buildRelativeMarkdownImagePath,
   DEFAULT_MARKDOWN_IMAGE_DIRECTORY,
@@ -313,10 +314,16 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       if (mod && event.key === 'f') {
         event.preventDefault()
         openSearchPanel(false)
+        return
       }
       if (mod && event.key === 'h') {
         event.preventDefault()
         openSearchPanel(true)
+        return
+      }
+      if (event.key === 'Escape' && searchOpen) {
+        event.preventDefault()
+        setSearchOpen(false)
       }
     }
 
@@ -325,13 +332,30 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       openSearchPanel(detail.replace)
     }
 
+    const onSearchCloseRequested = () => {
+      setSearchOpen(false)
+    }
+
     document.addEventListener('keydown', onKeyDown)
     document.addEventListener('editor:search', onSearchRequested)
+    document.addEventListener('editor:search-close', onSearchCloseRequested)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
       document.removeEventListener('editor:search', onSearchRequested)
+      document.removeEventListener('editor:search-close', onSearchCloseRequested)
     }
-  }, [openSearchPanel])
+  }, [openSearchPanel, searchOpen])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || !searchSupport) return
+
+    if (searchOpen) {
+      searchSupport.openPanel(view)
+    } else {
+      searchSupport.closePanel(view)
+    }
+  }, [searchOpen, searchSupport])
 
   useEffect(() => {
     if (!pendingNavigation || pendingNavigation.tabId !== activeTab?.id) return
@@ -359,6 +383,14 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
+
+    const handleCopy = (event: ClipboardEvent) => {
+      void handleCopyOrCut(event, 'copy')
+    }
+
+    const handleCut = (event: ClipboardEvent) => {
+      void handleCopyOrCut(event, 'cut')
+    }
 
     const handlePaste = async (event: ClipboardEvent) => {
       const view = viewRef.current
@@ -403,8 +435,62 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       replaceSelectionWithMarkdown(view, markdownText)
     }
 
+    const handleCopyOrCut = async (event: ClipboardEvent, mode: 'copy' | 'cut') => {
+      const view = viewRef.current
+      if (!view) return
+
+      const target = event.target
+      if (!(target instanceof Node) || !view.dom.contains(target)) return
+      if (view.state.selection.ranges.length !== 1) return
+
+      const selection = view.state.selection.main
+      if (selection.empty) return
+
+      const markdownText = view.state.sliceDoc(selection.from, selection.to)
+      const fallbackCopied = writeClipboardEventFallback(event, markdownText)
+      event.preventDefault()
+
+      const applyCut = () => {
+        view.dispatch({
+          changes: { from: selection.from, to: selection.to, insert: '' },
+          selection: { anchor: selection.from },
+        })
+      }
+
+      if (mode === 'cut' && fallbackCopied) {
+        applyCut()
+      }
+
+      try {
+        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return
+
+        const mermaidTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'default'
+        const html = await renderClipboardHtmlFromMarkdown(markdownText, mermaidTheme)
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([markdownText], { type: 'text/plain' }),
+          }),
+        ])
+
+        if (mode === 'cut' && !fallbackCopied) {
+          applyCut()
+        }
+      } catch (error) {
+        if (!fallbackCopied) {
+          console.error(`${mode} clipboard write error:`, error)
+        }
+      }
+    }
+
+    container.addEventListener('copy', handleCopy)
+    container.addEventListener('cut', handleCut)
     container.addEventListener('paste', handlePaste)
-    return () => container.removeEventListener('paste', handlePaste)
+    return () => {
+      container.removeEventListener('copy', handleCopy)
+      container.removeEventListener('cut', handleCut)
+      container.removeEventListener('paste', handlePaste)
+    }
   }, [activeTab?.path])
 
   useEffect(() => {
@@ -519,4 +605,13 @@ async function fileToBase64Markdown(file: File): Promise<string> {
     reader.onload = (event) => resolve(`![${altText}](${event.target?.result as string})`)
     reader.readAsDataURL(file)
   })
+}
+
+function writeClipboardEventFallback(event: ClipboardEvent, markdownText: string): boolean {
+  const clipboardData = event.clipboardData
+  if (!clipboardData) return false
+
+  clipboardData.setData('text/plain', markdownText)
+  clipboardData.setData('text/html', buildPlainTextClipboardHtml(markdownText))
+  return true
 }
