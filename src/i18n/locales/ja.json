@@ -107,6 +107,7 @@
     "close": "閉じる (Esc)",
     "noMatches": "一致がありません",
     "matches": "{{count}} 件一致",
+    "selectAll": "すべて",
     "replaceOne": "置換",
     "replaceAll": "すべて"
   },
@@ -120,6 +121,8 @@
   "preview": {
     "loading": "起動を軽く保つため、プレビューは必要になった時に読み込みます。",
     "loadNow": "プレビューを読み込む",
+    "externalImageBlocked": "外部画像をブロックしました",
+    "externalImageClickToLoad": "クリックすると元のホストから読み込みます",
     "mermaidLabel": "Mermaid 図",
     "renderDiagram": "図を描画",
     "refreshDiagram": "図を再描画",
@@ -216,6 +219,8 @@
     "recentFileBrowserMessage": "最近のファイルを再度開くにはデスクトップ版が必要です。",
     "exportErrorTitle": "書き出しに失敗しました",
     "exportErrorMessage": "文書を書き出せませんでした。",
+    "externalImageLoadErrorTitle": "外部画像を読み込めませんでした",
+    "externalImageLoadErrorMessage": "プレビューで {{host}} の画像を読み込めませんでした。",
     "copyHtmlSuccessTitle": "HTML をコピーしました",
     "copyHtmlSuccessMessage": "レンダリング済み HTML をクリップボードにコピーしました。",
     "dismissLabel": "通知を閉じる"

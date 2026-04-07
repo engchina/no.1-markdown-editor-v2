@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  buildFrontMatterHtml,
   buildStandaloneHtml,
   renderMarkdown,
   stripFrontMatter,
 } from '../src/lib/markdown.ts'
 import { containsLikelyRawHtml } from '../src/lib/markdownHtml.ts'
+import { resolveTyporaRootUrlAsset } from '../src/lib/imageRoots.ts'
 import { getInlineKatexCss } from '../src/lib/katexInlineCss.ts'
 import { containsLikelyMath } from '../src/lib/markdownMath.ts'
+import { isExternalImageSource, rewritePreviewHtmlExternalImages } from '../src/lib/previewExternalImages.ts'
+import { buildFrontMatterHtml } from '../src/lib/markdownShared.ts'
 import { renderMarkdownInWorker } from '../src/lib/markdownWorker.ts'
 
 function countRenderedBreaks(html: string): number {
@@ -125,6 +127,103 @@ test('renderMarkdown keeps linked remote images from pasted web content', async 
 
   assert.match(html, /<a href="https:\/\/example.com\/assets\/hero\.png"><img/)
   assert.match(html, /src="https:\/\/example.com\/assets\/hero\.png"/)
+})
+
+test('renderMarkdown resolves typora-root-url for markdown image sources', async () => {
+  const markdown = ['---', 'typora-root-url: https://assets.example.com/posts', '---', '', '![Cover](cover.png)'].join('\n')
+  const html = await renderMarkdown(markdown)
+
+  assert.match(html, /src="https:\/\/assets\.example\.com\/posts\/cover\.png"/)
+})
+
+test('renderMarkdown resolves typora-root-url for raw html image sources', async () => {
+  const markdown = [
+    '---',
+    'typora-root-url: http://cdn.example.com/content',
+    '---',
+    '',
+    '<img src="hero/banner.jpg" alt="Banner">',
+  ].join('\n')
+
+  const html = await renderMarkdown(markdown)
+
+  assert.match(html, /src="http:\/\/cdn\.example\.com\/content\/hero\/banner\.jpg"/)
+})
+
+test('resolveTyporaRootUrlAsset keeps absolute sources untouched and resolves relative ones', () => {
+  assert.equal(resolveTyporaRootUrlAsset('cover.png', 'https://assets.example.com/posts'), 'https://assets.example.com/posts/cover.png')
+  assert.equal(resolveTyporaRootUrlAsset('http://example.com/hero.png', 'https://assets.example.com/posts'), 'http://example.com/hero.png')
+  assert.equal(resolveTyporaRootUrlAsset('data:image/png;base64,abc', 'https://assets.example.com/posts'), 'data:image/png;base64,abc')
+})
+
+test('rewritePreviewHtmlExternalImages keeps https remote images intact on http origins', () => {
+  const html =
+    '<p><a href="https://example.com/full.png"><img src="https://example.com/assets/hero.png" alt="Hero"></a></p>'
+
+  const previewHtml = rewritePreviewHtmlExternalImages(
+    html,
+    {
+      blockedLabel: 'External image blocked',
+      clickLabel: 'Click to load from the original host',
+    },
+    'http://127.0.0.1:1420'
+  )
+
+  assert.match(previewHtml, /src="https:\/\/example.com\/assets\/hero.png"/)
+  assert.doesNotMatch(previewHtml, /data-external-src=/)
+  assert.doesNotMatch(previewHtml, /data-external-image=/)
+  assert.match(previewHtml, /loading="lazy"/)
+  assert.match(previewHtml, /decoding="async"/)
+})
+
+test('rewritePreviewHtmlExternalImages bridges insecure http images on secure origins', () => {
+  const html = '<p><img src="http://example.com/assets/hero.png" alt="Hero"></p>'
+
+  const previewHtml = rewritePreviewHtmlExternalImages(
+    html,
+    {
+      blockedLabel: 'External image blocked',
+      clickLabel: 'Click to load from the original host',
+    },
+    'https://tauri.localhost'
+  )
+
+  assert.match(previewHtml, /src="data:image\/svg\+xml/)
+  assert.match(previewHtml, /data-external-src="http:\/\/example.com\/assets\/hero.png"/)
+  assert.match(previewHtml, /data-external-image="blocked"/)
+  assert.match(previewHtml, /class="[^"]*preview-external-image/)
+  assert.match(previewHtml, /referrerpolicy="no-referrer"/)
+  assert.match(previewHtml, /loading="lazy"/)
+  assert.match(previewHtml, /decoding="async"/)
+})
+
+test('rewritePreviewHtmlExternalImages keeps same-origin and data images intact', () => {
+  const html = [
+    '<p><img src="http://127.0.0.1:1420/assets/logo.png" alt="Logo"></p>',
+    '<p><img src="data:image/png;base64,abc" alt="Embedded"></p>',
+  ].join('')
+
+  const previewHtml = rewritePreviewHtmlExternalImages(
+    html,
+    {
+      blockedLabel: 'External image blocked',
+      clickLabel: 'Click to load from the original host',
+    },
+    'http://127.0.0.1:1420'
+  )
+
+  assert.match(previewHtml, /src="http:\/\/127.0.0.1:1420\/assets\/logo.png"/)
+  assert.match(previewHtml, /src="data:image\/png;base64,abc"/)
+  assert.doesNotMatch(previewHtml, /data-external-src=/)
+  assert.match(previewHtml, /loading="lazy"/)
+  assert.match(previewHtml, /decoding="async"/)
+})
+
+test('isExternalImageSource only flags cross-origin http and https urls', () => {
+  assert.equal(isExternalImageSource('https://example.com/image.png', 'http://127.0.0.1:1420'), true)
+  assert.equal(isExternalImageSource('/assets/logo.png', 'http://127.0.0.1:1420'), false)
+  assert.equal(isExternalImageSource('http://127.0.0.1:1420/assets/logo.png', 'http://127.0.0.1:1420'), false)
+  assert.equal(isExternalImageSource('data:image/png;base64,abc', 'http://127.0.0.1:1420'), false)
 })
 
 test('buildStandaloneHtml escapes the document title', () => {

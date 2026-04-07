@@ -376,6 +376,29 @@ body {
   border-radius: 4px;
 }
 
+.markdown-preview img.preview-external-image {
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  box-shadow: 0 14px 36px -22px color-mix(in srgb, var(--text-primary) 22%, transparent);
+  transition: border-color 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.markdown-preview img.preview-external-image:hover,
+.markdown-preview img.preview-external-image:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  box-shadow: 0 20px 40px -24px color-mix(in srgb, var(--accent) 32%, transparent);
+  filter: saturate(1.04);
+}
+
+.markdown-preview img.preview-external-image:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 4px;
+}
+
+.markdown-preview img.preview-external-image[data-external-image="loading"] {
+  filter: grayscale(0.12) opacity(0.84);
+}
+
 .markdown-preview input[type="checkbox"] {
   margin-right: 8px;
 }

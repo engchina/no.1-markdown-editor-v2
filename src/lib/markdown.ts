@@ -6,9 +6,9 @@ import rehypeSanitize from 'rehype-sanitize'
 import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import {
-  buildFrontMatterHtml,
   buildStandaloneHtml,
   containsLikelyMath,
+  finalizeRenderedMarkdownHtml,
   sanitizeSchema,
   stripFrontMatter,
 } from './markdownShared.ts'
@@ -31,10 +31,10 @@ let mathHtmlRendererPromise: Promise<typeof import('./markdownMathHtmlRender.ts'
 async function renderBaseMarkdown(markdown: string): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
   const rendered = await processorWithoutMath.process(body)
-  return buildFrontMatterHtml(meta) + String(rendered)
+  return finalizeRenderedMarkdownHtml(meta, String(rendered))
 }
 
-export { buildFrontMatterHtml, buildStandaloneHtml, containsLikelyMath, stripFrontMatter }
+export { buildStandaloneHtml, containsLikelyMath, stripFrontMatter }
 
 export async function renderMarkdown(markdown: string): Promise<string> {
   const { body } = stripFrontMatter(markdown)

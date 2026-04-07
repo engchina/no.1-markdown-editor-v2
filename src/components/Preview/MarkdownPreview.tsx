@@ -11,6 +11,9 @@ import {
   updateMermaidShellLabels,
 } from '../../lib/mermaid'
 import { ensureKatexStylesheet } from '../../lib/katexStylesheet'
+import { pushErrorNotice } from '../../lib/notices'
+import { rewritePreviewHtmlExternalImages } from '../../lib/previewExternalImages'
+import { loadExternalPreviewImage } from '../../lib/previewRemoteImage'
 import { useMarkdown } from '../../hooks/useMarkdown'
 import { useActiveTab, useEditorStore } from '../../store/editor'
 
@@ -22,6 +25,18 @@ export default function MarkdownPreview() {
   const content = activeTab?.content ?? ''
   const deferredContent = useDeferredValue(content)
   const html = useMarkdown(deferredContent)
+  const previewHtml = useMemo(
+    () =>
+      rewritePreviewHtmlExternalImages(
+        html,
+        {
+          blockedLabel: t('preview.externalImageBlocked'),
+          clickLabel: t('preview.externalImageClickToLoad'),
+        },
+        typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+      ),
+    [html, i18n.language, t]
+  )
   const previewRef = useRef<HTMLDivElement>(null)
   const [pendingMermaidCount, setPendingMermaidCount] = useState(0)
   const [renderingAll, setRenderingAll] = useState(false)
@@ -70,6 +85,64 @@ export default function MarkdownPreview() {
     warmMermaidTask(warmMermaidForSources(getPendingMermaidSources(preview)))
   }
 
+  const activateExternalImage = (image: HTMLImageElement) => {
+    const externalSource = image.dataset.externalSrc
+    if (!externalSource || image.dataset.externalImage === 'loading') return
+
+    const placeholderSource = image.dataset.externalPlaceholder ?? image.src
+    const host = image.dataset.externalHost ?? 'external source'
+    image.dataset.externalImage = 'loading'
+    image.setAttribute('aria-busy', 'true')
+
+    const cleanup = () => {
+      image.removeEventListener('load', onLoad)
+      image.removeEventListener('error', onError)
+    }
+
+    const resetToBlocked = () => {
+      cleanup()
+      image.src = placeholderSource
+      image.dataset.externalImage = 'blocked'
+      image.removeAttribute('aria-busy')
+    }
+
+    const onLoad = () => {
+      cleanup()
+      image.classList.remove('preview-external-image')
+      image.removeAttribute('data-external-src')
+      image.removeAttribute('data-external-host')
+      image.removeAttribute('data-external-image')
+      image.removeAttribute('data-external-placeholder')
+      image.removeAttribute('tabindex')
+      image.removeAttribute('role')
+      image.removeAttribute('aria-label')
+      image.removeAttribute('aria-busy')
+    }
+
+    const onError = () => {
+      resetToBlocked()
+    }
+
+    image.addEventListener('load', onLoad)
+    image.addEventListener('error', onError)
+
+    void loadExternalPreviewImage(externalSource)
+      .then((resolvedSource) => {
+        if (!image.isConnected || image.dataset.externalSrc !== externalSource) {
+          cleanup()
+          return
+        }
+
+        image.src = resolvedSource
+      })
+      .catch(() => {
+        resetToBlocked()
+        pushErrorNotice('notices.externalImageLoadErrorTitle', 'notices.externalImageLoadErrorMessage', {
+          values: { host },
+        })
+      })
+  }
+
   useEffect(() => {
     const preview = previewRef.current
     if (!preview) return
@@ -77,14 +150,14 @@ export default function MarkdownPreview() {
     prepareMermaidShells(preview, mermaidLabels, getMermaidTheme())
     updateMermaidShellLabels(preview, mermaidLabels)
     setPendingMermaidCount(countPendingMermaidShells(preview))
-  }, [html, mermaidLabels])
+  }, [previewHtml, mermaidLabels])
 
   useEffect(() => {
-    if (!html.includes('class="katex"')) return
+    if (!previewHtml.includes('class="katex"')) return
     void ensureKatexStylesheet().catch((error) => {
       console.error('Load KaTeX stylesheet error:', error)
     })
-  }, [html])
+  }, [previewHtml])
 
   useEffect(() => {
     const preview = previewRef.current
@@ -100,7 +173,7 @@ export default function MarkdownPreview() {
     return () => {
       cancelled = true
     }
-  }, [activeThemeId, html])
+  }, [activeThemeId, previewHtml])
 
   useEffect(() => {
     const preview = previewRef.current
@@ -128,6 +201,14 @@ export default function MarkdownPreview() {
     if (!preview) return
 
     const onClick = (event: MouseEvent) => {
+      const externalImage = (event.target as HTMLElement | null)?.closest('img[data-external-src]') as HTMLImageElement | null
+      if (externalImage) {
+        event.preventDefault()
+        event.stopPropagation()
+        activateExternalImage(externalImage)
+        return
+      }
+
       const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-mermaid-action="render"]')
       if (!button) return
 
@@ -151,6 +232,37 @@ export default function MarkdownPreview() {
     const preview = previewRef.current
     if (!preview) return
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+
+      const externalImage = (event.target as HTMLElement | null)?.closest('img[data-external-src]') as HTMLImageElement | null
+      if (!externalImage) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      activateExternalImage(externalImage)
+    }
+
+    preview.addEventListener('keydown', onKeyDown)
+    return () => preview.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  useEffect(() => {
+    const preview = previewRef.current
+    if (!preview) return
+
+    const blockedImages = Array.from(
+      preview.querySelectorAll<HTMLImageElement>('img[data-external-src][data-external-image="blocked"]')
+    )
+    for (const image of blockedImages) {
+      activateExternalImage(image)
+    }
+  }, [previewHtml])
+
+  useEffect(() => {
+    const preview = previewRef.current
+    if (!preview) return
+
     const headings = Array.from(preview.querySelectorAll('h1,h2,h3,h4,h5,h6'))
     if (headings.length === 0) return
 
@@ -169,7 +281,7 @@ export default function MarkdownPreview() {
 
     headings.forEach((heading) => observer.observe(heading))
     return () => observer.disconnect()
-  }, [html])
+  }, [previewHtml])
 
   const renderAllDiagrams = () => {
     const preview = previewRef.current
@@ -210,7 +322,7 @@ export default function MarkdownPreview() {
       <div
         ref={previewRef}
         className="markdown-preview animate-in"
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: previewHtml }}
         style={{
           background: 'var(--preview-bg)',
           color: 'var(--preview-text)',

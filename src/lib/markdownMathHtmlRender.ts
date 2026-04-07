@@ -8,7 +8,7 @@ import rehypeSanitize from 'rehype-sanitize'
 import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import rehypeKatex from 'rehype-katex'
-import { buildFrontMatterHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
+import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithMathAndHtml = unified()
@@ -26,5 +26,5 @@ const processorWithMathAndHtml = unified()
 export async function renderMarkdownWithMathAndHtml(markdown: string): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
   const rendered = await processorWithMathAndHtml.process(body)
-  return buildFrontMatterHtml(meta) + String(rendered)
+  return finalizeRenderedMarkdownHtml(meta, String(rendered))
 }

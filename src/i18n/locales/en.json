@@ -109,6 +109,7 @@
     "noMatches": "No matches",
     "matches": "{{count}} match",
     "matches_other": "{{count}} matches",
+    "selectAll": "All",
     "replaceOne": "Replace",
     "replaceAll": "All"
   },
@@ -122,6 +123,8 @@
   "preview": {
     "loading": "Preview loads on demand to keep startup fast.",
     "loadNow": "Load Preview",
+    "externalImageBlocked": "External image blocked",
+    "externalImageClickToLoad": "Click to load from the original host",
     "mermaidLabel": "Mermaid Diagram",
     "renderDiagram": "Render Diagram",
     "refreshDiagram": "Refresh Diagram",
@@ -220,6 +223,8 @@
     "recentFileBrowserMessage": "Reopening recent files is only available in the desktop build.",
     "exportErrorTitle": "Export failed",
     "exportErrorMessage": "The document could not be exported.",
+    "externalImageLoadErrorTitle": "Couldn't load external image",
+    "externalImageLoadErrorMessage": "The preview could not load the remote image from {{host}}.",
     "copyHtmlSuccessTitle": "HTML copied",
     "copyHtmlSuccessMessage": "The rendered HTML is now on the clipboard.",
     "dismissLabel": "Dismiss notification"

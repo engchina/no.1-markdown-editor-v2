@@ -6,7 +6,7 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
-import { buildFrontMatterHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
+import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const workerHtmlProcessor = unified()
@@ -22,5 +22,5 @@ const workerHtmlProcessor = unified()
 export async function renderMarkdownWithHtmlInWorker(markdown: string): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
   const rendered = await workerHtmlProcessor.process(body)
-  return buildFrontMatterHtml(meta) + String(rendered)
+  return finalizeRenderedMarkdownHtml(meta, String(rendered))
 }

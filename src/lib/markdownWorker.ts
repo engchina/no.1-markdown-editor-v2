@@ -5,7 +5,7 @@ import remarkRehype from 'remark-rehype'
 import rehypeSanitize from 'rehype-sanitize'
 import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
-import { buildFrontMatterHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
+import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
 import { containsLikelyRawHtml } from './markdownHtml.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
@@ -26,5 +26,5 @@ export async function renderMarkdownInWorker(markdown: string): Promise<string> 
   }
 
   const rendered = await workerProcessor.process(frontMatter.body)
-  return buildFrontMatterHtml(frontMatter.meta) + String(rendered)
+  return finalizeRenderedMarkdownHtml(frontMatter.meta, String(rendered))
 }

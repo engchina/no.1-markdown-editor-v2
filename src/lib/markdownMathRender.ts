@@ -8,7 +8,7 @@ import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import rehypeKatex from 'rehype-katex'
 import {
-  buildFrontMatterHtml,
+  finalizeRenderedMarkdownHtml,
   sanitizeSchema,
   stripFrontMatter,
 } from './markdownShared.ts'
@@ -28,5 +28,5 @@ const processorWithMath = unified()
 export async function renderMarkdownWithMath(markdown: string): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
   const rendered = await processorWithMath.process(body)
-  return buildFrontMatterHtml(meta) + String(rendered)
+  return finalizeRenderedMarkdownHtml(meta, String(rendered))
 }

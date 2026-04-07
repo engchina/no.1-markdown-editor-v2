@@ -107,6 +107,7 @@
     "close": "关闭 (Esc)",
     "noMatches": "没有匹配项",
     "matches": "{{count}} 个匹配",
+    "selectAll": "全部",
     "replaceOne": "替换",
     "replaceAll": "全部"
   },
@@ -120,6 +121,8 @@
   "preview": {
     "loading": "为了保持启动轻量，预览会按需加载。",
     "loadNow": "立即加载预览",
+    "externalImageBlocked": "外链图片已阻止",
+    "externalImageClickToLoad": "点击后再从原始站点加载",
     "mermaidLabel": "Mermaid 图表",
     "renderDiagram": "渲染图表",
     "refreshDiagram": "重新渲染",
@@ -216,6 +219,8 @@
     "recentFileBrowserMessage": "重新打开最近文件需要使用桌面版应用。",
     "exportErrorTitle": "导出失败",
     "exportErrorMessage": "无法导出该文档。",
+    "externalImageLoadErrorTitle": "无法加载外链图片",
+    "externalImageLoadErrorMessage": "预览无法加载来自 {{host}} 的远程图片。",
     "copyHtmlSuccessTitle": "HTML 已复制",
     "copyHtmlSuccessMessage": "渲染后的 HTML 已复制到剪贴板。",
     "dismissLabel": "关闭通知"

@@ -1,5 +1,6 @@
 import { defaultSchema } from 'rehype-sanitize'
 import { containsLikelyMath } from './markdownMath.ts'
+import { rewriteRenderedHtmlImageSources } from './renderedImageSources.ts'
 
 export type FrontMatterMeta = Record<string, string>
 
@@ -55,6 +56,10 @@ export function buildFrontMatterHtml(meta: FrontMatterMeta): string {
 }
 
 export { containsLikelyMath }
+
+export function finalizeRenderedMarkdownHtml(meta: FrontMatterMeta, bodyHtml: string): string {
+  return buildFrontMatterHtml(meta) + rewriteRenderedHtmlImageSources(bodyHtml, { frontMatter: meta })
+}
 
 export function buildStandaloneHtml(
   title: string,
