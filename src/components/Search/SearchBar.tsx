@@ -1,98 +1,100 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { EditorView } from '@codemirror/view'
-import {
-  SearchQuery,
-  setSearchQuery,
-  findNext,
-  findPrevious,
-  replaceNext,
-  replaceAll,
-} from '@codemirror/search'
+import { useTranslation } from 'react-i18next'
+import type { EditorView } from '@codemirror/view'
+import { countSearchMatches } from '../../lib/search'
+import type { SearchSupport } from '../Editor/optionalFeatures'
 
 interface Props {
   editorView: EditorView | null
+  searchSupport: SearchSupport | null
+  loading: boolean
   showReplace: boolean
   onClose: () => void
 }
 
-export default function SearchBar({ editorView, showReplace, onClose }: Props) {
+export default function SearchBar({ editorView, searchSupport, loading, showReplace, onClose }: Props) {
+  const { t } = useTranslation()
   const [findText, setFindText] = useState('')
   const [replaceText, setReplaceText] = useState('')
   const [caseSensitive, setCaseSensitive] = useState(false)
   const [useRegex, setUseRegex] = useState(false)
   const [wholeWord, setWholeWord] = useState(false)
   const [matchCount, setMatchCount] = useState<string>('')
+  const [hasNoMatches, setHasNoMatches] = useState(false)
   const [hasReplace, setHasReplace] = useState(showReplace)
 
   const findRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setHasReplace(showReplace) }, [showReplace])
-  useEffect(() => { findRef.current?.focus() }, [])
+  useEffect(() => {
+    setHasReplace(showReplace)
+  }, [showReplace])
 
-  // Build query and run search
+  useEffect(() => {
+    if (!loading) findRef.current?.focus()
+  }, [loading])
+
   const runSearch = useCallback(
     (find: string, opts?: { cs?: boolean; re?: boolean; ww?: boolean }) => {
-      if (!editorView) return
+      if (!editorView || !searchSupport) return
+
       const cs = opts?.cs ?? caseSensitive
       const re = opts?.re ?? useRegex
       const ww = opts?.ww ?? wholeWord
 
-      let valid = true
-      if (re && find) {
-        try { new RegExp(find) } catch { valid = false }
-      }
-
-      if (!find || !valid) {
+      if (!find) {
         setMatchCount('')
+        setHasNoMatches(false)
         return
       }
 
-      const query = new SearchQuery({ search: find, caseSensitive: cs, regexp: re, wholeWord: ww, replace: replaceText })
-      editorView.dispatch({ effects: setSearchQuery.of(query) })
+      searchSupport.applyQuery(editorView, {
+        search: find,
+        caseSensitive: cs,
+        regexp: re,
+        wholeWord: ww,
+        replace: replaceText,
+      })
 
-      // Count matches in document
-      const doc = editorView.state.doc.toString()
-      let count = 0
-      if (re) {
-        try {
-          const flags = cs ? 'g' : 'gi'
-          const matches = doc.match(new RegExp(find, flags))
-          count = matches?.length ?? 0
-        } catch { /* ignore */ }
-      } else {
-        const needle = cs ? find : find.toLowerCase()
-        const hay = cs ? doc : doc.toLowerCase()
-        let pos = 0
-        while ((pos = hay.indexOf(needle, pos)) !== -1) { count++; pos++ }
-      }
-      setMatchCount(count === 0 ? 'No matches' : `${count} match${count !== 1 ? 'es' : ''}`)
+      const count = countSearchMatches(editorView.state.doc.toString(), find, {
+        caseSensitive: cs,
+        regexp: re,
+        wholeWord: ww,
+      })
+      setHasNoMatches(count === 0)
+      setMatchCount(count === 0 ? t('search.noMatches') : t('search.matches', { count }))
     },
-    [editorView, caseSensitive, useRegex, wholeWord, replaceText]
+    [caseSensitive, editorView, replaceText, searchSupport, t, useRegex, wholeWord]
   )
 
-  useEffect(() => { runSearch(findText) }, [findText, caseSensitive, useRegex, wholeWord])
+  useEffect(() => {
+    runSearch(findText)
+  }, [findText, runSearch])
 
   const onKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        if (!editorView) return
-        if (e.shiftKey) {
-          findPrevious(editorView)
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!editorView || !searchSupport) {
+        if (event.key === 'Escape') onClose()
+        return
+      }
+
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        if (event.shiftKey) {
+          searchSupport.findPrevious(editorView)
         } else {
-          findNext(editorView)
+          searchSupport.findNext(editorView)
         }
-      } else if (e.key === 'Escape') {
+      } else if (event.key === 'Escape') {
         onClose()
       }
     },
-    [editorView, onClose]
+    [editorView, onClose, searchSupport]
   )
 
   const toggleOpt = (opt: 'cs' | 're' | 'ww') => {
-    if (opt === 'cs') setCaseSensitive((v) => { runSearch(findText, { cs: !v }); return !v })
-    if (opt === 're') setUseRegex((v) => { runSearch(findText, { re: !v }); return !v })
-    if (opt === 'ww') setWholeWord((v) => { runSearch(findText, { ww: !v }); return !v })
+    if (opt === 'cs') setCaseSensitive((value) => { runSearch(findText, { cs: !value }); return !value })
+    if (opt === 're') setUseRegex((value) => { runSearch(findText, { re: !value }); return !value })
+    if (opt === 'ww') setWholeWord((value) => { runSearch(findText, { ww: !value }); return !value })
   }
 
   const btnStyle = (active: boolean) => ({
@@ -106,6 +108,26 @@ export default function SearchBar({ editorView, showReplace, onClose }: Props) {
     cursor: 'pointer',
   })
 
+  if (loading || !searchSupport) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-2 flex-shrink-0"
+        style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}
+      >
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('search.loading')}</span>
+        <div className="flex-1" />
+        <button
+          onClick={onClose}
+          className="w-6 h-6 rounded flex items-center justify-center text-sm"
+          style={{ color: 'var(--text-muted)' }}
+          title={t('search.close')}
+        >
+          ×
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div
       className="flex flex-col gap-1 px-3 py-2 flex-shrink-0"
@@ -114,9 +136,8 @@ export default function SearchBar({ editorView, showReplace, onClose }: Props) {
         borderBottom: '1px solid var(--border)',
       }}
     >
-      {/* Find row */}
       <div className="flex items-center gap-2">
-        <span className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '52px' }}>Find</span>
+        <span className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '52px' }}>{t('search.find')}</span>
         <div
           className="flex-1 flex items-center gap-1 rounded px-2"
           style={{ background: 'var(--editor-bg)', border: '1px solid var(--border)', height: '26px' }}
@@ -125,54 +146,49 @@ export default function SearchBar({ editorView, showReplace, onClose }: Props) {
             ref={findRef}
             type="text"
             value={findText}
-            onChange={(e) => setFindText(e.target.value)}
+            onChange={(event) => setFindText(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search..."
+            placeholder={t('search.searchPlaceholder')}
             className="flex-1 bg-transparent outline-none text-xs"
             style={{ color: 'var(--text-primary)' }}
           />
           {matchCount && (
-            <span className="text-xs flex-shrink-0" style={{ color: matchCount === 'No matches' ? '#ef4444' : 'var(--text-muted)' }}>
+            <span className="text-xs flex-shrink-0" style={{ color: hasNoMatches ? '#ef4444' : 'var(--text-muted)' }}>
               {matchCount}
             </span>
           )}
         </div>
-        {/* Options */}
-        <button style={btnStyle(caseSensitive)} onClick={() => toggleOpt('cs')} title="Case Sensitive">Aa</button>
-        <button style={btnStyle(wholeWord)} onClick={() => toggleOpt('ww')} title="Whole Word">W</button>
-        <button style={btnStyle(useRegex)} onClick={() => toggleOpt('re')} title="Use Regex">.*</button>
-        {/* Nav */}
+        <button style={btnStyle(caseSensitive)} onClick={() => toggleOpt('cs')} title={t('search.caseSensitive')}>Aa</button>
+        <button style={btnStyle(wholeWord)} onClick={() => toggleOpt('ww')} title={t('search.wholeWord')}>W</button>
+        <button style={btnStyle(useRegex)} onClick={() => toggleOpt('re')} title={t('search.useRegex')}>.*</button>
         <button
-          title="Previous (Shift+Enter)"
-          onClick={() => editorView && findPrevious(editorView)}
+          title={t('search.previous')}
+          onClick={() => editorView && searchSupport.findPrevious(editorView)}
           className="w-6 h-6 rounded flex items-center justify-center transition-colors"
           style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
         >↑</button>
         <button
-          title="Next (Enter)"
-          onClick={() => editorView && findNext(editorView)}
+          title={t('search.next')}
+          onClick={() => editorView && searchSupport.findNext(editorView)}
           className="w-6 h-6 rounded flex items-center justify-center transition-colors"
           style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
         >↓</button>
-        {/* Toggle replace */}
         <button
-          onClick={() => setHasReplace((v) => !v)}
+          onClick={() => setHasReplace((value) => !value)}
           className="text-xs px-2 h-6 rounded"
           style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
-        >{hasReplace ? 'Hide' : 'Replace'}</button>
-        {/* Close */}
+        >{hasReplace ? t('search.hideReplace') : t('search.showReplace')}</button>
         <button
           onClick={onClose}
           className="w-6 h-6 rounded flex items-center justify-center text-sm"
           style={{ color: 'var(--text-muted)' }}
-          title="Close (Esc)"
+          title={t('search.close')}
         >×</button>
       </div>
 
-      {/* Replace row */}
       {hasReplace && (
         <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '52px' }}>Replace</span>
+          <span className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '52px' }}>{t('search.replace')}</span>
           <div
             className="flex-1 flex items-center gap-1 rounded px-2"
             style={{ background: 'var(--editor-bg)', border: '1px solid var(--border)', height: '26px' }}
@@ -180,34 +196,44 @@ export default function SearchBar({ editorView, showReplace, onClose }: Props) {
             <input
               type="text"
               value={replaceText}
-              onChange={(e) => setReplaceText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
-              placeholder="Replace with..."
+              onChange={(event) => setReplaceText(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Escape') onClose() }}
+              placeholder={t('search.replacePlaceholder')}
               className="flex-1 bg-transparent outline-none text-xs"
               style={{ color: 'var(--text-primary)' }}
             />
           </div>
           <button
+            disabled={!findText}
             onClick={() => {
               if (!editorView) return
-              const q = new SearchQuery({ search: findText, caseSensitive, regexp: useRegex, wholeWord, replace: replaceText })
-              editorView.dispatch({ effects: setSearchQuery.of(q) })
-              replaceNext(editorView)
+              searchSupport.replaceNext(editorView, {
+                search: findText,
+                caseSensitive,
+                regexp: useRegex,
+                wholeWord,
+                replace: replaceText,
+              })
             }}
-            className="text-xs px-2 h-6 rounded"
+            className="text-xs px-2 h-6 rounded disabled:opacity-40"
             style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-          >Replace</button>
+          >{t('search.replaceOne')}</button>
           <button
+            disabled={!findText}
             onClick={() => {
               if (!editorView) return
-              const q = new SearchQuery({ search: findText, caseSensitive, regexp: useRegex, wholeWord, replace: replaceText })
-              editorView.dispatch({ effects: setSearchQuery.of(q) })
-              replaceAll(editorView)
+              searchSupport.replaceAll(editorView, {
+                search: findText,
+                caseSensitive,
+                regexp: useRegex,
+                wholeWord,
+                replace: replaceText,
+              })
               runSearch(findText)
             }}
-            className="text-xs px-2 h-6 rounded"
+            className="text-xs px-2 h-6 rounded disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'white', border: 'none' }}
-          >All</button>
+          >{t('search.replaceAll')}</button>
         </div>
       )}
     </div>

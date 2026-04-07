@@ -1,16 +1,19 @@
+import { useTranslation } from 'react-i18next'
 import { useFileTree, type FileNode } from '../../hooks/useFileTree'
 import { useEditorStore } from '../../store/editor'
+import AppIcon from '../Icons/AppIcon'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export default function FileTree() {
+  const { t } = useTranslation()
   const { rootPath, tree, loading, openFolder, toggleDir, openFile } = useFileTree()
   const { tabs, activeTabId } = useEditorStore()
 
   if (!isTauri) {
     return (
       <div className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-        <p>File tree is available in desktop app.</p>
+        <p>{t('sidebar.desktopOnly')}</p>
       </div>
     )
   }
@@ -23,32 +26,32 @@ export default function FileTree() {
         style={{ borderBottom: '1px solid var(--border)' }}
       >
         <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-          {rootPath ? rootPath.split(/[\\/]/).pop() : 'Explorer'}
+          {rootPath ? rootPath.split(/[\\/]/).pop() : t('sidebar.files')}
         </span>
         <button
-          onClick={openFolder}
-          title="Open Folder"
+          onClick={() => { void openFolder() }}
+          title={t('sidebar.openFolder')}
           className="text-xs rounded px-1.5 py-0.5 transition-colors"
           style={{ color: 'var(--text-muted)', background: 'var(--bg-tertiary)' }}
         >
-          Open…
+          {t('sidebar.openFolder')}
         </button>
       </div>
 
       {/* Tree */}
       <div className="flex-1 overflow-y-auto py-1">
         {loading && (
-          <div className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>Loading...</div>
+          <div className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{t('sidebar.loading')}</div>
         )}
         {!rootPath && !loading && (
           <div className="px-3 py-4 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-            <p>No folder open</p>
+            <p>{t('sidebar.noFiles')}</p>
             <button
-              onClick={openFolder}
+              onClick={() => { void openFolder() }}
               className="mt-2 px-3 py-1 rounded text-xs transition-colors"
               style={{ background: 'var(--accent)', color: 'white' }}
             >
-              Open Folder
+              {t('sidebar.openFolder')}
             </button>
           </div>
         )}
@@ -78,6 +81,7 @@ interface TreeNodeProps {
 }
 
 function TreeNode({ node, depth, pathInTree, onToggle, onOpen, activeFilePath }: TreeNodeProps) {
+  const { t } = useTranslation()
   const isActive = node.type === 'file' && node.path === activeFilePath
   const indentPx = 12 + depth * 14
 
@@ -105,14 +109,17 @@ function TreeNode({ node, depth, pathInTree, onToggle, onOpen, activeFilePath }:
         }}
       >
         {node.type === 'dir' ? (
-          <span className="text-xs" style={{ minWidth: '14px', color: 'var(--text-muted)' }}>
-            {node.expanded ? '▾' : '▸'}
+          <span className="flex items-center justify-center" style={{ minWidth: '14px', color: 'var(--text-muted)' }}>
+            <AppIcon name={node.expanded ? 'chevronDown' : 'chevronRight'} size={12} />
           </span>
         ) : (
           <span className="text-xs" style={{ minWidth: '14px', opacity: 0 }}>·</span>
         )}
-        <span className="text-xs" style={{ marginRight: '4px' }}>
-          {node.type === 'dir' ? (node.expanded ? '📂' : '📁') : '📄'}
+        <span className="flex items-center justify-center" style={{ marginRight: '4px', color: isActive ? 'var(--accent)' : 'var(--text-muted)' }}>
+          <AppIcon
+            name={node.type === 'dir' ? (node.expanded ? 'folderOpen' : 'folder') : 'file'}
+            size={14}
+          />
         </span>
         <span
           className="text-xs truncate"
@@ -130,7 +137,7 @@ function TreeNode({ node, depth, pathInTree, onToggle, onOpen, activeFilePath }:
               className="text-xs py-0.5"
               style={{ paddingLeft: `${indentPx + 28}px`, color: 'var(--text-muted)' }}
             >
-              Empty
+              {t('sidebar.emptyFolder')}
             </div>
           )}
           {node.children.map((child, i) => (

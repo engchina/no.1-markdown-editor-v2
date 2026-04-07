@@ -1,25 +1,44 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { THEMES, applyTheme, getThemeById } from '../../themes'
 import { useEditorStore } from '../../store/editor'
 
 interface Props {
   onClose: () => void
+  triggerRef: React.RefObject<HTMLButtonElement>
 }
 
-export default function ThemePanel({ onClose }: Props) {
-  const { activeThemeId, setActiveThemeId, fontSize, setFontSize, lineNumbers, setLineNumbers, wordWrap, setWordWrap, wysiwygMode, setWysiwygMode, typewriterMode, setTypewriterMode } = useEditorStore()
+export default function ThemePanel({ onClose, triggerRef }: Props) {
+  const { t } = useTranslation()
+  const {
+    activeThemeId,
+    setActiveThemeId,
+    fontSize,
+    setFontSize,
+    lineNumbers,
+    setLineNumbers,
+    wordWrap,
+    setWordWrap,
+    wysiwygMode,
+    setWysiwygMode,
+    typewriterMode,
+    setTypewriterMode,
+  } = useEditorStore()
   const panelRef = useRef<HTMLDivElement>(null)
+  const resolvedThemeId = getThemeById(activeThemeId).id
 
-  // Close on outside click
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose()
-      }
+    const handler = (event: MouseEvent) => {
+      const target = event.target as Node | null
+      if (!target) return
+
+      if (panelRef.current?.contains(target)) return
+      if (triggerRef.current?.contains(target)) return
+      onClose()
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
+  }, [onClose, triggerRef])
 
   function selectTheme(id: string) {
     setActiveThemeId(id)
@@ -29,44 +48,44 @@ export default function ThemePanel({ onClose }: Props) {
   return (
     <div
       ref={panelRef}
-      className="absolute right-2 top-12 z-50 rounded-xl shadow-2xl overflow-hidden animate-in"
+      className="absolute right-2 top-12 z-50 rounded-xl shadow-2xl overflow-hidden animate-in glass-panel"
       style={{
         width: '320px',
-        background: 'var(--bg-primary)',
-        border: '1px solid var(--border)',
+        background: 'var(--glass-bg)',
+        borderColor: 'var(--glass-border)',
       }}
     >
       <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
         <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
-          Appearance
+          {t('themePanel.appearance')}
         </h3>
       </div>
 
       <div className="p-4 space-y-5 max-h-[70vh] overflow-y-auto">
-        {/* Theme grid */}
         <div>
           <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
-            THEME
+            {t('themePanel.theme')}
           </p>
           <div className="grid grid-cols-2 gap-2">
             {THEMES.map((theme) => (
               <button
                 key={theme.id}
+                type="button"
                 onClick={() => selectTheme(theme.id)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all text-left"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all text-left hover-scale"
                 style={{
-                  border: activeThemeId === theme.id
-                    ? '2px solid var(--accent)'
-                    : '1px solid var(--border)',
+                  border: resolvedThemeId === theme.id ? '2px solid var(--accent)' : '1px solid var(--border)',
                   background: theme.vars['--bg-primary'],
                   color: theme.vars['--text-primary'],
-                  boxShadow: activeThemeId === theme.id ? '0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent)' : 'none',
+                  boxShadow:
+                    resolvedThemeId === theme.id
+                      ? '0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent)'
+                      : 'none',
                 }}
               >
-                {/* Mini color swatches */}
                 <div className="flex gap-0.5 flex-shrink-0">
-                  {[theme.vars['--accent'], theme.vars['--bg-secondary'], theme.vars['--border']].map((c, i) => (
-                    <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />
+                  {[theme.vars['--accent'], theme.vars['--bg-secondary'], theme.vars['--border']].map((color, index) => (
+                    <div key={index} style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
                   ))}
                 </div>
                 <span className="truncate font-medium">{theme.name}</span>
@@ -75,11 +94,10 @@ export default function ThemePanel({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Font size */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-              FONT SIZE
+              {t('themePanel.fontSize')}
             </p>
             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{fontSize}px</span>
           </div>
@@ -88,46 +106,44 @@ export default function ThemePanel({ onClose }: Props) {
             min={11}
             max={24}
             value={fontSize}
-            onChange={(e) => setFontSize(Number(e.target.value))}
+            onChange={(event) => setFontSize(Number(event.target.value))}
             className="w-full h-1 rounded-full appearance-none cursor-pointer"
             style={{ accentColor: 'var(--accent)', background: 'var(--bg-tertiary)' }}
           />
           <div className="flex justify-between mt-1">
-            {[11, 13, 15, 18, 20, 24].map((s) => (
+            {[11, 13, 15, 18, 20, 24].map((size) => (
               <button
-                key={s}
-                onClick={() => setFontSize(s)}
-                className="text-xs px-1.5 py-0.5 rounded transition-colors"
+                key={size}
+                type="button"
+                onClick={() => setFontSize(size)}
+                className="text-xs px-1.5 py-0.5 rounded transition-all hover-scale"
                 style={{
-                  background: fontSize === s ? 'var(--accent)' : 'var(--bg-tertiary)',
-                  color: fontSize === s ? 'white' : 'var(--text-muted)',
+                  background: fontSize === size ? 'var(--accent)' : 'var(--bg-tertiary)',
+                  color: fontSize === size ? 'white' : 'var(--text-muted)',
                 }}
               >
-                {s}
+                {size}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Editor options */}
         <div>
           <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
-            EDITOR OPTIONS
+            {t('themePanel.editorOptions')}
           </p>
           <div className="space-y-2">
             {([
-              { label: 'WYSIWYG (Live Preview)', value: wysiwygMode, set: setWysiwygMode },
-              { label: 'Line Numbers', value: lineNumbers, set: setLineNumbers },
-              { label: 'Word Wrap', value: wordWrap, set: setWordWrap },
-              { label: 'Typewriter Mode', value: typewriterMode, set: setTypewriterMode },
+              { label: t('themePanel.wysiwyg'), value: wysiwygMode, set: setWysiwygMode },
+              { label: t('themePanel.lineNumbers'), value: lineNumbers, set: setLineNumbers },
+              { label: t('themePanel.wordWrap'), value: wordWrap, set: setWordWrap },
+              { label: t('themePanel.typewriterMode'), value: typewriterMode, set: setTypewriterMode },
             ] as const).map(({ label, value, set }) => (
-              <label
-                key={label}
-                className="flex items-center justify-between cursor-pointer"
-              >
+              <label key={label} className="flex items-center justify-between cursor-pointer">
                 <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{label}</span>
                 <button
-                  onClick={() => (set as (v: boolean) => void)(!value)}
+                  type="button"
+                  onClick={() => (set as (nextValue: boolean) => void)(!value)}
                   className="relative rounded-full transition-colors flex-shrink-0"
                   style={{
                     width: '36px',

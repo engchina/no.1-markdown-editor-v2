@@ -5,68 +5,72 @@
 /* ── CSS Custom Properties ── */
 :root {
   /* Light theme */
-  --bg-primary: #FAFAFA;
+  --bg-canvas: #E5E7EB; /* Subtle gray background for floating look */
+  --bg-primary: #FCFCFD;
   --bg-secondary: #F4F4F5;
   --bg-tertiary: #E4E4E7;
-  --bg-sidebar: #F0F0F2;
-  --border: #D4D4D8;
+  --bg-sidebar: rgba(244, 244, 245, 0.4);
+  --border: rgba(0, 0, 0, 0.08);
   --text-primary: #18181B;
   --text-secondary: #52525B;
   --text-muted: #A1A1AA;
-  --accent: #3B82F6;
-  --accent-hover: #2563EB;
-  --toolbar-bg: #FFFFFF;
-  --statusbar-bg: #3B82F6;
-  --statusbar-text: #FFFFFF;
+  --accent: #0ea5e9;
+  --accent-hover: #0284c7;
+  --toolbar-bg: rgba(255, 255, 255, 0.7);
+  --statusbar-bg: transparent;
+  --statusbar-text: #52525B;
 
   /* Editor */
-  --editor-bg: #FFFFFF;
+  --editor-bg: transparent;
   --editor-text: #1A1A1A;
-  --editor-line-active: rgba(59, 130, 246, 0.05);
-  --editor-selection: rgba(59, 130, 246, 0.2);
-  --editor-cursor: #3B82F6;
+  --editor-line-active: rgba(14, 165, 233, 0.04);
+  --editor-selection: rgba(14, 165, 233, 0.15);
+  --editor-cursor: #0ea5e9;
 
   /* Preview */
-  --preview-bg: #FAFAFA;
+  --preview-bg: transparent;
   --preview-text: #1A1A1A;
 
   /* Glass & Depth */
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(0, 0, 0, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.5);
   --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-elegant: 0 10px 40px -10px rgba(0, 0, 0, 0.1), 0 0 1px 1px rgba(0, 0, 0, 0.05);
 }
 
 .dark {
-  /* Dark theme — Catppuccin Mocha */
+  /* Dark theme — Catppuccin Mocha Refined */
+  --bg-canvas: #09090b; /* Very dark canvas for floating window */
   --bg-primary: #1E1E2E;
   --bg-secondary: #181825;
   --bg-tertiary: #11111B;
-  --bg-sidebar: #181825;
-  --border: #313244;
+  --bg-sidebar: rgba(24, 24, 37, 0.6);
+  --border: rgba(255, 255, 255, 0.06);
   --text-primary: #CDD6F4;
   --text-secondary: #BAC2DE;
   --text-muted: #6C7086;
   --accent: #89B4FA;
   --accent-hover: #B4BEFE;
-  --toolbar-bg: #181825;
-  --statusbar-bg: #89B4FA;
-  --statusbar-text: #1E1E2E;
+  --toolbar-bg: rgba(30, 30, 46, 0.7);
+  --statusbar-bg: transparent;
+  --statusbar-text: #BAC2DE;
 
   /* Editor */
-  --editor-bg: #1E1E2E;
+  --editor-bg: transparent;
   --editor-text: #CDD6F4;
   --editor-line-active: rgba(137, 180, 250, 0.05);
   --editor-selection: rgba(137, 180, 250, 0.2);
   --editor-cursor: #89B4FA;
 
   /* Preview */
-  --preview-bg: #1E1E2E;
+  --preview-bg: transparent;
   --preview-text: #CDD6F4;
 
   /* Glass & Depth - Dark */
-  --glass-bg: rgba(30, 30, 46, 0.75);
+  --glass-bg: rgba(30, 30, 46, 0.55);
   --glass-border: rgba(255, 255, 255, 0.05);
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-elegant: 0 20px 40px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 /* ── Reset & Base ── */
@@ -82,12 +86,14 @@ html, body, #root {
 }
 
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-canvas); /* The outer background */
   color: var(--text-primary);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   user-select: none;
+  /* subtle transition when switching themes */
+  transition: background-color 0.4s ease;
 }
 
 /* Allow text selection in editor and preview */
@@ -118,28 +124,29 @@ body {
 /* ── Pro Max Utilities ── */
 .glass-panel {
   background: var(--glass-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--glass-border);
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-sm);
 }
 
 .hover-scale {
-  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .hover-scale:hover {
-  transform: scale(1.05);
+  transform: scale(1.04);
 }
 .hover-scale:active {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
 /* ── CodeMirror Editor Overrides ── */
 .cm-editor {
   height: 100%;
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.7;
-  background-color: var(--editor-bg) !important;
+  font-size: inherit;
+  line-height: 1.8;
+  background-color: transparent !important;
 }
 
 .cm-editor.cm-focused {
@@ -148,6 +155,8 @@ body {
 
 .cm-scroller {
   font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit;
 }
 
 .cm-content {
@@ -203,11 +212,15 @@ body {
 
 /* ── Markdown Preview ── */
 .markdown-preview {
-  background-color: var(--preview-bg);
+  background-color: transparent;
   color: var(--preview-text);
   padding: 32px 48px;
   overflow-y: auto;
   height: 100%;
+}
+
+.markdown-preview > *:first-child {
+  margin-top: 0;
 }
 
 .markdown-preview h1,
@@ -229,8 +242,10 @@ body {
 .markdown-preview a {
   color: var(--accent);
   text-decoration: none;
+  transition: all 0.2s ease;
 }
 .markdown-preview a:hover {
+  color: var(--accent-hover);
   text-decoration: underline;
 }
 
@@ -240,6 +255,7 @@ body {
   border-radius: 4px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.875em;
+  transition: background 0.2s ease;
 }
 
 .markdown-preview pre {
@@ -248,6 +264,11 @@ body {
   border-radius: 8px;
   padding: 16px;
   overflow-x: auto;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+}
+.markdown-preview pre:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .markdown-preview pre code {
@@ -257,10 +278,48 @@ body {
 
 .markdown-preview blockquote {
   border-left: 4px solid var(--accent);
-  padding-left: 16px;
+  padding: 16px;
   margin-left: 0;
   color: var(--text-secondary);
   font-style: italic;
+  transition: background 0.2s ease, border-color 0.2s ease, border-radius 0.2s ease;
+}
+.markdown-preview blockquote:hover {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border-left-color: var(--accent-hover);
+  border-radius: 0 4px 4px 0;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  padding-left: 2em;
+  margin: 1em 0;
+}
+
+.markdown-preview ul {
+  list-style-type: disc;
+}
+
+.markdown-preview ul ul {
+  list-style-type: circle;
+}
+
+.markdown-preview ul ul ul {
+  list-style-type: square;
+}
+
+.markdown-preview ol {
+  list-style-type: decimal;
+}
+
+.markdown-preview li {
+  margin-bottom: 0.5em;
+}
+
+.markdown-preview li > ul,
+.markdown-preview li > ol {
+  margin-top: 0.5em;
+  margin-bottom: 0;
 }
 
 .markdown-preview table {
@@ -312,6 +371,130 @@ body {
   padding: 16px 0;
 }
 
+.markdown-preview .mermaid-shell {
+  margin: 1.5em 0;
+}
+
+.markdown-preview .mermaid-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-secondary) 74%, transparent);
+  overflow: hidden;
+}
+
+.markdown-preview .mermaid-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-preview .mermaid-card-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.markdown-preview .mermaid-card-button {
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.markdown-preview .mermaid-card-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+}
+
+.markdown-preview .mermaid-card-button:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.markdown-preview .mermaid-card-code {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 14px 16px 16px;
+  box-shadow: none;
+}
+
+.markdown-preview .mermaid-card-status {
+  margin: 0;
+  padding: 10px 14px 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #b91c1c;
+}
+
+.dark .markdown-preview .mermaid-card-status {
+  color: #fca5a5;
+}
+
+.markdown-preview .mermaid-card-code:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.markdown-preview .mermaid-render-surface {
+  padding: 16px;
+}
+
+.preview-diagram-toolbar {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(14px);
+}
+
+.preview-diagram-toolbar__text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.preview-diagram-toolbar__button {
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.preview-diagram-toolbar__button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+}
+
+.preview-diagram-toolbar__button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
 /* ── Transitions ── */
 .panel-divider {
   cursor: col-resize;
@@ -324,15 +507,51 @@ body {
 }
 
 /* ── Focus Mode ── */
-.focus-mode .sidebar,
-.focus-mode .toolbar {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s;
+.focus-mode-container {
+  background: var(--editor-bg);
+  animation: focusFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.focus-mode:hover .toolbar {
-  opacity: 1;
-  pointer-events: auto;
+
+@keyframes focusFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Centered writing column */
+.focus-mode-column {
+  max-width: 720px;
+  margin: 0 auto;
+  height: 100%;
+}
+
+/* Inside focus mode: override CodeMirror line padding for wider margins */
+.focus-mode-container .cm-editor {
+  background: var(--editor-bg) !important;
+}
+
+.focus-mode-container .cm-content {
+  padding: 48px 0 !important;
+}
+
+.focus-mode-container .cm-line {
+  padding: 0 48px !important;
+}
+
+/* Hide gutters (line numbers) in focus mode */
+.focus-mode-container .cm-gutters {
+  display: none !important;
+}
+
+/* Dim non-active lines — iA Writer paragraph focus */
+.focus-mode .focus-mode-container .cm-line:not(.cm-activeLine) {
+  opacity: 0.35;
+  transition: opacity 0.3s ease;
+}
+
+.focus-mode .focus-mode-container .cm-activeLine {
+  opacity: 1 !important;
+  background: transparent !important;
+  transition: opacity 0.3s ease;
 }
 
 /* ── Typewriter Mode ── */
@@ -350,3 +569,40 @@ body {
 .animate-in {
   animation: fadeIn 0.2s ease-out;
 }
+
+/* ── YAML Front Matter ── */
+.front-matter {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 1.5em;
+  font-size: 0.8em;
+}
+.front-matter table { border: none; margin: 0; width: 100%; }
+.front-matter td { border: none; padding: 2px 8px 2px 0; }
+.fm-key {
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  padding-right: 16px;
+}
+.fm-val { color: var(--text-secondary); }
+
+/* ── Footnotes ── */
+.markdown-preview .footnotes {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border);
+  font-size: 0.875em;
+  color: var(--text-secondary);
+}
+.markdown-preview .footnotes ol { padding-left: 1.5em; }
+.markdown-preview a[data-footnote-ref] {
+  font-size: 0.75em;
+  vertical-align: super;
+  text-decoration: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+.markdown-preview a[data-footnote-backref] { color: var(--text-muted); }

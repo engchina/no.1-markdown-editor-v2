@@ -4,7 +4,6 @@ import { useEditorStore, type ViewMode } from '../../store/editor'
 import { LANGUAGES, type Language } from '../../i18n'
 import { useFileOps } from '../../hooks/useFileOps'
 import { useExport } from '../../hooks/useExport'
-import { applyTheme, getThemeById } from '../../themes'
 import ThemePanel from '../ThemePanel/ThemePanel'
 
 // SVG icon helper
@@ -33,7 +32,12 @@ const icons = {
   palette: 'M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20z M12 8v4 M12 16h.01',
   wysiwyg: 'M4 6h16M4 12h10M4 18h7',
   export: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',
-  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4',
+  source: 'M8 8l-4 4 4 4 M16 8l4 4-4 4',
+  split: 'M3 5h18v14H3z M12 5v14',
+  preview: 'M2 12c2.5-4 6-6 10-6c4 0 7.5 2 10 6c-2.5 4-6 6-10 6c-4 0-7.5-2-10-6z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
+  print: 'M6 9V4h12v5 M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1 M7 14h10v6H7z',
+  fileText: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M8 13h8 M8 17h8 M8 9h3',
+  copy: 'M9 9h10v11H9z M6 15H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
 }
 
 interface ToolbarBtnProps {
@@ -42,15 +46,18 @@ interface ToolbarBtnProps {
   active?: boolean
   children: React.ReactNode
   disabled?: boolean
+  buttonRef?: React.Ref<HTMLButtonElement>
 }
 
-function ToolbarBtn({ title, onClick, active, children, disabled }: ToolbarBtnProps) {
+function ToolbarBtn({ title, onClick, active, children, disabled, buttonRef }: ToolbarBtnProps) {
   return (
     <button
+      ref={buttonRef}
+      type="button"
       title={title}
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center justify-center w-8 h-8 rounded-lg hover-scale disabled:opacity-40"
+      className="flex items-center justify-center w-8 h-8 rounded-[10px] hover-scale disabled:opacity-40 transition-all duration-200"
       style={{
         color: active ? 'var(--accent)' : 'var(--text-secondary)',
         background: active ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
@@ -71,50 +78,73 @@ function Divider() {
   return <div className="w-px mx-1 self-stretch" style={{ background: 'var(--border)' }} />
 }
 
-const VIEW_MODES: { mode: ViewMode; icon: string; title: string }[] = [
-  { mode: 'source', icon: '⌨', title: 'Source' },
-  { mode: 'split', icon: '⬛', title: 'Split' },
-  { mode: 'preview', icon: '👁', title: 'Preview' },
+const VIEW_MODES: { mode: ViewMode; icon: keyof typeof icons }[] = [
+  { mode: 'source', icon: 'source' },
+  { mode: 'split', icon: 'split' },
+  { mode: 'preview', icon: 'preview' },
 ]
 
-function ExportMenu({ onClose }: { onClose: () => void }) {
-  const { exportHtml, exportPdf, exportMarkdown } = useExport()
+function ExportMenu({
+  onClose,
+  triggerRef,
+}: {
+  onClose: () => void
+  triggerRef: React.RefObject<HTMLButtonElement>
+}) {
+  const { t } = useTranslation()
+  const { exportHtml, exportPdf, exportMarkdown, copyAsHtml } = useExport()
   const ref = useRef<HTMLDivElement>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      const target = e.target as Node | null
+      if (!target) return
+
+      if (ref.current?.contains(target)) return
+      if (triggerRef.current?.contains(target)) return
+      onClose()
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
+  }, [onClose, triggerRef])
 
-  const items = [
-    { label: 'Export as HTML', icon: '🌐', action: exportHtml },
-    { label: 'Export as PDF', icon: '📄', action: exportPdf },
-    { label: 'Export Markdown', icon: '📝', action: exportMarkdown },
+  const items: { label: string; icon: keyof typeof icons; action: () => void | Promise<void> }[] = [
+    { label: t('export.html'), icon: 'code', action: exportHtml },
+    { label: t('export.pdf'), icon: 'print', action: exportPdf },
+    { label: t('export.markdown'), icon: 'fileText', action: exportMarkdown },
+    {
+      label: copied ? t('export.copied') : t('export.copyHtml'),
+      icon: 'copy',
+      action: async () => {
+        await copyAsHtml()
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      },
+    },
   ]
 
   return (
     <div
       ref={ref}
-      className="absolute right-2 top-12 z-50 rounded-lg shadow-xl overflow-hidden animate-in"
+      className="absolute right-2 top-12 z-50 rounded-xl shadow-xl overflow-hidden animate-in glass-panel"
       style={{
         width: '200px',
-        background: 'var(--bg-primary)',
-        border: '1px solid var(--border)',
+        background: 'var(--glass-bg)',
+        borderColor: 'var(--glass-border)',
       }}
     >
       {items.map(({ label, icon, action }) => (
         <button
           key={label}
+          type="button"
           onClick={() => { action(); onClose() }}
           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors"
           style={{ color: 'var(--text-primary)' }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-secondary)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
-          <span>{icon}</span>
+          <Icon d={icons[icon]} />
           <span>{label}</span>
         </button>
       ))}
@@ -122,7 +152,7 @@ function ExportMenu({ onClose }: { onClose: () => void }) {
   )
 }
 
-export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void }) {
+export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () => void; saving?: boolean }) {
   const { t } = useTranslation()
   const {
     viewMode, setViewMode,
@@ -131,48 +161,52 @@ export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void 
     wysiwygMode, setWysiwygMode,
     language, setLanguage,
     tabs, activeTabId,
-    activeThemeId,
   } = useEditorStore()
 
-  const { newFile, openFile, saveFile } = useFileOps()
+  const { newFile, openFile, saveFile, saveFileAs } = useFileOps()
   const [showExport, setShowExport] = useState(false)
   const [showTheme, setShowTheme] = useState(false)
+  const exportButtonRef = useRef<HTMLButtonElement>(null)
+  const themeButtonRef = useRef<HTMLButtonElement>(null)
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0]
-
-  // Apply stored theme on mount
-  useEffect(() => {
-    applyTheme(getThemeById(activeThemeId))
-  }, [activeThemeId])
 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key === 'n') { e.preventDefault(); newFile() }
-      if (mod && e.key === 'o') { e.preventDefault(); openFile() }
-      if (mod && e.key === 's') { e.preventDefault(); saveFile() }
+      if (mod && e.key === 'o') { e.preventDefault(); void openFile() }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); void saveFileAs() }
+      if (mod && !e.shiftKey && e.key === 's') { e.preventDefault(); void saveFile() }
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [newFile, openFile, saveFile])
+  }, [newFile, openFile, saveFile, saveFileAs])
 
   return (
     <div
-      className="relative flex items-center px-3 gap-1 flex-shrink-0"
+      className="relative flex items-center px-4 gap-1.5 flex-shrink-0 rounded-[1.25rem] glass-panel transition-all duration-300"
       style={{
         height: '48px',
-        background: 'transparent',
+        boxShadow: 'var(--shadow-elegant)'
       }}
     >
+      {/* Sidebar toggle */}
+      <ToolbarBtn title={t('toolbar.toggleSidebar')} onClick={() => setSidebarOpen(!sidebarOpen)} active={sidebarOpen}>
+        <Icon d={icons.sidebar} />
+      </ToolbarBtn>
+
+      <Divider />
+
       {/* File ops */}
       <ToolbarBtn title={`${t('toolbar.new')} (Ctrl+N)`} onClick={newFile}>
         <Icon d={icons.new} />
       </ToolbarBtn>
-      <ToolbarBtn title={`${t('toolbar.open')} (Ctrl+O)`} onClick={openFile}>
+      <ToolbarBtn title={`${t('toolbar.open')} (Ctrl+O)`} onClick={() => { void openFile() }}>
         <Icon d={icons.open} />
       </ToolbarBtn>
-      <ToolbarBtn title={`${t('toolbar.save')} (Ctrl+S)`} onClick={saveFile}>
+      <ToolbarBtn title={`${t('toolbar.save')} (Ctrl+S)`} onClick={() => { void saveFile() }}>
         <Icon d={icons.save} />
       </ToolbarBtn>
 
@@ -222,7 +256,7 @@ export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void 
       {/* WYSIWYG toggle */}
       <Divider />
       <ToolbarBtn
-        title={`WYSIWYG Live Preview${wysiwygMode ? ' (ON)' : ''}`}
+        title={`${t('themePanel.wysiwyg')}${wysiwygMode ? ' (ON)' : ''}`}
         onClick={() => setWysiwygMode(!wysiwygMode)}
         active={wysiwygMode}
       >
@@ -232,26 +266,35 @@ export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void 
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Title */}
+      {/* Title + save indicator */}
       {activeTab && (
-        <span className="text-sm truncate max-w-xs" style={{ color: 'var(--text-secondary)' }}>
-          {activeTab.isDirty ? '● ' : ''}{activeTab.name}
+        <span className="text-sm truncate max-w-xs flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+          {saving
+            ? <span className="inline-block w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />
+            : activeTab.isDirty
+            ? <span style={{ color: 'var(--accent)' }}>●</span>
+            : null}
+          {activeTab.name}
         </span>
       )}
 
       <div className="flex-1" />
 
       {/* Command Palette */}
-      <ToolbarBtn title="Command Palette (Ctrl+Shift+P)" onClick={() => onOpenPalette?.()}>
+      <ToolbarBtn title={t('toolbar.commandPalette')} onClick={() => onOpenPalette?.()}>
         <span className="text-xs font-mono" style={{ fontSize: '13px' }}>⌘</span>
       </ToolbarBtn>
 
       {/* Export */}
       <div className="relative">
-        <ToolbarBtn title="Export" onClick={() => { setShowExport(!showExport); setShowTheme(false) }}>
+        <ToolbarBtn
+          title={t('toolbar.export')}
+          buttonRef={exportButtonRef}
+          onClick={() => { setShowExport(!showExport); setShowTheme(false) }}
+        >
           <Icon d={icons.export} />
         </ToolbarBtn>
-        {showExport && <ExportMenu onClose={() => setShowExport(false)} />}
+        {showExport && <ExportMenu onClose={() => setShowExport(false)} triggerRef={exportButtonRef} />}
       </div>
 
       {/* View mode */}
@@ -259,10 +302,10 @@ export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void 
         className="flex items-center rounded overflow-hidden mx-1"
         style={{ border: '1px solid var(--border)', height: '28px' }}
       >
-        {VIEW_MODES.map(({ mode, icon, title }) => (
+        {VIEW_MODES.map(({ mode, icon }) => (
           <button
             key={mode}
-            title={title}
+            title={t(`viewMode.${mode}`)}
             onClick={() => setViewMode(mode)}
             className="px-2 h-full text-xs transition-colors"
             style={{
@@ -271,7 +314,7 @@ export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void 
               borderRight: mode !== 'preview' ? '1px solid var(--border)' : 'none',
             }}
           >
-            {icon}
+            <Icon d={icons[icon]} size={14} />
           </button>
         ))}
       </div>
@@ -300,13 +343,14 @@ export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void 
       {/* Theme panel */}
       <div className="relative">
         <ToolbarBtn
-          title="Appearance"
+          title={t('toolbar.appearance')}
+          buttonRef={themeButtonRef}
           onClick={() => { setShowTheme(!showTheme); setShowExport(false) }}
           active={showTheme}
         >
           <Icon d={icons.palette} />
         </ToolbarBtn>
-        {showTheme && <ThemePanel onClose={() => setShowTheme(false)} />}
+        {showTheme && <ThemePanel onClose={() => setShowTheme(false)} triggerRef={themeButtonRef} />}
       </div>
 
       {/* Focus mode */}
@@ -314,10 +358,6 @@ export default function Toolbar({ onOpenPalette }: { onOpenPalette?: () => void 
         <Icon d={icons.focus} />
       </ToolbarBtn>
 
-      {/* Sidebar toggle */}
-      <ToolbarBtn title={t('toolbar.toggleSidebar')} onClick={() => setSidebarOpen(!sidebarOpen)} active={sidebarOpen}>
-        <Icon d={icons.sidebar} />
-      </ToolbarBtn>
     </div>
   )
 }

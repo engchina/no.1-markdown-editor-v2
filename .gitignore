@@ -15,6 +15,8 @@ src-tauri/.cargo/config.local.toml
 coverage/
 playwright-report/
 test-results/
+.playwright-cli/
+output/playwright/
 
 # Editor / IDE
 .vscode/settings.json

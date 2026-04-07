@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useCommands, type Command } from '../../hooks/useCommands'
+import { useRecentFiles } from '../../hooks/useRecentFiles'
 import { useEditorStore } from '../../store/editor'
+import AppIcon, { type IconName } from '../Icons/AppIcon'
 
 interface Props {
   mode: 'command' | 'file'
@@ -40,7 +43,128 @@ function fuzzyScore(query: string, text: string): number {
   return 50
 }
 
+function IconBadge({ children }: { children: ReactNode }) {
+  return (
+    <span
+      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md"
+      style={{
+        background: 'color-mix(in srgb, var(--bg-tertiary) 72%, transparent)',
+        color: 'var(--text-muted)',
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+function TextBadge({ label }: { label: string }) {
+  return (
+    <IconBadge>
+      <span className="text-[11px] font-semibold leading-none" style={{ fontFamily: 'monospace' }}>
+        {label}
+      </span>
+    </IconBadge>
+  )
+}
+
+function SvgBadge({ name }: { name: IconName }) {
+  return (
+    <IconBadge>
+      <AppIcon name={name} size={14} />
+    </IconBadge>
+  )
+}
+
+function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
+  if (command.id.startsWith('file.recent.') || command.id.startsWith('palette.recent.')) return <SvgBadge name="clock" />
+  if (mode === 'file') return <SvgBadge name="file" />
+  if (command.id.startsWith('theme.')) return <SvgBadge name="palette" />
+  if (command.id.startsWith('lang.')) return <SvgBadge name="globe" />
+
+  switch (command.id) {
+    case 'file.new':
+      return <SvgBadge name="filePlus" />
+    case 'file.open':
+      return <SvgBadge name="folderOpen" />
+    case 'file.save':
+    case 'file.saveAs':
+      return <SvgBadge name="save" />
+    case 'file.recent.clear':
+      return <SvgBadge name="trash" />
+    case 'view.source':
+      return <SvgBadge name="code" />
+    case 'view.split':
+      return <SvgBadge name="split" />
+    case 'view.preview':
+      return <SvgBadge name="eye" />
+    case 'view.focus':
+      return <SvgBadge name="focus" />
+    case 'view.wysiwyg':
+      return <SvgBadge name="sparkles" />
+    case 'view.sidebar':
+      return <SvgBadge name="panel" />
+    case 'view.lineNumbers':
+      return <SvgBadge name="lineNumbers" />
+    case 'view.wordWrap':
+      return <SvgBadge name="wrap" />
+    case 'view.typewriter':
+      return <SvgBadge name="typewriter" />
+    case 'view.fontSizeIncrease':
+      return <TextBadge label="A+" />
+    case 'view.fontSizeDecrease':
+      return <TextBadge label="A-" />
+    case 'view.fontSizeReset':
+      return <TextBadge label="A" />
+    case 'edit.find':
+      return <SvgBadge name="search" />
+    case 'edit.replace':
+      return <SvgBadge name="replace" />
+    case 'edit.bold':
+      return <SvgBadge name="bold" />
+    case 'edit.italic':
+      return <SvgBadge name="italic" />
+    case 'edit.strikethrough':
+      return <SvgBadge name="strikethrough" />
+    case 'edit.code':
+    case 'edit.codeBlock':
+      return <SvgBadge name="code" />
+    case 'edit.quote':
+      return <SvgBadge name="quote" />
+    case 'edit.ul':
+      return <SvgBadge name="list" />
+    case 'edit.ol':
+      return <SvgBadge name="orderedList" />
+    case 'edit.task':
+      return <SvgBadge name="task" />
+    case 'edit.hr':
+      return <SvgBadge name="hr" />
+    case 'edit.table':
+      return <SvgBadge name="table" />
+    case 'edit.link':
+      return <SvgBadge name="link" />
+    case 'edit.image':
+      return <SvgBadge name="image" />
+    case 'edit.h1':
+      return <TextBadge label="H1" />
+    case 'edit.h2':
+      return <TextBadge label="H2" />
+    case 'edit.h3':
+      return <TextBadge label="H3" />
+    case 'export.html':
+      return <SvgBadge name="code" />
+    case 'export.pdf':
+      return <SvgBadge name="print" />
+    case 'export.markdown':
+      return <SvgBadge name="file" />
+    case 'export.copyHtml':
+      return <SvgBadge name="copy" />
+    default:
+      return <SvgBadge name="outline" />
+  }
+}
+
 export default function CommandPalette({ mode, onClose }: Props) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -48,23 +172,46 @@ export default function CommandPalette({ mode, onClose }: Props) {
 
   const commands = useCommands()
   const { tabs } = useEditorStore()
+  const { recentFiles, openRecent } = useRecentFiles()
 
   const filtered = useMemo(() => {
     if (mode === 'file') {
-      // File mode: search open tabs
-      return tabs
-        .filter((t) => fuzzyMatch(query, t.name))
-        .map((t) => ({
-          id: t.id,
-          label: t.name,
-          description: t.path ?? 'Unsaved',
-          icon: '📄',
+      const openTabCommands: Command[] = tabs
+        .filter((tab) => fuzzyMatch(query, tab.name))
+        .map((tab) => ({
+          id: tab.id,
+          label: tab.name,
+          description: tab.path ?? t('palette.unsaved'),
+          icon: undefined,
           category: 'file' as const,
           shortcut: undefined,
           action: () => {
-            useEditorStore.getState().setActiveTab(t.id)
+            useEditorStore.getState().setActiveTab(tab.id)
           },
         }))
+
+      const openTabPaths = new Set(
+        tabs
+          .map((tab) => tab.path)
+          .filter((path): path is string => typeof path === 'string' && path.length > 0)
+      )
+
+      const recentCommands: Command[] = recentFiles
+        .filter((file) => !openTabPaths.has(file.path))
+        .filter((file) => fuzzyMatch(query, file.name) || fuzzyMatch(query, file.path))
+        .map((file) => ({
+          id: `palette.recent.${file.path}`,
+          label: file.name,
+          description: `${t('menu.recentFiles')} · ${file.path}`,
+          icon: undefined,
+          category: 'file',
+          shortcut: undefined,
+          action: () => {
+            void openRecent(file)
+          },
+        }))
+
+      return [...openTabCommands, ...recentCommands]
     }
 
     // Command mode
@@ -77,7 +224,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
       return CATEGORY_ORDER.flatMap((cat) => results.filter((c) => c.category === cat))
     }
     return results
-  }, [query, commands, tabs, mode])
+  }, [query, commands, tabs, mode, openRecent, recentFiles, t])
 
   // Reset selection on filter change
   useEffect(() => { setSelectedIndex(0) }, [filtered.length, query])
@@ -101,6 +248,11 @@ export default function CommandPalette({ mode, onClose }: Props) {
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (filtered.length === 0) {
+        if (e.key === 'Escape') onClose()
+        return
+      }
+
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1))
@@ -127,10 +279,10 @@ export default function CommandPalette({ mode, onClose }: Props) {
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
-        className="w-full max-w-xl rounded-xl shadow-2xl overflow-hidden animate-in"
+        className="w-full max-w-xl rounded-xl shadow-2xl overflow-hidden animate-in glass-panel"
         style={{
-          background: 'var(--bg-primary)',
-          border: '1px solid var(--border)',
+          background: 'var(--glass-bg)',
+          borderColor: 'var(--glass-border)',
           maxHeight: '60vh',
           display: 'flex',
           flexDirection: 'column',
@@ -141,8 +293,8 @@ export default function CommandPalette({ mode, onClose }: Props) {
           className="flex items-center gap-3 px-4"
           style={{ borderBottom: '1px solid var(--border)', height: '52px' }}
         >
-          <span style={{ color: 'var(--text-muted)', fontSize: '18px' }}>
-            {mode === 'file' ? '📄' : '>'}
+          <span style={{ color: 'var(--text-muted)' }}>
+            {mode === 'file' ? <AppIcon name="file" size={16} /> : <AppIcon name="search" size={16} />}
           </span>
           <input
             ref={inputRef}
@@ -150,7 +302,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={mode === 'file' ? 'Switch to tab...' : 'Type a command...'}
+            placeholder={mode === 'file' ? t('palette.filePlaceholder') : t('palette.commandPlaceholder')}
             className="flex-1 bg-transparent outline-none text-sm"
             style={{ color: 'var(--text-primary)', caretColor: 'var(--accent)' }}
           />
@@ -166,7 +318,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
         <ul ref={listRef} className="flex-1 overflow-y-auto py-1">
           {filtered.length === 0 && (
             <li className="px-4 py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-              No results for &quot;{query}&quot;
+              {t('palette.noResults', { query })}
             </li>
           )}
           {filtered.map((cmd, idx) => {
@@ -174,28 +326,27 @@ export default function CommandPalette({ mode, onClose }: Props) {
             if (showHeader) lastCategory = cmd.category
 
             return (
-              <div key={cmd.id}>
+              <Fragment key={cmd.id}>
                 {showHeader && (
                   <div
                     className="px-4 py-1 text-xs font-semibold uppercase tracking-wider"
                     style={{ color: 'var(--text-muted)' }}
                   >
-                    {CATEGORY_LABEL[cmd.category] ?? cmd.category}
+                    {t(`palette.${cmd.category}`, CATEGORY_LABEL[cmd.category] ?? cmd.category)}
                   </div>
                 )}
                 <li
                   data-idx={idx}
-                  className="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors"
+                  className="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors hover-scale"
                   style={{
                     background: idx === selectedIndex ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
                     color: idx === selectedIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    transformOrigin: 'left center',
                   }}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   onClick={() => execute(cmd)}
                 >
-                  {cmd.icon && (
-                    <span className="flex-shrink-0 w-5 text-center text-sm">{cmd.icon}</span>
-                  )}
+                  {getCommandIndicator(cmd, mode)}
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{cmd.label}</div>
                     {cmd.description && (
@@ -218,7 +369,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
                     </kbd>
                   )}
                 </li>
-              </div>
+              </Fragment>
             )
           })}
         </ul>
@@ -228,11 +379,11 @@ export default function CommandPalette({ mode, onClose }: Props) {
           className="flex items-center gap-4 px-4 py-2 text-xs"
           style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}
         >
-          <span>↑↓ navigate</span>
-          <span>↵ execute</span>
-          <span>ESC close</span>
+          <span>↑↓ {t('palette.navigate')}</span>
+          <span>↵ {t('palette.execute')}</span>
+          <span>ESC {t('palette.close')}</span>
           <div className="flex-1" />
-          <span>{filtered.length} results</span>
+          <span>{t('palette.results', { count: filtered.length })}</span>
         </div>
       </div>
     </div>

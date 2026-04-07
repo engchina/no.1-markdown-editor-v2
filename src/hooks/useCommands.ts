@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useEditorStore } from '../store/editor'
 import { useFileOps } from './useFileOps'
 import { useExport } from './useExport'
+import { useRecentFiles } from './useRecentFiles'
 import { applyTheme, getThemeById, THEMES } from '../themes'
 import type { Language } from '../i18n'
 
@@ -16,190 +17,388 @@ export interface Command {
   action: () => void
 }
 
+function emitFormat(action: string) {
+  document.dispatchEvent(new CustomEvent('editor:format', { detail: action }))
+}
+
 export function useCommands(): Command[] {
   const { t } = useTranslation()
   const store = useEditorStore()
   const { newFile, openFile, saveFile, saveFileAs } = useFileOps()
-  const { exportHtml, exportPdf, exportMarkdown } = useExport()
+  const { exportHtml, exportPdf, exportMarkdown, copyAsHtml } = useExport()
+  const { recentFiles, openRecent, clearRecent } = useRecentFiles()
 
-  return useMemo<Command[]>(() => [
-    // ── File ──────────────────────────────────────────────────────────────
-    {
-      id: 'file.new',
-      label: t('menu.newFile'),
-      icon: '📄',
-      category: 'file',
-      shortcut: 'Ctrl+N',
-      action: newFile,
-    },
-    {
-      id: 'file.open',
-      label: t('menu.openFile'),
-      icon: '📂',
-      category: 'file',
-      shortcut: 'Ctrl+O',
-      action: openFile,
-    },
-    {
-      id: 'file.save',
-      label: t('menu.saveFile'),
-      icon: '💾',
-      category: 'file',
-      shortcut: 'Ctrl+S',
-      action: saveFile,
-    },
-    {
-      id: 'file.saveAs',
-      label: t('menu.saveAs'),
-      icon: '💾',
-      category: 'file',
-      shortcut: 'Ctrl+Shift+S',
-      action: saveFileAs,
-    },
-    // ── View ──────────────────────────────────────────────────────────────
-    {
-      id: 'view.source',
-      label: 'View: Source Mode',
-      icon: '⌨',
-      category: 'view',
-      action: () => store.setViewMode('source'),
-    },
-    {
-      id: 'view.split',
-      label: 'View: Split Mode',
-      icon: '⬛',
-      category: 'view',
-      action: () => store.setViewMode('split'),
-    },
-    {
-      id: 'view.preview',
-      label: 'View: Preview Mode',
-      icon: '👁',
-      category: 'view',
-      action: () => store.setViewMode('preview'),
-    },
-    {
-      id: 'view.focus',
-      label: 'View: Focus Mode',
-      icon: '🎯',
-      category: 'view',
-      shortcut: 'F11',
-      action: () => store.setFocusMode(!store.focusMode),
-    },
-    {
-      id: 'view.wysiwyg',
-      label: `${store.wysiwygMode ? 'Disable' : 'Enable'} WYSIWYG Live Preview`,
-      icon: '✨',
-      category: 'view',
-      action: () => store.setWysiwygMode(!store.wysiwygMode),
-    },
-    {
-      id: 'view.sidebar',
-      label: `${store.sidebarOpen ? 'Hide' : 'Show'} Sidebar`,
-      icon: '📋',
-      category: 'view',
-      shortcut: 'Ctrl+\\',
-      action: () => store.setSidebarOpen(!store.sidebarOpen),
-    },
-    {
-      id: 'view.lineNumbers',
-      label: `${store.lineNumbers ? 'Hide' : 'Show'} Line Numbers`,
-      icon: '🔢',
-      category: 'view',
-      action: () => store.setLineNumbers(!store.lineNumbers),
-    },
-    {
-      id: 'view.wordWrap',
-      label: `${store.wordWrap ? 'Disable' : 'Enable'} Word Wrap`,
-      icon: '↩',
-      category: 'view',
-      action: () => store.setWordWrap(!store.wordWrap),
-    },
-    {
-      id: 'view.typewriter',
-      label: `${store.typewriterMode ? 'Disable' : 'Enable'} Typewriter Mode`,
-      icon: '🖊',
-      category: 'view',
-      action: () => store.setTypewriterMode(!store.typewriterMode),
-    },
-    {
-      id: 'view.fontSizeIncrease',
-      label: 'Increase Font Size',
-      icon: 'A+',
-      category: 'view',
-      shortcut: 'Ctrl++',
-      action: () => store.setFontSize(Math.min(store.fontSize + 1, 24)),
-    },
-    {
-      id: 'view.fontSizeDecrease',
-      label: 'Decrease Font Size',
-      icon: 'A-',
-      category: 'view',
-      shortcut: 'Ctrl+-',
-      action: () => store.setFontSize(Math.max(store.fontSize - 1, 11)),
-    },
-    {
-      id: 'view.fontSizeReset',
-      label: 'Reset Font Size',
-      icon: 'A',
-      category: 'view',
-      shortcut: 'Ctrl+0',
-      action: () => store.setFontSize(14),
-    },
-    // ── Edit ──────────────────────────────────────────────────────────────
-    {
-      id: 'edit.find',
-      label: 'Find in Document',
-      icon: '🔍',
-      category: 'edit',
-      shortcut: 'Ctrl+F',
-      action: () => document.dispatchEvent(new CustomEvent('editor:search', { detail: { replace: false } })),
-    },
-    {
-      id: 'edit.replace',
-      label: 'Find & Replace',
-      icon: '🔄',
-      category: 'edit',
-      shortcut: 'Ctrl+H',
-      action: () => document.dispatchEvent(new CustomEvent('editor:search', { detail: { replace: true } })),
-    },
-    // ── Export ────────────────────────────────────────────────────────────
-    {
-      id: 'export.html',
-      label: 'Export as HTML',
-      icon: '🌐',
-      category: 'export',
-      action: exportHtml,
-    },
-    {
-      id: 'export.pdf',
-      label: 'Export as PDF',
-      icon: '📄',
-      category: 'export',
-      action: exportPdf,
-    },
-    {
-      id: 'export.markdown',
-      label: 'Export Markdown',
-      icon: '📝',
-      category: 'export',
-      action: exportMarkdown,
-    },
-    // ── Themes ────────────────────────────────────────────────────────────
-    ...THEMES.map((theme) => ({
-      id: `theme.${theme.id}`,
-      label: `Theme: ${theme.name}`,
-      icon: theme.dark ? '🌙' : '☀️',
-      category: 'theme' as const,
+  return useMemo<Command[]>(() => {
+    const recentCommands = recentFiles.slice(0, 5).map((file) => ({
+      id: `file.recent.${file.path}`,
+      label: t('commands.recentFile', { name: file.name }),
+      description: file.path,
+      icon: '🕐',
+      category: 'file' as const,
       action: () => {
-        store.setActiveThemeId(theme.id)
-        applyTheme(getThemeById(theme.id))
+        void openRecent(file)
       },
-    })),
-    // ── Language ──────────────────────────────────────────────────────────
-    { id: 'lang.en', label: 'Language: English', icon: '🇬🇧', category: 'language', action: () => store.setLanguage('en' as Language) },
-    { id: 'lang.ja', label: 'Language: 日本語', icon: '🇯🇵', category: 'language', action: () => store.setLanguage('ja' as Language) },
-    { id: 'lang.zh', label: 'Language: 中文', icon: '🇨🇳', category: 'language', action: () => store.setLanguage('zh' as Language) },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [store.wysiwygMode, store.sidebarOpen, store.focusMode, store.lineNumbers, store.wordWrap, store.typewriterMode, store.fontSize])
+    }))
+
+    const commands: Command[] = [
+      {
+        id: 'file.new',
+        label: t('menu.newFile'),
+        icon: '📄',
+        category: 'file',
+        shortcut: 'Ctrl+N',
+        action: newFile,
+      },
+      {
+        id: 'file.open',
+        label: t('menu.openFile'),
+        icon: '📂',
+        category: 'file',
+        shortcut: 'Ctrl+O',
+        action: () => {
+          void openFile()
+        },
+      },
+      {
+        id: 'file.save',
+        label: t('menu.saveFile'),
+        icon: '💾',
+        category: 'file',
+        shortcut: 'Ctrl+S',
+        action: () => {
+          void saveFile()
+        },
+      },
+      {
+        id: 'file.saveAs',
+        label: t('menu.saveAs'),
+        icon: '📝',
+        category: 'file',
+        shortcut: 'Ctrl+Shift+S',
+        action: () => {
+          void saveFileAs()
+        },
+      },
+      ...recentCommands,
+      {
+        id: 'file.recent.clear',
+        label: t('commands.clearRecentFiles'),
+        icon: '🧹',
+        category: 'file',
+        action: clearRecent,
+      },
+      {
+        id: 'view.source',
+        label: t('commands.viewSourceMode'),
+        icon: '⌨',
+        category: 'view',
+        action: () => store.setViewMode('source'),
+      },
+      {
+        id: 'view.split',
+        label: t('commands.viewSplitMode'),
+        icon: '⬛',
+        category: 'view',
+        action: () => store.setViewMode('split'),
+      },
+      {
+        id: 'view.preview',
+        label: t('commands.viewPreviewMode'),
+        icon: '👁',
+        category: 'view',
+        action: () => store.setViewMode('preview'),
+      },
+      {
+        id: 'view.focus',
+        label: t('commands.viewFocusMode'),
+        icon: '🎯',
+        category: 'view',
+        shortcut: 'F11',
+        action: () => store.setFocusMode(!store.focusMode),
+      },
+      {
+        id: 'view.wysiwyg',
+        label: store.wysiwygMode ? t('commands.disableWysiwyg') : t('commands.enableWysiwyg'),
+        icon: '✨',
+        category: 'view',
+        action: () => store.setWysiwygMode(!store.wysiwygMode),
+      },
+      {
+        id: 'view.sidebar',
+        label: store.sidebarOpen ? t('commands.hideSidebar') : t('commands.showSidebar'),
+        icon: '📋',
+        category: 'view',
+        shortcut: 'Ctrl+\\',
+        action: () => store.setSidebarOpen(!store.sidebarOpen),
+      },
+      {
+        id: 'view.lineNumbers',
+        label: store.lineNumbers ? t('commands.hideLineNumbers') : t('commands.showLineNumbers'),
+        icon: '🔢',
+        category: 'view',
+        action: () => store.setLineNumbers(!store.lineNumbers),
+      },
+      {
+        id: 'view.wordWrap',
+        label: store.wordWrap ? t('commands.disableWordWrap') : t('commands.enableWordWrap'),
+        icon: '↩',
+        category: 'view',
+        action: () => store.setWordWrap(!store.wordWrap),
+      },
+      {
+        id: 'view.typewriter',
+        label: store.typewriterMode ? t('commands.disableTypewriterMode') : t('commands.enableTypewriterMode'),
+        icon: '🖊',
+        category: 'view',
+        action: () => store.setTypewriterMode(!store.typewriterMode),
+      },
+      {
+        id: 'view.fontSizeIncrease',
+        label: t('commands.increaseFontSize'),
+        icon: 'A+',
+        category: 'view',
+        shortcut: 'Ctrl++',
+        action: () => store.setFontSize(Math.min(store.fontSize + 1, 24)),
+      },
+      {
+        id: 'view.fontSizeDecrease',
+        label: t('commands.decreaseFontSize'),
+        icon: 'A-',
+        category: 'view',
+        shortcut: 'Ctrl+-',
+        action: () => store.setFontSize(Math.max(store.fontSize - 1, 11)),
+      },
+      {
+        id: 'view.fontSizeReset',
+        label: t('commands.resetFontSize'),
+        icon: 'A',
+        category: 'view',
+        shortcut: 'Ctrl+0',
+        action: () => store.setFontSize(14),
+      },
+      {
+        id: 'edit.find',
+        label: t('commands.findInDocument'),
+        icon: '🔍',
+        category: 'edit',
+        shortcut: 'Ctrl+F',
+        action: () => document.dispatchEvent(new CustomEvent('editor:search', { detail: { replace: false } })),
+      },
+      {
+        id: 'edit.replace',
+        label: t('commands.findReplace'),
+        icon: '🔄',
+        category: 'edit',
+        shortcut: 'Ctrl+H',
+        action: () => document.dispatchEvent(new CustomEvent('editor:search', { detail: { replace: true } })),
+      },
+      {
+        id: 'edit.bold',
+        label: t('toolbar.bold'),
+        icon: '𝐁',
+        category: 'edit',
+        shortcut: 'Ctrl+B',
+        action: () => emitFormat('bold'),
+      },
+      {
+        id: 'edit.italic',
+        label: t('toolbar.italic'),
+        icon: '𝘐',
+        category: 'edit',
+        shortcut: 'Ctrl+I',
+        action: () => emitFormat('italic'),
+      },
+      {
+        id: 'edit.strikethrough',
+        label: t('toolbar.strikethrough'),
+        icon: 'S̶',
+        category: 'edit',
+        action: () => emitFormat('strikethrough'),
+      },
+      {
+        id: 'edit.code',
+        label: t('toolbar.code'),
+        icon: '</>',
+        category: 'edit',
+        action: () => emitFormat('code'),
+      },
+      {
+        id: 'edit.codeBlock',
+        label: t('toolbar.codeBlock'),
+        icon: '```',
+        category: 'edit',
+        action: () => emitFormat('codeblock'),
+      },
+      {
+        id: 'edit.quote',
+        label: t('toolbar.quote'),
+        icon: '❝',
+        category: 'edit',
+        action: () => emitFormat('quote'),
+      },
+      {
+        id: 'edit.ul',
+        label: t('toolbar.ul'),
+        icon: '•',
+        category: 'edit',
+        action: () => emitFormat('ul'),
+      },
+      {
+        id: 'edit.ol',
+        label: t('toolbar.ol'),
+        icon: '1.',
+        category: 'edit',
+        action: () => emitFormat('ol'),
+      },
+      {
+        id: 'edit.task',
+        label: t('toolbar.task'),
+        icon: '☐',
+        category: 'edit',
+        action: () => emitFormat('task'),
+      },
+      {
+        id: 'edit.hr',
+        label: t('toolbar.hr'),
+        icon: '—',
+        category: 'edit',
+        action: () => emitFormat('hr'),
+      },
+      {
+        id: 'edit.table',
+        label: t('toolbar.table'),
+        icon: '▦',
+        category: 'edit',
+        action: () => emitFormat('table'),
+      },
+      {
+        id: 'edit.link',
+        label: t('toolbar.link'),
+        icon: '🔗',
+        category: 'edit',
+        action: () => emitFormat('link'),
+      },
+      {
+        id: 'edit.image',
+        label: t('toolbar.image'),
+        icon: '🖼',
+        category: 'edit',
+        action: () => emitFormat('image'),
+      },
+      {
+        id: 'edit.h1',
+        label: t('toolbar.h1'),
+        icon: 'H1',
+        category: 'edit',
+        action: () => emitFormat('h1'),
+      },
+      {
+        id: 'edit.h2',
+        label: t('toolbar.h2'),
+        icon: 'H2',
+        category: 'edit',
+        action: () => emitFormat('h2'),
+      },
+      {
+        id: 'edit.h3',
+        label: t('toolbar.h3'),
+        icon: 'H3',
+        category: 'edit',
+        action: () => emitFormat('h3'),
+      },
+      {
+        id: 'export.html',
+        label: t('commands.exportHtml'),
+        icon: '🌐',
+        category: 'export',
+        action: () => {
+          void exportHtml()
+        },
+      },
+      {
+        id: 'export.pdf',
+        label: t('commands.exportPdf'),
+        icon: '📄',
+        category: 'export',
+        action: () => {
+          void exportPdf()
+        },
+      },
+      {
+        id: 'export.markdown',
+        label: t('commands.exportMarkdown'),
+        icon: '📝',
+        category: 'export',
+        action: () => {
+          void exportMarkdown()
+        },
+      },
+      {
+        id: 'export.copyHtml',
+        label: t('commands.copyPreviewAsHtml'),
+        icon: '📋',
+        category: 'export',
+        action: () => {
+          void copyAsHtml()
+        },
+      },
+      ...THEMES.map((theme) => ({
+        id: `theme.${theme.id}`,
+        label: t('commands.theme', { name: theme.name }),
+        icon: theme.dark ? '🌙' : '☀️',
+        category: 'theme' as const,
+        action: () => {
+          store.setActiveThemeId(theme.id)
+          applyTheme(getThemeById(theme.id))
+        },
+      })),
+      {
+        id: 'lang.en',
+        label: t('commands.languageEnglish'),
+        icon: '🇬🇧',
+        category: 'language',
+        action: () => store.setLanguage('en' as Language),
+      },
+      {
+        id: 'lang.ja',
+        label: t('commands.languageJapanese'),
+        icon: '🇯🇵',
+        category: 'language',
+        action: () => store.setLanguage('ja' as Language),
+      },
+      {
+        id: 'lang.zh',
+        label: t('commands.languageChinese'),
+        icon: '🇨🇳',
+        category: 'language',
+        action: () => store.setLanguage('zh' as Language),
+      },
+    ]
+
+    if (recentCommands.length === 0) {
+      return commands.filter((command) => command.id !== 'file.recent.clear')
+    }
+
+    return commands
+  }, [
+    clearRecent,
+    copyAsHtml,
+    exportHtml,
+    exportMarkdown,
+    exportPdf,
+    newFile,
+    openFile,
+    openRecent,
+    recentFiles,
+    saveFile,
+    saveFileAs,
+    store.focusMode,
+    store.fontSize,
+    store.lineNumbers,
+    store.sidebarOpen,
+    store.typewriterMode,
+    store.wysiwygMode,
+    store.wordWrap,
+    t,
+  ])
 }

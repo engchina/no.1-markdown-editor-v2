@@ -1,10 +1,16 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import i18n, { type Language } from '../i18n'
+import {
+  countRestorableDraftTabs,
+  isRestorableDraftTab,
+  restoreDraftTabs,
+} from '../lib/draftRecovery'
+import { pushInfoNotice } from '../lib/notices'
 
 export type Theme = 'light' | 'dark'
 export type ViewMode = 'source' | 'split' | 'preview' | 'focus'
-export type SidebarTab = 'files' | 'outline' | 'search'
+export type SidebarTab = 'files' | 'outline' | 'search' | 'recent'
 
 export interface FileTab {
   id: string
@@ -18,6 +24,12 @@ export interface FileTab {
 export interface CursorPos {
   line: number
   col: number
+}
+
+export interface PendingNavigation {
+  tabId: string
+  line: number
+  column?: number
 }
 
 interface EditorState {
@@ -48,6 +60,7 @@ interface EditorState {
   tabs: FileTab[]
   activeTabId: string | null
   addTab: (tab?: Partial<FileTab>) => string
+  openDocument: (doc: Pick<FileTab, 'path' | 'name' | 'content' | 'savedContent'> & { isDirty?: boolean }) => string
   closeTab: (id: string) => void
   setActiveTab: (id: string) => void
   updateTabContent: (id: string, content: string) => void
@@ -57,6 +70,8 @@ interface EditorState {
   // Cursor
   cursorPos: CursorPos
   setCursorPos: (pos: CursorPos) => void
+  pendingNavigation: PendingNavigation | null
+  setPendingNavigation: (navigation: PendingNavigation | null) => void
 
   // Word count
   wordCount: number
@@ -89,13 +104,19 @@ function createNewTab(overrides: Partial<FileTab> = {}): FileTab {
   return {
     id,
     path: null,
-    name: 'Untitled',
+    name: i18n.t('app.untitled'),
     content: '',
     savedContent: '',
     isDirty: false,
     ...overrides,
   }
 }
+
+function isReusableScratchTab(tab: FileTab): boolean {
+  return tab.path === null && !tab.isDirty && tab.content === '' && tab.savedContent === ''
+}
+
+const initialTab = createNewTab()
 
 export const useEditorStore = create<EditorState>()(
   persist(
@@ -128,12 +149,63 @@ export const useEditorStore = create<EditorState>()(
       setEditorRatio: (editorRatio) => set({ editorRatio }),
 
       // Tabs
-      tabs: [createNewTab()],
-      activeTabId: null,
+      tabs: [initialTab],
+      activeTabId: initialTab.id,
       addTab: (overrides) => {
         const tab = createNewTab(overrides)
         set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tab.id }))
         return tab.id
+      },
+      openDocument: ({ path, name, content, savedContent, isDirty = false }) => {
+        const doc = { path, name, content, savedContent, isDirty }
+        let nextActiveId = ''
+
+        set((s) => {
+          if (path) {
+            const existing = s.tabs.find((tab) => tab.path === path)
+            if (existing) {
+              nextActiveId = existing.id
+              return {
+                tabs: s.tabs.map((tab) =>
+                  tab.id === existing.id
+                    ? existing.isDirty
+                      ? tab
+                      : { ...tab, ...doc }
+                    : tab
+                ),
+                activeTabId: existing.id,
+              }
+            }
+          }
+
+          const activeTab = s.tabs.find((tab) => tab.id === s.activeTabId) ?? s.tabs[0]
+          if (activeTab && isReusableScratchTab(activeTab)) {
+            nextActiveId = activeTab.id
+            return {
+              tabs: s.tabs.map((tab) =>
+                tab.id === activeTab.id
+                  ? { ...tab, ...doc }
+                  : tab
+              ),
+              activeTabId: activeTab.id,
+            }
+          }
+
+          const scratchTab = s.tabs.length === 1 && isReusableScratchTab(s.tabs[0]) ? s.tabs[0] : null
+          if (scratchTab) {
+            nextActiveId = scratchTab.id
+            return {
+              tabs: [{ ...scratchTab, ...doc }],
+              activeTabId: scratchTab.id,
+            }
+          }
+
+          const tab = createNewTab(doc)
+          nextActiveId = tab.id
+          return { tabs: [...s.tabs, tab], activeTabId: tab.id }
+        })
+
+        return nextActiveId
       },
       closeTab: (id) => {
         set((s) => {
@@ -172,6 +244,8 @@ export const useEditorStore = create<EditorState>()(
       // Cursor
       cursorPos: { line: 1, col: 1 },
       setCursorPos: (cursorPos) => set({ cursorPos }),
+      pendingNavigation: null,
+      setPendingNavigation: (pendingNavigation) => set({ pendingNavigation }),
 
       // Word count
       wordCount: 0,
@@ -191,7 +265,7 @@ export const useEditorStore = create<EditorState>()(
       setFontSize: (fontSize) => set({ fontSize }),
       wysiwygMode: false,
       setWysiwygMode: (wysiwygMode) => set({ wysiwygMode }),
-      activeThemeId: 'default',
+      activeThemeId: 'default-light',
       setActiveThemeId: (activeThemeId) => set({ activeThemeId }),
     }),
     {
@@ -207,11 +281,37 @@ export const useEditorStore = create<EditorState>()(
         lineNumbers: s.lineNumbers,
         wordWrap: s.wordWrap,
         fontSize: s.fontSize,
-        focusMode: s.focusMode,
         typewriterMode: s.typewriterMode,
         wysiwygMode: s.wysiwygMode,
         activeThemeId: s.activeThemeId,
+        tabs: s.tabs.filter(isRestorableDraftTab),
+        activeTabId: s.tabs.some((tab) => tab.id === s.activeTabId && isRestorableDraftTab(tab))
+          ? s.activeTabId
+          : null,
       }),
+      merge: (persisted, current) => {
+        const persistedState = persisted as Partial<EditorState> | undefined
+        const restoredState = restoreDraftTabs(persistedState, {
+          tabs: current.tabs,
+          activeTabId: current.activeTabId,
+        })
+
+        return {
+          ...current,
+          ...persistedState,
+          ...restoredState,
+        }
+      },
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        const restoredDraftCount = countRestorableDraftTabs(state.tabs)
+        if (restoredDraftCount === 0) return
+
+        pushInfoNotice('notices.draftsRestoredTitle', 'notices.draftsRestoredMessage', {
+          values: { count: restoredDraftCount },
+          timeoutMs: 4200,
+        })
+      },
     }
   )
 )

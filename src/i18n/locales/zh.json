@@ -1,7 +1,9 @@
 {
   "app": {
     "name": "No.1 Markdown编辑器",
-    "untitled": "无标题"
+    "untitled": "无标题",
+    "noFileOpen": "当前没有打开文件",
+    "loadingEditor": "正在加载编辑器"
   },
   "menu": {
     "file": "文件",
@@ -41,7 +43,10 @@
     "viewMode": "视图模式",
     "theme": "切换主题",
     "focusMode": "专注模式",
-    "typewriterMode": "打字机模式"
+    "typewriterMode": "打字机模式",
+    "commandPalette": "命令面板 (Ctrl+Shift+P)",
+    "export": "导出",
+    "appearance": "外观"
   },
   "viewMode": {
     "source": "源码",
@@ -55,21 +60,157 @@
     "search": "搜索",
     "noOutline": "未找到标题",
     "noFiles": "未打开文件夹",
-    "openFolder": "打开文件夹"
+    "openFolder": "打开文件夹",
+    "searchOpenTabs": "搜索已打开标签...",
+    "noResults": "没有结果",
+    "results": "{{count}} 条结果",
+    "recentFilesTitle": "最近文件",
+    "noRecent": "没有最近文件",
+    "clear": "清空",
+    "desktopOnly": "文件树仅在桌面版中可用。",
+    "loading": "加载中...",
+    "emptyFolder": "空文件夹",
+    "justNow": "刚刚",
+    "minutesAgo": "{{count}} 分钟前",
+    "hoursAgo": "{{count}} 小时前",
+    "daysAgo": "{{count}} 天前"
   },
   "statusbar": {
     "words": "{{count}} 词",
     "chars": "{{count}} 字符",
     "lines": "第 {{line}} 行，第 {{col}} 列",
     "encoding": "UTF-8",
-    "language": "Markdown"
+    "language": "Markdown",
+    "saving": "正在保存..."
+  },
+  "search": {
+    "find": "查找",
+    "replace": "替换",
+    "loading": "正在加载搜索功能...",
+    "searchPlaceholder": "搜索...",
+    "replacePlaceholder": "替换为...",
+    "caseSensitive": "区分大小写",
+    "wholeWord": "完整单词",
+    "useRegex": "使用正则",
+    "previous": "上一个 (Shift+Enter)",
+    "next": "下一个 (Enter)",
+    "showReplace": "替换",
+    "hideReplace": "隐藏",
+    "close": "关闭 (Esc)",
+    "noMatches": "没有匹配项",
+    "matches": "{{count}} 个匹配",
+    "replaceOne": "替换",
+    "replaceAll": "全部"
+  },
+  "export": {
+    "html": "导出为 HTML",
+    "pdf": "导出为 PDF",
+    "markdown": "导出 Markdown",
+    "copyHtml": "复制为 HTML",
+    "copied": "已复制"
+  },
+  "preview": {
+    "loading": "为了保持启动轻量，预览会按需加载。",
+    "loadNow": "立即加载预览",
+    "mermaidLabel": "Mermaid 图表",
+    "renderDiagram": "渲染图表",
+    "refreshDiagram": "重新渲染",
+    "diagramError": "图表无法渲染",
+    "diagramsPending": "有 {{count}} 个图表可供渲染",
+    "renderAllDiagrams": "全部渲染",
+    "renderingDiagrams": "渲染中..."
+  },
+  "themePanel": {
+    "appearance": "外观",
+    "theme": "主题",
+    "fontSize": "字体大小",
+    "editorOptions": "编辑器选项",
+    "wysiwyg": "WYSIWYG（实时预览）",
+    "lineNumbers": "行号",
+    "wordWrap": "自动换行",
+    "typewriterMode": "打字机模式"
+  },
+  "commands": {
+    "recentFile": "最近: {{name}}",
+    "clearRecentFiles": "清空最近文件",
+    "viewSourceMode": "视图：源码模式",
+    "viewSplitMode": "视图：分屏模式",
+    "viewPreviewMode": "视图：预览模式",
+    "viewFocusMode": "视图：专注模式",
+    "enableWysiwyg": "启用 WYSIWYG 实时预览",
+    "disableWysiwyg": "禁用 WYSIWYG 实时预览",
+    "showSidebar": "显示侧边栏",
+    "hideSidebar": "隐藏侧边栏",
+    "showLineNumbers": "显示行号",
+    "hideLineNumbers": "隐藏行号",
+    "enableWordWrap": "启用自动换行",
+    "disableWordWrap": "禁用自动换行",
+    "enableTypewriterMode": "启用打字机模式",
+    "disableTypewriterMode": "禁用打字机模式",
+    "increaseFontSize": "增大字体",
+    "decreaseFontSize": "减小字体",
+    "resetFontSize": "重置字体大小",
+    "findInDocument": "在文档中查找",
+    "findReplace": "查找和替换",
+    "exportHtml": "导出为 HTML",
+    "exportPdf": "打印 / 保存为 PDF",
+    "exportMarkdown": "导出 Markdown",
+    "copyPreviewAsHtml": "复制预览为 HTML",
+    "theme": "主题: {{name}}",
+    "languageEnglish": "语言: English",
+    "languageJapanese": "语言: 日本語",
+    "languageChinese": "语言: 中文"
+  },
+  "palette": {
+    "file": "文件",
+    "edit": "编辑",
+    "view": "视图",
+    "theme": "主题",
+    "export": "导出",
+    "language": "语言",
+    "unsaved": "未保存",
+    "filePlaceholder": "切换到标签...",
+    "commandPlaceholder": "输入命令...",
+    "noResults": "没有关于“{{query}}”的结果",
+    "navigate": "导航",
+    "execute": "执行",
+    "close": "关闭",
+    "results": "{{count}} 条结果"
+  },
+  "titleBar": {
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭"
   },
   "dialog": {
     "unsavedChanges": "未保存的更改",
     "unsavedMessage": "是否保存对「{{name}}」的更改？",
+    "unsavedMessageMultiple": "{{count}} 个文件有未保存的更改。",
+    "discardMessage": "要放弃对「{{name}}」的更改吗？",
     "save": "保存",
+    "saveAll": "全部保存",
     "dontSave": "不保存",
     "cancel": "取消"
+  },
+  "notices": {
+    "draftsRestoredTitle": "已恢复草稿",
+    "draftsRestoredMessage": "已恢复 {{count}} 个未保存草稿。",
+    "openFileErrorTitle": "无法打开文件",
+    "openFileErrorMessage": "无法读取所选文档。",
+    "saveFileErrorTitle": "无法保存文件",
+    "saveFileErrorMessage": "无法写入当前文档。",
+    "openFolderErrorTitle": "无法打开文件夹",
+    "openFolderErrorMessage": "无法加载文件夹内容。",
+    "recentFileErrorTitle": "无法重新打开最近文件",
+    "recentFileErrorMessage": "该文件可能已被移动或删除。",
+    "recentFileBrowserTitle": "最近文件仅在桌面版可用",
+    "recentFileBrowserMessage": "重新打开最近文件需要使用桌面版应用。",
+    "exportErrorTitle": "导出失败",
+    "exportErrorMessage": "无法导出该文档。",
+    "copyHtmlSuccessTitle": "HTML 已复制",
+    "copyHtmlSuccessMessage": "渲染后的 HTML 已复制到剪贴板。",
+    "dismissLabel": "关闭通知"
   },
   "placeholder": "开始用 Markdown 写作...\n\n# 你好，世界！\n\n这是 **No.1 Markdown编辑器** — 快速、美观、永久免费。"
 }

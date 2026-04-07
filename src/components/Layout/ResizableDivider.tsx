@@ -7,11 +7,13 @@ interface Props {
 export default function ResizableDivider({ onResize }: Props) {
   const isDragging = useRef(false)
   const startX = useRef(0)
+  const containerWidth = useRef<number>(window.innerWidth)
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
       isDragging.current = true
       startX.current = e.clientX
+      containerWidth.current = e.currentTarget.parentElement?.clientWidth ?? window.innerWidth
       document.body.style.cursor = 'col-resize'
       document.body.style.userSelect = 'none'
 
@@ -19,7 +21,7 @@ export default function ResizableDivider({ onResize }: Props) {
         if (!isDragging.current) return
         const delta = ev.clientX - startX.current
         startX.current = ev.clientX
-        onResize(delta, window.innerWidth)
+        onResize(delta, containerWidth.current)
       }
 
       const onMouseUp = () => {

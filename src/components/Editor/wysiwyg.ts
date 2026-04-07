@@ -17,6 +17,7 @@ import {
 } from '@codemirror/view'
 import { RangeSetBuilder } from '@codemirror/state'
 import katex from 'katex'
+import { ensureKatexStylesheet } from '../../lib/katexStylesheet'
 
 // ── Widgets ────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ class InlineMathWidget extends WidgetType {
   toDOM() {
     const el = document.createElement('span')
     el.className = 'cm-wysiwyg-math-inline'
+    void ensureKatexStylesheet().catch(() => {})
     try {
       katex.render(this.latex, el, { throwOnError: false, displayMode: false })
     } catch {
@@ -54,6 +56,7 @@ class BlockMathWidget extends WidgetType {
   toDOM() {
     const el = document.createElement('div')
     el.className = 'cm-wysiwyg-math-block'
+    void ensureKatexStylesheet().catch(() => {})
     try {
       katex.render(this.latex, el, { throwOnError: false, displayMode: true })
     } catch {
@@ -213,16 +216,16 @@ function processInline(
   lineFrom: number
 ): void {
   // Bold **text** or __text__
-  processPattern(builder, text, lineFrom, /(\*\*|__)((?:[^*_]|\*(?!\*))+?)\1/g, 'cm-wysiwyg-bold', 1)
+  processPattern(builder, text, lineFrom, /(\*\*|__)((?:[^*_]|\*(?!\*))+?)\1/g, 'cm-wysiwyg-bold')
 
   // Italic *text* or _text_ (not bold)
-  processPattern(builder, text, lineFrom, /(?<!\*)(\*)(?!\*)((?:[^*])+?)(\*)(?!\*)/g, 'cm-wysiwyg-italic', 1)
+  processPattern(builder, text, lineFrom, /(?<!\*)(\*)(?!\*)((?:[^*])+?)(\*)(?!\*)/g, 'cm-wysiwyg-italic')
 
   // Strikethrough ~~text~~
-  processPattern(builder, text, lineFrom, /(~~)((?:[^~])+?)\1/g, 'cm-wysiwyg-strikethrough', 1)
+  processPattern(builder, text, lineFrom, /(~~)((?:[^~])+?)\1/g, 'cm-wysiwyg-strikethrough')
 
   // Inline code `code`
-  processPattern(builder, text, lineFrom, /(`+)((?:.)+?)\1/g, 'cm-wysiwyg-code', 1)
+  processPattern(builder, text, lineFrom, /(`+)((?:.)+?)\1/g, 'cm-wysiwyg-code')
 
   // Images ![alt](url)
   const imgRe = /!\[([^\]]*)\]\(([^)]+)\)/g
@@ -257,14 +260,13 @@ function processPattern(
   text: string,
   lineFrom: number,
   re: RegExp,
-  cls: string,
-  markerGroupLen: number
+  cls: string
 ): void {
   let m: RegExpExecArray | null
   while ((m = re.exec(text)) !== null) {
     const fullStart = lineFrom + m.index
     const fullEnd = fullStart + m[0].length
-    const markerLen = markerGroupLen
+    const markerLen = typeof m[1] === 'string' && m[1].length > 0 ? m[1].length : 1
 
     // Hide opening marker
     builder.add(fullStart, fullStart + markerLen, Decoration.replace({}))

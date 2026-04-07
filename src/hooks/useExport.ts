@@ -1,100 +1,81 @@
 import { useCallback } from 'react'
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import remarkRehype from 'remark-rehype'
-import rehypeKatex from 'rehype-katex'
-import rehypeRaw from 'rehype-raw'
-import rehypeStringify from 'rehype-stringify'
 import { useActiveTab } from '../store/editor'
+import { pushErrorNotice, pushSuccessNotice } from '../lib/notices'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeRaw)
-  .use(rehypeKatex)
-  .use(rehypeStringify)
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.click()
 
-function buildStandaloneHtml(title: string, bodyHtml: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-      font-size: 16px;
-      line-height: 1.75;
-      color: #1a1a1a;
-      background: #fff;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 48px 32px;
-    }
-    h1, h2, h3, h4, h5, h6 {
-      font-weight: 700;
-      line-height: 1.3;
-      margin-top: 2em;
-      margin-bottom: 0.5em;
-      padding-bottom: 0.3em;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    h1 { font-size: 2em; }
-    h2 { font-size: 1.5em; }
-    h3 { font-size: 1.25em; }
-    a { color: #2563eb; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    p { margin: 1em 0; }
-    code {
-      font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
-      font-size: 0.875em;
-      background: #f4f4f5;
-      border-radius: 4px;
-      padding: 0.15em 0.4em;
-    }
-    pre {
-      background: #18181b;
-      color: #d4d4d8;
-      border-radius: 8px;
-      padding: 20px;
-      overflow-x: auto;
-      margin: 1.5em 0;
-    }
-    pre code { background: none; padding: 0; color: inherit; }
-    blockquote {
-      border-left: 4px solid #3b82f6;
-      margin: 1em 0;
-      padding: 0.5em 1em;
-      color: #6b7280;
-      font-style: italic;
-    }
-    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-    th, td { border: 1px solid #e5e7eb; padding: 8px 16px; text-align: left; }
-    th { background: #f9fafb; font-weight: 600; }
-    tr:nth-child(even) td { background: #f9fafb; }
-    img { max-width: 100%; border-radius: 4px; }
-    hr { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
-    ul, ol { padding-left: 2em; }
-    li { margin: 0.25em 0; }
-    input[type="checkbox"] { margin-right: 6px; }
-    @media print {
-      body { max-width: 100%; padding: 0; }
-    }
-  </style>
-</head>
-<body>
-${bodyHtml}
-</body>
-</html>`
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+    document.body.removeChild(anchor)
+  }, 1000)
+}
+
+function printHtmlDocument(html: string) {
+  const frame = document.createElement('iframe')
+  frame.style.position = 'fixed'
+  frame.style.right = '0'
+  frame.style.bottom = '0'
+  frame.style.width = '0'
+  frame.style.height = '0'
+  frame.style.border = '0'
+  document.body.appendChild(frame)
+
+  const cleanup = () => {
+    if (frame.parentNode) frame.parentNode.removeChild(frame)
+  }
+
+  frame.onload = () => {
+    setTimeout(() => {
+      const printWindow = frame.contentWindow
+      if (!printWindow) {
+        cleanup()
+        return
+      }
+
+      printWindow.focus()
+      printWindow.print()
+      setTimeout(cleanup, 1000)
+    }, 300)
+  }
+
+  const frameDocument = frame.contentDocument
+  if (!frameDocument) {
+    cleanup()
+    return
+  }
+
+  frameDocument.open()
+  frameDocument.write(html)
+  frameDocument.close()
+}
+
+async function buildExportHtml(markdown: string, title: string, mermaidTheme: 'default' | 'dark' = 'default') {
+  const { buildStandaloneHtml, containsLikelyMath, renderMarkdown } = await import('../lib/markdown')
+
+  let bodyHtml = await renderMarkdown(markdown)
+  if (bodyHtml.includes('language-mermaid')) {
+    const { renderMermaidInHtml } = await import('../lib/mermaid')
+    bodyHtml = await renderMermaidInHtml(bodyHtml, mermaidTheme)
+  }
+
+  const inlineKatexCss =
+    containsLikelyMath(markdown) && bodyHtml.includes('class="katex"')
+      ? await (await import('../lib/katexInlineCss')).getInlineKatexCss()
+      : undefined
+
+  return {
+    bodyHtml,
+    fullHtml: buildStandaloneHtml(title, bodyHtml, { inlineKatexCss }),
+  }
 }
 
 export function useExport() {
@@ -103,13 +84,10 @@ export function useExport() {
   const exportHtml = useCallback(async () => {
     if (!activeTab) return
 
-    const result = await processor.process(activeTab.content)
-    const bodyHtml = String(result)
-    const fullHtml = buildStandaloneHtml(activeTab.name, bodyHtml)
-    const fileName = activeTab.name.replace(/\.(md|markdown)$/i, '') + '.html'
-
-    if (isTauri) {
-      try {
+    try {
+      const fileName = activeTab.name.replace(/\.(md|markdown|mdx)$/i, '') + '.html'
+      const { fullHtml } = await buildExportHtml(activeTab.content, activeTab.name, 'default')
+      if (isTauri) {
         const { save } = await import('@tauri-apps/plugin-dialog')
         const { writeTextFile } = await import('@tauri-apps/plugin-fs')
         const path = await save({
@@ -118,67 +96,107 @@ export function useExport() {
         })
         if (!path) return
         await writeTextFile(path, fullHtml)
-      } catch (e) {
-        console.error('Export HTML error:', e)
+        return
       }
-    } else {
-      const blob = new Blob([fullHtml], { type: 'text/html' })
-      downloadBlob(blob, fileName)
+
+      const anchor = document.createElement('a')
+      anchor.style.display = 'none'
+      document.body.appendChild(anchor)
+
+      const url = URL.createObjectURL(new Blob([fullHtml], { type: 'text/html' }))
+      anchor.href = url
+      anchor.download = fileName
+      anchor.click()
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+        document.body.removeChild(anchor)
+      }, 1000)
+    } catch (error) {
+      console.error('Export HTML error:', error)
+      pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')
     }
   }, [activeTab])
 
   const exportPdf = useCallback(async () => {
     if (!activeTab) return
 
-    // Generate preview HTML in a hidden iframe, then print it
-    const result = await processor.process(activeTab.content)
-    const bodyHtml = String(result)
-    const fullHtml = buildStandaloneHtml(activeTab.name, bodyHtml)
-
-    // Open in a new window optimized for print
-    const win = window.open('', '_blank')
-    if (!win) return
-    win.document.write(fullHtml)
-    win.document.close()
-    win.focus()
-    // Slight delay to allow fonts/images to load
-    setTimeout(() => {
-      win.print()
-      win.close()
-    }, 500)
+    try {
+      const { fullHtml } = await buildExportHtml(activeTab.content, activeTab.name, 'default')
+      printHtmlDocument(fullHtml)
+    } catch (error) {
+      console.error('Export PDF error:', error)
+      pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')
+    }
   }, [activeTab])
 
   const exportMarkdown = useCallback(async () => {
     if (!activeTab) return
-    const fileName = activeTab.name.endsWith('.md') ? activeTab.name : activeTab.name + '.md'
 
-    if (isTauri) {
-      try {
+    try {
+      const fileName = activeTab.name.endsWith('.md') ? activeTab.name : `${activeTab.name}.md`
+      if (isTauri) {
         const { save } = await import('@tauri-apps/plugin-dialog')
         const { writeTextFile } = await import('@tauri-apps/plugin-fs')
         const path = await save({
-          filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+          filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx', 'txt'] }],
           defaultPath: fileName,
         })
         if (!path) return
         await writeTextFile(path, activeTab.content)
-      } catch (e) {
-        console.error('Export Markdown error:', e)
+        return
       }
-    } else {
-      const blob = new Blob([activeTab.content], { type: 'text/markdown' })
-      downloadBlob(blob, fileName)
+
+      downloadBlob(new Blob([activeTab.content], { type: 'text/markdown' }), fileName)
+    } catch (error) {
+      console.error('Export Markdown error:', error)
+      pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')
     }
   }, [activeTab])
 
-  return { exportHtml, exportPdf, exportMarkdown }
-}
+  const copyAsHtml = useCallback(async () => {
+    if (!activeTab) return
 
-function downloadBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  a.click()
-  URL.revokeObjectURL(url)
+    try {
+      const mermaidTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'default'
+      const { bodyHtml } = await buildExportHtml(activeTab.content, activeTab.name, mermaidTheme)
+
+      let copied = false
+      try {
+        if (navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html': new Blob([bodyHtml], { type: 'text/html' }),
+              'text/plain': new Blob([activeTab.content], { type: 'text/plain' }),
+            }),
+          ])
+          copied = true
+        } else {
+          await navigator.clipboard.writeText(bodyHtml)
+          copied = true
+        }
+      } catch {
+        const textarea = document.createElement('textarea')
+        textarea.value = bodyHtml
+        textarea.setAttribute('readonly', 'true')
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        copied = document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+
+      if (!copied) {
+        throw new Error('Clipboard copy failed')
+      }
+
+      pushSuccessNotice('notices.copyHtmlSuccessTitle', 'notices.copyHtmlSuccessMessage')
+    } catch (error) {
+      console.error('Copy HTML error:', error)
+      pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')
+    }
+  }, [activeTab])
+
+  return { exportHtml, exportPdf, exportMarkdown, copyAsHtml }
 }

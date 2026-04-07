@@ -1,50 +1,91 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useEditorStore } from '../store/editor'
+import { useFileTreeStore, type FileNode } from '../store/fileTree'
+import { useRecentFilesStore } from '../store/recentFiles'
+import { pushErrorNotice } from '../lib/notices'
 
-export interface FileNode {
-  name: string
-  path: string
-  type: 'file' | 'dir'
-  children?: FileNode[]
-  expanded?: boolean
-}
+export type { FileNode } from '../store/fileTree'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const MARKDOWN_FILE_PATTERN = /\.(md|markdown|mdx|txt)$/i
 
 async function readDirTauri(dirPath: string): Promise<FileNode[]> {
   const { readDir } = await import('@tauri-apps/plugin-fs')
+  const { join } = await import('@tauri-apps/api/path')
   const entries = await readDir(dirPath)
-  const nodes: FileNode[] = []
 
-  for (const entry of entries) {
-    if (!entry.name || entry.name.startsWith('.')) continue
-    const childPath = `${dirPath}/${entry.name}`
-    // In Tauri v2 fs plugin, directories don't have a `children` field in readDir results
-    // We check if the name has no extension to guess it's a directory, or use isDirectory
-    const isDir = !entry.name.includes('.') || ('isDirectory' in entry && (entry as { isDirectory: boolean }).isDirectory)
-    if (isDir) {
-      nodes.push({ name: entry.name, path: childPath, type: 'dir', children: undefined, expanded: false })
-    } else {
-      if (/\.(md|markdown|txt|mdx)$/i.test(entry.name)) {
-        nodes.push({ name: entry.name, path: childPath, type: 'file' })
-      }
+  const nodes: Array<FileNode | null> = await Promise.all(
+    entries
+      .filter((entry) => entry.name && !entry.name.startsWith('.'))
+      .map(async (entry) => {
+        const childPath = await join(dirPath, entry.name)
+
+        if (entry.isDirectory) {
+          return {
+            name: entry.name,
+            path: childPath,
+            type: 'dir' as const,
+            children: undefined,
+            expanded: false,
+          }
+        }
+
+        if (entry.isFile && MARKDOWN_FILE_PATTERN.test(entry.name)) {
+          return {
+            name: entry.name,
+            path: childPath,
+            type: 'file' as const,
+          }
+        }
+
+        return null
+      })
+  )
+
+  return nodes
+    .filter((node): node is FileNode => node !== null)
+    .sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+}
+
+function updateTreeNode(
+  tree: FileNode[],
+  pathInTree: number[],
+  updater: (node: FileNode) => void
+): FileNode[] {
+  const next = structuredClone(tree)
+  let cursor = next
+  let target: FileNode | null = null
+
+  for (let index = 0; index < pathInTree.length; index++) {
+    const pathIndex = pathInTree[index]
+    target = cursor[pathIndex]
+    if (!target) return tree
+    if (index < pathInTree.length - 1) {
+      cursor = target.children ?? []
     }
   }
 
-  return nodes.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
-    return a.name.localeCompare(b.name)
-  })
+  if (!target) return tree
+  updater(target)
+  return next
 }
 
 export function useFileTree() {
-  const [rootPath, setRootPath] = useState<string | null>(null)
-  const [tree, setTree] = useState<FileNode[]>([])
-  const [loading, setLoading] = useState(false)
-  const { addTab } = useEditorStore()
+  const rootPath = useFileTreeStore((state) => state.rootPath)
+  const tree = useFileTreeStore((state) => state.tree)
+  const loading = useFileTreeStore((state) => state.loading)
+  const setRootPath = useFileTreeStore((state) => state.setRootPath)
+  const setTree = useFileTreeStore((state) => state.setTree)
+  const setLoading = useFileTreeStore((state) => state.setLoading)
+  const openDocument = useEditorStore((state) => state.openDocument)
+  const addRecent = useRecentFilesStore((state) => state.addRecent)
 
   const openFolder = useCallback(async () => {
     if (!isTauri) return
+
     try {
       const { open } = await import('@tauri-apps/plugin-dialog')
       const selected = await open({ directory: true, multiple: false })
@@ -54,75 +95,76 @@ export function useFileTree() {
       setRootPath(selected)
       const nodes = await readDirTauri(selected)
       setTree(nodes)
-    } catch (e) {
-      console.error('Open folder error:', e)
+    } catch (error) {
+      console.error('Open folder error:', error)
+      pushErrorNotice('notices.openFolderErrorTitle', 'notices.openFolderErrorMessage')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [setLoading, setRootPath, setTree])
 
-  const toggleDir = useCallback(async (node: FileNode, pathInTree: number[]) => {
-    if (!isTauri) return
+  const toggleDir = useCallback(
+    async (node: FileNode, pathInTree: number[]) => {
+      if (!isTauri || node.type !== 'dir') return
 
-    setTree((prev) => {
-      const next = structuredClone(prev)
-      let target = next
-      let found: FileNode | null = null
-      for (let i = 0; i < pathInTree.length; i++) {
-        const idx = pathInTree[i]
-        if (i === pathInTree.length - 1) {
-          found = target[idx]
-        } else {
-          target = target[idx].children ?? []
-        }
-      }
-      if (!found) return prev
+      const shouldLoadChildren = !node.expanded && !node.children
+      useFileTreeStore.setState((state) => ({
+        tree: updateTreeNode(state.tree, pathInTree, (target) => {
+          if (shouldLoadChildren) {
+            target.expanded = true
+            target.children = []
+            return
+          }
 
-      if (!found.expanded && !found.children) {
-        // Load children lazily — mark as loading
-        found.expanded = true
-        found.children = []
-      } else {
-        found.expanded = !found.expanded
-      }
-      return next
-    })
+          target.expanded = !target.expanded
+        }),
+      }))
 
-    // Actually load children
-    if (!node.expanded && !node.children?.length) {
+      if (!shouldLoadChildren) return
+
       try {
         const children = await readDirTauri(node.path)
-        setTree((prev) => {
-          const next = structuredClone(prev)
-          let target = next
-          let found: FileNode | null = null
-          for (let i = 0; i < pathInTree.length; i++) {
-            const idx = pathInTree[i]
-            if (i === pathInTree.length - 1) {
-              found = target[idx]
-            } else {
-              target = target[idx].children ?? []
-            }
-          }
-          if (found) found.children = children
-          return next
-        })
-      } catch (e) {
-        console.error('Read dir error:', e)
+        useFileTreeStore.setState((state) => ({
+          tree: updateTreeNode(state.tree, pathInTree, (target) => {
+            target.children = children
+          }),
+        }))
+      } catch (error) {
+        console.error('Read dir error:', error)
+        pushErrorNotice('notices.openFolderErrorTitle', 'notices.openFolderErrorMessage')
+        useFileTreeStore.setState((state) => ({
+          tree: updateTreeNode(state.tree, pathInTree, (target) => {
+            target.children = []
+            target.expanded = false
+          }),
+        }))
       }
-    }
-  }, [])
+    },
+    []
+  )
 
-  const openFile = useCallback(async (node: FileNode) => {
-    if (!isTauri) return
-    try {
-      const { readTextFile } = await import('@tauri-apps/plugin-fs')
-      const content = await readTextFile(node.path)
-      addTab({ path: node.path, name: node.name, content, savedContent: content, isDirty: false })
-    } catch (e) {
-      console.error('Open file error:', e)
-    }
-  }, [addTab])
+  const openFile = useCallback(
+    async (node: FileNode) => {
+      if (!isTauri || node.type !== 'file') return
+
+      try {
+        const { readTextFile } = await import('@tauri-apps/plugin-fs')
+        const content = await readTextFile(node.path)
+        openDocument({
+          path: node.path,
+          name: node.name,
+          content,
+          savedContent: content,
+          isDirty: false,
+        })
+        addRecent(node.path, node.name)
+      } catch (error) {
+        console.error('Open file error:', error)
+        pushErrorNotice('notices.openFileErrorTitle', 'notices.openFileErrorMessage')
+      }
+    },
+    [addRecent, openDocument]
+  )
 
   return { rootPath, tree, loading, openFolder, toggleDir, openFile }
 }
