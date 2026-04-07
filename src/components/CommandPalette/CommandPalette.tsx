@@ -10,7 +10,7 @@ interface Props {
   onClose: () => void
 }
 
-const CATEGORY_ORDER = ['file', 'edit', 'view', 'theme', 'export', 'language'] as const
+const CATEGORY_ORDER = ['file', 'edit', 'view', 'export', 'theme', 'language'] as const
 const CATEGORY_LABEL: Record<string, string> = {
   file: 'File',
   edit: 'Edit',
@@ -19,6 +19,51 @@ const CATEGORY_LABEL: Record<string, string> = {
   export: 'Export',
   language: 'Language',
 }
+const COMMAND_PRIORITY = new Map<string, number>([
+  ['file.new', 10],
+  ['file.open', 11],
+  ['file.save', 12],
+  ['file.saveAs', 13],
+  ['file.recent.clear', 19],
+  ['edit.bold', 110],
+  ['edit.italic', 111],
+  ['edit.underline', 112],
+  ['edit.strikethrough', 113],
+  ['edit.link', 114],
+  ['edit.code', 115],
+  ['edit.quote', 116],
+  ['edit.ul', 117],
+  ['edit.ol', 118],
+  ['edit.task', 119],
+  ['edit.codeBlock', 120],
+  ['edit.table', 121],
+  ['edit.hr', 122],
+  ['edit.image', 123],
+  ['edit.h1', 130],
+  ['edit.h2', 131],
+  ['edit.h3', 132],
+  ['edit.h4', 133],
+  ['edit.h5', 134],
+  ['edit.h6', 135],
+  ['edit.find', 140],
+  ['edit.replace', 141],
+  ['view.source', 210],
+  ['view.split', 211],
+  ['view.preview', 212],
+  ['view.wysiwyg', 213],
+  ['view.focus', 214],
+  ['view.sidebar', 215],
+  ['view.lineNumbers', 216],
+  ['view.wordWrap', 217],
+  ['view.typewriter', 218],
+  ['view.fontSizeIncrease', 219],
+  ['view.fontSizeDecrease', 220],
+  ['view.fontSizeReset', 221],
+  ['export.html', 310],
+  ['export.pdf', 311],
+  ['export.markdown', 312],
+  ['export.copyHtml', 313],
+])
 
 function fuzzyMatch(query: string, text: string): boolean {
   if (!query) return true
@@ -41,6 +86,41 @@ function fuzzyScore(query: string, text: string): number {
   if (t.startsWith(q)) return 90
   if (t.includes(q)) return 70
   return 50
+}
+
+function getMatchScore(query: string, text?: string): number {
+  if (!query || !text || !fuzzyMatch(query, text)) return -1
+  return fuzzyScore(query, text)
+}
+
+function getCommandPriority(command: Command): number {
+  const explicit = COMMAND_PRIORITY.get(command.id)
+  if (typeof explicit === 'number') return explicit
+
+  if (command.id.startsWith('file.recent.')) return 15
+  if (command.id.startsWith('theme.')) return 410
+  if (command.id.startsWith('lang.')) return 510
+
+  const categoryOffset = Math.max(CATEGORY_ORDER.indexOf(command.category), 0) * 100
+  return categoryOffset + 99
+}
+
+function compareCommands(a: Command, b: Command, query: string): number {
+  if (query) {
+    const scoreDelta =
+      Math.max(getMatchScore(query, b.label), getMatchScore(query, b.description)) -
+      Math.max(getMatchScore(query, a.label), getMatchScore(query, a.description))
+
+    if (scoreDelta !== 0) return scoreDelta
+  }
+
+  const priorityDelta = getCommandPriority(a) - getCommandPriority(b)
+  if (priorityDelta !== 0) return priorityDelta
+
+  if (a.shortcut && !b.shortcut) return -1
+  if (!a.shortcut && b.shortcut) return 1
+
+  return a.label.localeCompare(b.label)
 }
 
 function IconBadge({ children }: { children: ReactNode }) {
@@ -80,6 +160,9 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
   if (mode === 'file') return <SvgBadge name="file" />
   if (command.id.startsWith('theme.')) return <SvgBadge name="palette" />
   if (command.id.startsWith('lang.')) return <SvgBadge name="globe" />
+
+  const headingMatch = command.id.match(/^edit\.(h[1-6])$/)
+  if (headingMatch) return <TextBadge label={headingMatch[1].toUpperCase()} />
 
   switch (command.id) {
     case 'file.new':
@@ -128,8 +211,9 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
     case 'edit.strikethrough':
       return <SvgBadge name="strikethrough" />
     case 'edit.code':
-    case 'edit.codeBlock':
       return <SvgBadge name="code" />
+    case 'edit.codeBlock':
+      return <SvgBadge name="codeBlock" />
     case 'edit.quote':
       return <SvgBadge name="quote" />
     case 'edit.ul':
@@ -146,12 +230,6 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
       return <SvgBadge name="link" />
     case 'edit.image':
       return <SvgBadge name="image" />
-    case 'edit.h1':
-      return <TextBadge label="H1" />
-    case 'edit.h2':
-      return <TextBadge label="H2" />
-    case 'edit.h3':
-      return <TextBadge label="H3" />
     case 'export.html':
       return <SvgBadge name="code" />
     case 'export.pdf':
@@ -219,7 +297,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
     // Command mode
     const results = commands
       .filter((c) => fuzzyMatch(query, c.label) || (c.description && fuzzyMatch(query, c.description)))
-      .sort((a, b) => fuzzyScore(query, b.label) - fuzzyScore(query, a.label))
+      .sort((a, b) => compareCommands(a, b, query))
 
     if (!query) {
       // Group by category when no query

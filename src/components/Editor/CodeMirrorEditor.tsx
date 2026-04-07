@@ -15,6 +15,7 @@ import {
   type SearchSupport,
 } from './optionalFeatures'
 import { applyFormat } from './formatCommands'
+import { getFormatActionFromShortcut } from './formatShortcuts'
 import { getImageAltText, getImageFileExtension } from '../../lib/fileTypes'
 import { convertClipboardHtmlToMarkdown } from '../../lib/pasteHtml'
 import { useActiveTab, useEditorStore } from '../../store/editor'
@@ -282,6 +283,25 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   }, [])
 
   useEffect(() => {
+    const onFormatShortcut = (event: KeyboardEvent) => {
+      const action = getFormatActionFromShortcut(event)
+      if (!action) return
+
+      const view = viewRef.current
+      if (!view) return
+
+      const target = event.target
+      if (!(target instanceof Node) || !view.dom.contains(target)) return
+
+      event.preventDefault()
+      applyFormat(view, action)
+    }
+
+    document.addEventListener('keydown', onFormatShortcut, true)
+    return () => document.removeEventListener('keydown', onFormatShortcut, true)
+  }, [])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey
       if (mod && event.key === 'f') {
@@ -317,10 +337,14 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     const line = view.state.doc.line(lineNumber)
     const column = Math.max(1, pendingNavigation.column ?? 1)
     const anchor = Math.min(line.to, line.from + column - 1)
+    const align = pendingNavigation.align ?? 'center'
 
     view.dispatch({
       selection: { anchor },
-      effects: EditorView.scrollIntoView(anchor, { y: 'center' }),
+      effects: EditorView.scrollIntoView(anchor, {
+        y: align,
+        yMargin: align === 'start' ? 20 : 5,
+      }),
     })
     view.focus()
     setPendingNavigation(null)

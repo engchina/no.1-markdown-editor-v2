@@ -81,6 +81,9 @@ export default function Sidebar({ width }: Props) {
 function OutlinePanel({ headings }: { headings: Heading[] }) {
   const { t } = useTranslation()
   const [activeId, setActiveId] = useState<string>('')
+  const activeTab = useActiveTab()
+  const viewMode = useEditorStore((state) => state.viewMode)
+  const setPendingNavigation = useEditorStore((state) => state.setPendingNavigation)
 
   // Listen for scrollspy events from the preview panel
   useEffect(() => {
@@ -114,6 +117,15 @@ function OutlinePanel({ headings }: { headings: Heading[] }) {
               borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
             }}
             onClick={() => {
+              if (activeTab && viewMode !== 'preview') {
+                setPendingNavigation({
+                  tabId: activeTab.id,
+                  line: h.line,
+                  column: 1,
+                  align: 'start',
+                })
+              }
+
               // Scroll preview panel to heading using rehype-slug generated IDs
               const preview = document.querySelector('.markdown-preview')
               const el = preview?.querySelector(`#${CSS.escape(h.id)}`) ?? document.getElementById(h.id)

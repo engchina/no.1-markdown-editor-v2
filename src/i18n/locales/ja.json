@@ -40,6 +40,9 @@
     "h1": "見出し1",
     "h2": "見出し2",
     "h3": "見出し3",
+    "h4": "見出し4",
+    "h5": "見出し5",
+    "h6": "見出し6",
     "toggleSidebar": "サイドバー切替",
     "viewMode": "表示モード",
     "theme": "テーマ切替",
@@ -49,6 +52,8 @@
     "export": "エクスポート",
     "appearance": "表示設定",
     "headings": "見出し",
+    "structure": "文書構造",
+    "inline": "インライン装飾",
     "moreActions": "その他の書式と挿入"
   },
   "viewMode": {

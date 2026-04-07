@@ -1,12 +1,12 @@
 /**
  * Markdown format commands for CodeMirror 6
- * Wired to toolbar buttons via the `editor:format` CustomEvent
+ * Wired to toolbar buttons and editor keyboard shortcuts.
  */
 
 import { EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
 
-type FormatAction =
+export type FormatAction =
   | 'bold' | 'italic' | 'underline' | 'strikethrough'
   | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
   | 'code' | 'codeblock'

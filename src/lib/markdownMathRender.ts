@@ -12,11 +12,13 @@ import {
   sanitizeSchema,
   stripFrontMatter,
 } from './markdownShared.ts'
+import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithMath = unified()
   .use(remarkParse)
   .use(remarkGfm)
   .use(remarkMath)
+  .use(remarkSoftBreaks)
   .use(remarkRehype)
   .use(rehypeSanitize, sanitizeSchema)
   .use(rehypeKatex)

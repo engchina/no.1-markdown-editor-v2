@@ -86,21 +86,28 @@ export function buildStandaloneHtml(
       max-width: 800px;
       margin: 0 auto;
       padding: 48px 32px;
+      --md-block-space: 1em;
+      --md-quote-space: 0.75em;
+    }
+    body > * {
+      margin-top: 0;
+      margin-bottom: 0;
+    }
+    body > * + * {
+      margin-top: var(--md-block-space);
     }
     h1, h2, h3, h4, h5, h6 {
-      font-weight: 700;
       line-height: 1.3;
-      margin-top: 2em;
-      margin-bottom: 0.5em;
-      padding-bottom: 0.3em;
-      border-bottom: 1px solid #e5e7eb;
+      margin: 0;
     }
+    h1, h2 { font-weight: 700; }
+    h3, h4, h5, h6 { font-weight: 600; }
     h1 { font-size: 2em; }
     h2 { font-size: 1.5em; }
     h3 { font-size: 1.25em; }
     a { color: #2563eb; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    p { margin: 1em 0; }
+    p { margin: 0; }
     code {
       font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
       font-size: 0.875em;
@@ -112,25 +119,39 @@ export function buildStandaloneHtml(
       background: #18181b;
       color: #d4d4d8;
       border-radius: 8px;
+      margin: 0;
       padding: 20px;
       overflow-x: auto;
-      margin: 1.5em 0;
     }
     pre code { background: none; padding: 0; color: inherit; }
     blockquote {
-      border-left: 4px solid #3b82f6;
-      margin: 1em 0;
-      padding: 0.5em 1em;
-      color: #6b7280;
+      position: relative;
+      margin: 0;
+      padding: 0.75em 1em 0.75em 1.375em;
+      color: #4b5563;
       font-style: italic;
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.08), rgba(59, 130, 246, 0.03));
+      border-radius: 0 12px 12px 0;
     }
-    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    blockquote::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.55em;
+      bottom: 0.55em;
+      width: 3px;
+      border-radius: 999px;
+      background: #3b82f6;
+    }
+    blockquote > * { margin-top: 0; margin-bottom: 0; }
+    blockquote > * + * { margin-top: var(--md-quote-space); }
+    table { border-collapse: collapse; width: 100%; margin: 0; }
     th, td { border: 1px solid #e5e7eb; padding: 8px 16px; text-align: left; }
     th { background: #f9fafb; font-weight: 600; }
     tr:nth-child(even) td { background: #f9fafb; }
     img { max-width: 100%; border-radius: 4px; }
-    hr { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
-    ul, ol { padding-left: 2em; }
+    hr { border: none; border-top: 1px solid #e5e7eb; margin: 0; }
+    ul, ol { padding-left: 2em; margin: 0; }
     li { margin: 0.25em 0; }
     input[type="checkbox"] { margin-right: 6px; }
     .front-matter {
@@ -138,7 +159,7 @@ export function buildStandaloneHtml(
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       padding: 12px 16px;
-      margin-bottom: 1.5em;
+      margin: 0;
       font-size: 0.8em;
     }
     .front-matter table { border: none; margin: 0; width: 100%; }

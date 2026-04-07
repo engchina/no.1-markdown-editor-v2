@@ -11,6 +11,10 @@ import { getInlineKatexCss } from '../src/lib/katexInlineCss.ts'
 import { containsLikelyMath } from '../src/lib/markdownMath.ts'
 import { renderMarkdownInWorker } from '../src/lib/markdownWorker.ts'
 
+function countRenderedBreaks(html: string): number {
+  return html.match(/<br\s*\/?>/g)?.length ?? 0
+}
+
 test('stripFrontMatter parses CRLF front matter blocks', () => {
   const markdown = ['---', 'title: "Hello"', 'lang: en', '---', '', '# Body'].join('\r\n')
   const result = stripFrontMatter(markdown)
@@ -66,6 +70,27 @@ test('renderMarkdown ignores front matter values when choosing the math path', a
   assert.match(html, /<p>Plain body<\/p>/)
 })
 
+test('renderMarkdown preserves soft paragraph line breaks in preview output', async () => {
+  const html = await renderMarkdown('Line 1\nLine 2\nLine 3')
+
+  assert.equal(countRenderedBreaks(html), 2)
+  assert.match(html, /<p>Line 1<br\s*\/?>\s*Line 2<br\s*\/?>\s*Line 3<\/p>/)
+})
+
+test('renderMarkdown keeps soft line breaks when raw html is present', async () => {
+  const html = await renderMarkdown('Line 1\n<span>Inline</span>\nLine 3')
+
+  assert.equal(countRenderedBreaks(html), 2)
+  assert.match(html, /<span>Inline<\/span>/)
+})
+
+test('renderMarkdown keeps soft line breaks when math is present', async () => {
+  const html = await renderMarkdown('Top\nInline $E=mc^2$\nBottom')
+
+  assert.equal(countRenderedBreaks(html), 2)
+  assert.match(html, /class="katex"/)
+})
+
 test('containsLikelyRawHtml detects actual html but ignores plain angle brackets', () => {
   assert.equal(containsLikelyRawHtml('2 < 3 and 5 > 4'), false)
   assert.equal(containsLikelyRawHtml('Hello <span>world</span>'), true)
@@ -102,6 +127,13 @@ test('buildStandaloneHtml escapes the document title', () => {
   assert.match(html, /<title>&lt;bad &quot;title&quot;&gt;<\/title>/)
   assert.match(html, /<p>Body<\/p>/)
   assert.doesNotMatch(html, /katex\.min\.css/)
+})
+
+test('buildStandaloneHtml does not add divider borders to headings', () => {
+  const html = buildStandaloneHtml('Heading styles', '<h1>Title</h1><h2>Subtitle</h2>')
+
+  assert.doesNotMatch(html, /h1, h2, h3, h4, h5, h6 \{[^}]*border-bottom:/)
+  assert.doesNotMatch(html, /h1, h2, h3, h4, h5, h6 \{[^}]*padding-bottom:/)
 })
 
 test('buildStandaloneHtml includes KaTeX styles when rendered math is present', () => {
@@ -142,10 +174,24 @@ test('renderMarkdownInWorker keeps the worker-safe path free of KaTeX rendering'
   assert.doesNotMatch(html, /class="katex"/)
 })
 
+test('renderMarkdownInWorker preserves soft paragraph line breaks', async () => {
+  const html = await renderMarkdownInWorker('Worker 1\nWorker 2\nWorker 3')
+
+  assert.equal(countRenderedBreaks(html), 2)
+  assert.match(html, /<p>Worker 1<br\s*\/?>\s*Worker 2<br\s*\/?>\s*Worker 3<\/p>/)
+})
+
 test('renderMarkdownInWorker supports sanitized raw html when needed', async () => {
   const html = await renderMarkdownInWorker('Hello <span>worker</span><script>bad()</script>')
 
   assert.match(html, /<span>worker<\/span>/)
   assert.doesNotMatch(html, /<script/i)
   assert.doesNotMatch(html, /bad\(\)/)
+})
+
+test('renderMarkdownInWorker keeps soft line breaks when raw html is present', async () => {
+  const html = await renderMarkdownInWorker('Worker 1\n<span>Inline</span>\nWorker 3')
+
+  assert.equal(countRenderedBreaks(html), 2)
+  assert.match(html, /<span>Inline<\/span>/)
 })

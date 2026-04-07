@@ -19,11 +19,11 @@ test('extractHeadings returns stable deduplicated ids', () => {
   const headings = extractHeadings(markdown)
 
   assert.deepEqual(headings, [
-    { level: 1, text: 'Intro', id: 'intro' },
-    { level: 2, text: 'Intro', id: 'intro-1' },
-    { level: 3, text: 'Intro', id: 'intro-2' },
-    { level: 1, text: 'Café', id: 'cafe' },
-    { level: 1, text: 'こんにちは 世界', id: 'こんにちは-世界' },
+    { level: 1, text: 'Intro', id: 'intro', line: 1 },
+    { level: 2, text: 'Intro', id: 'intro-1', line: 2 },
+    { level: 3, text: 'Intro', id: 'intro-2', line: 3 },
+    { level: 1, text: 'Café', id: 'cafe', line: 4 },
+    { level: 1, text: 'こんにちは 世界', id: 'こんにちは-世界', line: 5 },
   ])
 })
 
@@ -46,8 +46,8 @@ test('extractHeadings supports setext headings and ignores fenced code blocks', 
   const headings = extractHeadings(markdown)
 
   assert.deepEqual(headings, [
-    { level: 1, text: 'Title Setext', id: 'title-setext' },
-    { level: 2, text: 'Subtitle Setext', id: 'subtitle-setext' },
-    { level: 1, text: 'Final Heading', id: 'final-heading' },
+    { level: 1, text: 'Title Setext', id: 'title-setext', line: 1 },
+    { level: 2, text: 'Subtitle Setext', id: 'subtitle-setext', line: 4 },
+    { level: 1, text: 'Final Heading', id: 'final-heading', line: 12 },
   ])
 })

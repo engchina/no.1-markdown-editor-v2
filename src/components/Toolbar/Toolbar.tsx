@@ -12,10 +12,14 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 type FormatAction =
   | 'bold'
   | 'italic'
+  | 'underline'
   | 'strikethrough'
   | 'h1'
   | 'h2'
   | 'h3'
+  | 'h4'
+  | 'h5'
+  | 'h6'
   | 'code'
   | 'codeblock'
   | 'link'
@@ -282,17 +286,18 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
     { id: 'h1', label: t('toolbar.h1'), textIcon: 'H1', action: () => emitFormat('h1') },
     { id: 'h2', label: t('toolbar.h2'), textIcon: 'H2', action: () => emitFormat('h2') },
     { id: 'h3', label: t('toolbar.h3'), textIcon: 'H3', action: () => emitFormat('h3') },
+    { id: 'h4', label: t('toolbar.h4'), textIcon: 'H4', action: () => emitFormat('h4') },
+    { id: 'h5', label: t('toolbar.h5'), textIcon: 'H5', action: () => emitFormat('h5') },
+    { id: 'h6', label: t('toolbar.h6'), textIcon: 'H6', action: () => emitFormat('h6') },
   ]
 
   const moreActionItems: ToolbarMenuItem[] = [
-    { id: 'codeblock', label: t('toolbar.codeBlock'), icon: 'code', action: () => emitFormat('codeblock') },
-    { id: 'quote', label: t('toolbar.quote'), icon: 'quote', action: () => emitFormat('quote') },
-    { id: 'ordered-list', label: t('toolbar.ol'), icon: 'orderedList', action: () => emitFormat('ol') },
-    { id: 'task-list', label: t('toolbar.task'), icon: 'task', action: () => emitFormat('task') },
-    { id: 'image', label: t('toolbar.image'), icon: 'image', action: () => emitFormat('image') },
+    { id: 'link', label: t('toolbar.link'), icon: 'link', action: () => emitFormat('link') },
+    { id: 'code', label: t('toolbar.code'), icon: 'code', action: () => emitFormat('code') },
+    { id: 'codeblock', label: t('toolbar.codeBlock'), icon: 'codeBlock', action: () => emitFormat('codeblock') },
     { id: 'table', label: t('toolbar.table'), icon: 'table', action: () => emitFormat('table') },
-    { id: 'strikethrough', label: t('toolbar.strikethrough'), icon: 'strikethrough', action: () => emitFormat('strikethrough') },
     { id: 'hr', label: t('toolbar.hr'), icon: 'hr', action: () => emitFormat('hr') },
+    { id: 'image', label: t('toolbar.image'), icon: 'image', action: () => emitFormat('image') },
   ]
 
   return (
@@ -319,7 +324,7 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
         </ToolbarBtn>
       </ToolbarGroup>
 
-      <ToolbarGroup label={t('menu.edit')}>
+      <ToolbarGroup label={t('toolbar.structure')}>
         <div className="relative">
           <ToolbarBtn
             title={t('toolbar.headings')}
@@ -334,23 +339,32 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           {showHeadings && <ToolbarMenu items={headingItems} onClose={() => setShowHeadings(false)} triggerRef={headingButtonRef} width={176} />}
         </div>
 
+        <ToolbarBtn title={t('toolbar.quote')} onClick={() => emitFormat('quote')}>
+          <AppIcon name="quote" size={16} />
+        </ToolbarBtn>
+        <ToolbarBtn title={t('toolbar.ul')} onClick={() => emitFormat('ul')}>
+          <AppIcon name="list" size={16} />
+        </ToolbarBtn>
+        <ToolbarBtn title={t('toolbar.ol')} onClick={() => emitFormat('ol')}>
+          <AppIcon name="orderedList" size={16} />
+        </ToolbarBtn>
+        <ToolbarBtn title={t('toolbar.task')} onClick={() => emitFormat('task')}>
+          <AppIcon name="task" size={16} />
+        </ToolbarBtn>
+      </ToolbarGroup>
+
+      <ToolbarGroup label={t('toolbar.inline')}>
         <ToolbarBtn title={t('toolbar.bold')} onClick={() => emitFormat('bold')}>
           <AppIcon name="bold" size={16} />
         </ToolbarBtn>
         <ToolbarBtn title={t('toolbar.italic')} onClick={() => emitFormat('italic')}>
           <AppIcon name="italic" size={16} />
         </ToolbarBtn>
-        <ToolbarBtn title={t('toolbar.code')} onClick={() => emitFormat('code')}>
-          <AppIcon name="code" size={16} />
+        <ToolbarBtn title={t('toolbar.underline')} onClick={() => emitFormat('underline')}>
+          <AppIcon name="underline" size={16} />
         </ToolbarBtn>
-      </ToolbarGroup>
-
-      <ToolbarGroup label={t('toolbar.moreActions')}>
-        <ToolbarBtn title={t('toolbar.link')} onClick={() => emitFormat('link')}>
-          <AppIcon name="link" size={16} />
-        </ToolbarBtn>
-        <ToolbarBtn title={t('toolbar.ul')} onClick={() => emitFormat('ul')}>
-          <AppIcon name="list" size={16} />
+        <ToolbarBtn title={t('toolbar.strikethrough')} onClick={() => emitFormat('strikethrough')}>
+          <AppIcon name="strikethrough" size={16} />
         </ToolbarBtn>
 
         <div className="relative">

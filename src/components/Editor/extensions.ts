@@ -10,7 +10,7 @@ import {
   crosshairCursor,
   placeholder as placeholderExtension,
 } from '@codemirror/view'
-import { EditorState, Extension, EditorSelection } from '@codemirror/state'
+import { EditorState, Extension } from '@codemirror/state'
 import { history, defaultKeymap, historyKeymap, indentWithTab } from '@codemirror/commands'
 import {
   foldGutter,
@@ -91,33 +91,6 @@ export function buildCoreExtensions(options: {
       ...foldKeymap,
       indentWithTab,
     ]),
-    keymap.of([
-      {
-        key: 'Ctrl-b',
-        mac: 'Cmd-b',
-        run: (view) => wrapSelection(view, '**', '**'),
-      },
-      {
-        key: 'Ctrl-i',
-        mac: 'Cmd-i',
-        run: (view) => wrapSelection(view, '*', '*'),
-      },
-      {
-        key: 'Ctrl-u',
-        mac: 'Cmd-u',
-        run: (view) => wrapSelection(view, '<u>', '</u>'),
-      },
-      {
-        key: 'Ctrl-Shift-s',
-        mac: 'Cmd-Shift-s',
-        run: (view) => wrapSelection(view, '~~', '~~'),
-      },
-      {
-        key: 'Ctrl-`',
-        mac: 'Cmd-`',
-        run: (view) => wrapSelection(view, '`', '`'),
-      },
-    ]),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         options.onChange(update.state.doc.toString())
@@ -142,28 +115,4 @@ export function buildWordWrapExtensions(enabled: boolean): Extension[] {
 
 export function buildPlaceholderExtensions(placeholder?: string): Extension[] {
   return placeholder ? [placeholderExtension(placeholder)] : []
-}
-
-function wrapSelection(view: EditorView, before: string, after: string): boolean {
-  const changes = view.state.changeByRange((range) => {
-    if (range.empty) {
-      const insertText = before + after
-      return {
-        changes: { from: range.from, insert: insertText },
-        range: EditorSelection.cursor(range.from + before.length),
-      }
-    }
-
-    const selectedText = view.state.sliceDoc(range.from, range.to)
-    return {
-      changes: { from: range.from, to: range.to, insert: before + selectedText + after },
-      range: EditorSelection.range(
-        range.from + before.length,
-        range.from + before.length + selectedText.length
-      ),
-    }
-  })
-
-  view.dispatch(changes)
-  return true
 }

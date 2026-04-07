@@ -2,6 +2,7 @@ export interface OutlineHeading {
   level: number
   text: string
   id: string
+  line: number
 }
 
 export function slugifyHeading(text: string): string {
@@ -55,7 +56,7 @@ export function extractHeadings(markdown: string): OutlineHeading[] {
 
     const atxMatch = line.match(/^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/)
     if (atxMatch) {
-      pushHeading(headings, slugCounts, atxMatch[1].length, atxMatch[2])
+      pushHeading(headings, slugCounts, atxMatch[1].length, atxMatch[2], index + 1)
       continue
     }
 
@@ -67,7 +68,7 @@ export function extractHeadings(markdown: string): OutlineHeading[] {
     if (!setextMatch) continue
 
     const level = nextLine.includes('=') ? 1 : 2
-    pushHeading(headings, slugCounts, level, line)
+    pushHeading(headings, slugCounts, level, line, index + 1)
     index += 1
   }
 
@@ -78,7 +79,8 @@ function pushHeading(
   headings: OutlineHeading[],
   slugCounts: Map<string, number>,
   level: number,
-  rawText: string
+  rawText: string,
+  line: number
 ) {
   const text = rawText.trim()
   if (!text) return
@@ -91,5 +93,6 @@ function pushHeading(
     level,
     text,
     id: count === 0 ? baseId : `${baseId}-${count}`,
+    line,
   })
 }

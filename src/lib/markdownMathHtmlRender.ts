@@ -9,11 +9,13 @@ import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import rehypeKatex from 'rehype-katex'
 import { buildFrontMatterHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
+import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithMathAndHtml = unified()
   .use(remarkParse)
   .use(remarkGfm)
   .use(remarkMath)
+  .use(remarkSoftBreaks)
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
   .use(rehypeSanitize, sanitizeSchema)

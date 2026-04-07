@@ -30,6 +30,7 @@ export interface PendingNavigation {
   tabId: string
   line: number
   column?: number
+  align?: 'nearest' | 'start' | 'end' | 'center'
 }
 
 interface EditorState {

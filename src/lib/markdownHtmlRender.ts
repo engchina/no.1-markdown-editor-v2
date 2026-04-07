@@ -7,10 +7,12 @@ import rehypeSanitize from 'rehype-sanitize'
 import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import { buildFrontMatterHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
+import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithHtml = unified()
   .use(remarkParse)
   .use(remarkGfm)
+  .use(remarkSoftBreaks)
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
   .use(rehypeSanitize, sanitizeSchema)

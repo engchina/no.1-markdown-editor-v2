@@ -5,6 +5,7 @@ import { useFileOps } from './useFileOps'
 import { useExport } from './useExport'
 import { useRecentFiles } from './useRecentFiles'
 import { applyTheme, getThemeById, THEMES } from '../themes'
+import { getFormatShortcutLabel } from '../components/Editor/formatShortcuts'
 import type { Language } from '../i18n'
 
 export interface Command {
@@ -197,7 +198,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.bold'),
         icon: '𝐁',
         category: 'edit',
-        shortcut: 'Ctrl+B',
+        shortcut: getFormatShortcutLabel('bold'),
         action: () => emitFormat('bold'),
       },
       {
@@ -205,7 +206,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.italic'),
         icon: '𝘐',
         category: 'edit',
-        shortcut: 'Ctrl+I',
+        shortcut: getFormatShortcutLabel('italic'),
         action: () => emitFormat('italic'),
       },
       {
@@ -213,7 +214,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.underline'),
         icon: 'U̲',
         category: 'edit',
-        shortcut: 'Ctrl+U',
+        shortcut: getFormatShortcutLabel('underline'),
         action: () => emitFormat('underline'),
       },
       {
@@ -221,6 +222,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.strikethrough'),
         icon: 'S̶',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('strikethrough'),
         action: () => emitFormat('strikethrough'),
       },
       {
@@ -228,6 +230,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.code'),
         icon: '</>',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('code'),
         action: () => emitFormat('code'),
       },
       {
@@ -313,6 +316,27 @@ export function useCommands(): Command[] {
         icon: 'H3',
         category: 'edit',
         action: () => emitFormat('h3'),
+      },
+      {
+        id: 'edit.h4',
+        label: t('toolbar.h4'),
+        icon: 'H4',
+        category: 'edit',
+        action: () => emitFormat('h4'),
+      },
+      {
+        id: 'edit.h5',
+        label: t('toolbar.h5'),
+        icon: 'H5',
+        category: 'edit',
+        action: () => emitFormat('h5'),
+      },
+      {
+        id: 'edit.h6',
+        label: t('toolbar.h6'),
+        icon: 'H6',
+        category: 'edit',
+        action: () => emitFormat('h6'),
       },
       {
         id: 'export.html',

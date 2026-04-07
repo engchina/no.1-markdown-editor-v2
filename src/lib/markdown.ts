@@ -13,10 +13,12 @@ import {
   stripFrontMatter,
 } from './markdownShared.ts'
 import { containsLikelyRawHtml } from './markdownHtml.ts'
+import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithoutMath = unified()
   .use(remarkParse)
   .use(remarkGfm)
+  .use(remarkSoftBreaks)
   .use(remarkRehype)
   .use(rehypeSanitize, sanitizeSchema)
   .use(rehypeSlug)
