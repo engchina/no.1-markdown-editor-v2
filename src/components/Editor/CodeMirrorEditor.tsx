@@ -18,12 +18,8 @@ import { applyFormat } from './formatCommands'
 import { getFormatActionFromShortcut } from './formatShortcuts'
 import { clipboardHasType, readClipboardString } from '../../lib/clipboard'
 import { buildPlainTextClipboardHtml, renderClipboardHtmlFromMarkdown } from '../../lib/clipboardHtml'
-import {
-  buildRelativeMarkdownImagePath,
-  DEFAULT_MARKDOWN_IMAGE_DIRECTORY,
-  getImageAltText,
-  getImageFileExtension,
-} from '../../lib/fileTypes'
+import { getImageAltText } from '../../lib/fileTypes'
+import { getTauriFilePersistence, persistImageFilesAsMarkdown } from '../../lib/documentPersistence'
 import { convertClipboardHtmlToMarkdown } from '../../lib/pasteHtml'
 import { useActiveTab, useEditorStore } from '../../store/editor'
 import SearchBar from '../Search/SearchBar'
@@ -566,30 +562,10 @@ function insertMarkdown(view: EditorView, markdownText: string, range: { from: n
 }
 
 async function buildImageMarkdown(files: File[], activeTabPath: string | null): Promise<string> {
-  const batchId = Date.now()
-
   if (isTauri && activeTabPath) {
     try {
-      const { mkdir, writeFile } = await import('@tauri-apps/plugin-fs')
-      const { dirname, join } = await import('@tauri-apps/api/path')
-      const parentDir = await dirname(activeTabPath)
-      const imageDir = await join(parentDir, DEFAULT_MARKDOWN_IMAGE_DIRECTORY)
-      await mkdir(imageDir, { recursive: true })
-
-      const snippets = await Promise.all(
-        files.map(async (file, index) => {
-          const extension = getImageFileExtension(file.name, file.type)
-          const altText = getImageAltText(file.name)
-          const suffix = files.length > 1 ? `-${index + 1}` : ''
-          const fileName = `image-${batchId}${suffix}.${extension}`
-          const imagePath = await join(imageDir, fileName)
-
-          await writeFile(imagePath, new Uint8Array(await file.arrayBuffer()))
-          return `![${altText}](${buildRelativeMarkdownImagePath(fileName)})`
-        })
-      )
-
-      return snippets.join('\n')
+      const persistence = await getTauriFilePersistence()
+      return await persistImageFilesAsMarkdown(files, activeTabPath, persistence)
     } catch (error) {
       console.error('Persist dropped image error:', error)
     }

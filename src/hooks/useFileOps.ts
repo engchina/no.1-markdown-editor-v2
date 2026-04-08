@@ -3,7 +3,7 @@ import { useEditorStore } from '../store/editor'
 import { useRecentFilesStore } from '../store/recentFiles'
 import i18n from '../i18n'
 import { MARKDOWN_FILE_EXTENSIONS } from '../lib/fileTypes'
-import { materializeEmbeddedMarkdownImages } from '../lib/embeddedImages'
+import { getTauriFilePersistence, saveMarkdownDocumentWithAssets } from '../lib/documentPersistence'
 import { pushErrorNotice } from '../lib/notices'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -92,19 +92,8 @@ export function useFileOps() {
             savePath = result
           }
 
-          const { mkdir, writeFile, writeTextFile } = await import('@tauri-apps/plugin-fs')
-          const { dirname, join } = await import('@tauri-apps/api/path')
-          const imageDir = await join(await dirname(savePath), 'images')
-          let nextContent = tab.content
-
-          nextContent = await materializeEmbeddedMarkdownImages(nextContent, {
-            persistImage: async (fileName, bytes) => {
-              await mkdir(imageDir, { recursive: true })
-              await writeFile(await join(imageDir, fileName), bytes)
-            },
-          })
-
-          await writeTextFile(savePath, nextContent)
+          const persistence = await getTauriFilePersistence()
+          const nextContent = await saveMarkdownDocumentWithAssets(tab.content, savePath, persistence)
 
           const name = savePath.split(/[\\/]/).pop() ?? tab.name
           if (nextContent !== tab.content) {

@@ -10,6 +10,7 @@ import { resolveTyporaRootUrlAsset } from '../src/lib/imageRoots.ts'
 import { getInlineKatexCss } from '../src/lib/katexInlineCss.ts'
 import { containsLikelyMath } from '../src/lib/markdownMath.ts'
 import { isExternalImageSource, rewritePreviewHtmlExternalImages } from '../src/lib/previewExternalImages.ts'
+import { isLocalPreviewImageSource, rewritePreviewHtmlLocalImages } from '../src/lib/previewLocalImages.ts'
 import { buildFrontMatterHtml } from '../src/lib/markdownShared.ts'
 import { renderMarkdownInWorker } from '../src/lib/markdownWorker.ts'
 import { extractHeadings } from '../src/lib/outline.ts'
@@ -198,6 +199,25 @@ test('rewritePreviewHtmlExternalImages keeps https remote images intact on http 
   assert.match(previewHtml, /decoding="async"/)
 })
 
+test('rewritePreviewHtmlExternalImages keeps https remote images intact on secure origins by default', () => {
+  const html = '<p><img src="https://example.com/assets/hero.png" alt="Hero"></p>'
+
+  const previewHtml = rewritePreviewHtmlExternalImages(
+    html,
+    {
+      blockedLabel: 'External image blocked',
+      clickLabel: 'Click to load from the original host',
+    },
+    'https://tauri.localhost'
+  )
+
+  assert.match(previewHtml, /src="https:\/\/example.com\/assets\/hero.png"/)
+  assert.doesNotMatch(previewHtml, /data-external-src=/)
+  assert.doesNotMatch(previewHtml, /data-external-image=/)
+  assert.match(previewHtml, /loading="lazy"/)
+  assert.match(previewHtml, /decoding="async"/)
+})
+
 test('rewritePreviewHtmlExternalImages bridges insecure http images on secure origins', () => {
   const html = '<p><img src="http://example.com/assets/hero.png" alt="Hero"></p>'
 
@@ -246,6 +266,44 @@ test('isExternalImageSource only flags cross-origin http and https urls', () => 
   assert.equal(isExternalImageSource('/assets/logo.png', 'http://127.0.0.1:1420'), false)
   assert.equal(isExternalImageSource('http://127.0.0.1:1420/assets/logo.png', 'http://127.0.0.1:1420'), false)
   assert.equal(isExternalImageSource('data:image/png;base64,abc', 'http://127.0.0.1:1420'), false)
+})
+
+test('rewritePreviewHtmlLocalImages rewrites relative local images when the active document has a path', () => {
+  const previewHtml = rewritePreviewHtmlLocalImages('<p><img src="./images/hero.png" alt="Hero"></p>', {
+    documentPath: 'D:\\tmp\\draft.md',
+  })
+
+  assert.match(previewHtml, /src="data:image\/svg\+xml/)
+  assert.match(previewHtml, /data-local-src="\.\/images\/hero\.png"/)
+  assert.match(previewHtml, /data-local-image="pending"/)
+})
+
+test('rewritePreviewHtmlLocalImages rewrites absolute local and file url images but keeps remote sources intact', () => {
+  const previewHtml = rewritePreviewHtmlLocalImages(
+    [
+      '<p><img src="C:\\docs\\hero.png" alt="Hero"></p>',
+      '<p><img src="file:///C:/docs/cover.png" alt="Cover"></p>',
+      '<p><img src="https://example.com/remote.png" alt="Remote"></p>',
+      '<p><img src="//cdn.example.com/protocol-relative.png" alt="Protocol relative"></p>',
+    ].join(''),
+    { documentPath: null }
+  )
+
+  assert.match(previewHtml, /data-local-src="C:\\docs\\hero\.png"/)
+  assert.match(previewHtml, /data-local-src="file:\/\/\/C:\/docs\/cover\.png"/)
+  assert.match(previewHtml, /src="https:\/\/example\.com\/remote\.png"/)
+  assert.match(previewHtml, /src="\/\/cdn\.example\.com\/protocol-relative\.png"/)
+  assert.doesNotMatch(previewHtml, /data-local-src="https:\/\/example\.com\/remote\.png"/)
+})
+
+test('isLocalPreviewImageSource only accepts local paths that the preview can resolve', () => {
+  assert.equal(isLocalPreviewImageSource('./images/hero.png', 'D:\\tmp\\draft.md'), true)
+  assert.equal(isLocalPreviewImageSource('./images/hero.png', null), false)
+  assert.equal(isLocalPreviewImageSource('C:\\docs\\hero.png', null), true)
+  assert.equal(isLocalPreviewImageSource('file:///C:/docs/hero.png', null), true)
+  assert.equal(isLocalPreviewImageSource('https://example.com/hero.png', 'D:\\tmp\\draft.md'), false)
+  assert.equal(isLocalPreviewImageSource('//cdn.example.com/hero.png', 'D:\\tmp\\draft.md'), false)
+  assert.equal(isLocalPreviewImageSource('data:image/png;base64,abc', 'D:\\tmp\\draft.md'), false)
 })
 
 test('buildStandaloneHtml escapes the document title', () => {

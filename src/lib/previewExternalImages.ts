@@ -7,6 +7,11 @@ export interface PreviewExternalImageCopy {
   clickLabel: string
 }
 
+interface RewritePreviewHtmlExternalImagesOptions {
+  bridgeAllExternalImages?: boolean
+  resolvedImages?: Record<string, string>
+}
+
 export function isExternalImageSource(source: string, baseOrigin: string): boolean {
   const trimmed = source.trim()
   if (!trimmed) return false
@@ -23,7 +28,15 @@ export function isExternalImageSource(source: string, baseOrigin: string): boole
   }
 }
 
-function requiresExternalImageBridge(source: string, baseOrigin: string): boolean {
+export function buildExternalPreviewImageKey(source: string): string {
+  return source.trim()
+}
+
+function requiresExternalImageBridge(
+  source: string,
+  baseOrigin: string,
+  options: RewritePreviewHtmlExternalImagesOptions
+): boolean {
   const trimmed = source.trim()
   if (!trimmed) return false
 
@@ -35,7 +48,9 @@ function requiresExternalImageBridge(source: string, baseOrigin: string): boolea
     if (!HTTP_PROTOCOLS.has(resolvedSource.protocol)) return false
     if (resolvedSource.origin === resolvedBase.origin) return false
 
-    return resolvedSource.protocol === 'http:' && resolvedBase.protocol !== 'http:'
+    return options.bridgeAllExternalImages === true
+      ? true
+      : resolvedSource.protocol === 'http:' && resolvedBase.protocol !== 'http:'
   } catch {
     return false
   }
@@ -44,7 +59,8 @@ function requiresExternalImageBridge(source: string, baseOrigin: string): boolea
 export function rewritePreviewHtmlExternalImages(
   html: string,
   copy: PreviewExternalImageCopy,
-  baseOrigin: string
+  baseOrigin: string,
+  options: RewritePreviewHtmlExternalImagesOptions = {}
 ): string {
   if (!html.includes('<img')) return html
 
@@ -52,7 +68,26 @@ export function rewritePreviewHtmlExternalImages(
     const source = getHtmlAttribute(rawAttributes, 'src')
     let nextAttributes = ensureSharedImageAttributes(rawAttributes)
 
-    if (!source || !requiresExternalImageBridge(source, baseOrigin)) {
+    if (!source) {
+      return buildImageTag(nextAttributes, selfClosingSlash)
+    }
+
+    const resolvedSource = options.resolvedImages?.[buildExternalPreviewImageKey(source)]
+    if (resolvedSource) {
+      nextAttributes = upsertHtmlAttribute(nextAttributes, 'src', resolvedSource)
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-src')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-host')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-image')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-placeholder')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'tabindex')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'role')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'aria-label')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'referrerpolicy')
+      nextAttributes = removeClass(nextAttributes, PREVIEW_EXTERNAL_IMAGE_CLASS)
+      return buildImageTag(nextAttributes, selfClosingSlash)
+    }
+
+    if (!requiresExternalImageBridge(source, baseOrigin, options)) {
       return buildImageTag(nextAttributes, selfClosingSlash)
     }
 
@@ -110,6 +145,20 @@ function upsertHtmlAttribute(attributes: string, name: string, value: string): s
 function appendClass(attributes: string, className: string): string {
   const existingClassName = getHtmlAttribute(attributes, 'class')
   const nextClassName = Array.from(new Set([...existingClassName.split(/\s+/).filter(Boolean), className])).join(' ')
+  return upsertHtmlAttribute(attributes, 'class', nextClassName)
+}
+
+function removeClass(attributes: string, className: string): string {
+  const existingClassName = getHtmlAttribute(attributes, 'class')
+  const nextClassName = existingClassName
+    .split(/\s+/)
+    .filter((entry) => entry && entry !== className)
+    .join(' ')
+
+  if (!nextClassName) {
+    return removeHtmlAttribute(attributes, 'class')
+  }
+
   return upsertHtmlAttribute(attributes, 'class', nextClassName)
 }
 

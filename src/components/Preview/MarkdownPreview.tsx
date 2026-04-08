@@ -12,6 +12,8 @@ import {
 } from '../../lib/mermaid'
 import { ensureKatexStylesheet } from '../../lib/katexStylesheet'
 import { pushErrorNotice } from '../../lib/notices'
+import { loadLocalPreviewImage } from '../../lib/previewLocalImage'
+import { buildLocalPreviewImageKey, rewritePreviewHtmlLocalImages } from '../../lib/previewLocalImages'
 import { rewritePreviewHtmlExternalImages } from '../../lib/previewExternalImages'
 import { loadExternalPreviewImage } from '../../lib/previewRemoteImage'
 import { useMarkdown } from '../../hooks/useMarkdown'
@@ -23,19 +25,26 @@ export default function MarkdownPreview() {
   const activeThemeId = useEditorStore((state) => state.activeThemeId)
   const fontSize = useEditorStore((state) => state.fontSize)
   const content = activeTab?.content ?? ''
+  const documentPath = activeTab?.path ?? null
   const deferredContent = useDeferredValue(content)
   const html = useMarkdown(deferredContent)
+  const [resolvedLocalImages, setResolvedLocalImages] = useState<Record<string, string>>({})
+  const failedLocalImagesRef = useRef(new Set<string>())
+  const previewOrigin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
   const previewHtml = useMemo(
     () =>
       rewritePreviewHtmlExternalImages(
-        html,
+        rewritePreviewHtmlLocalImages(html, {
+          documentPath,
+          resolvedImages: resolvedLocalImages,
+        }),
         {
           blockedLabel: t('preview.externalImageBlocked'),
           clickLabel: t('preview.externalImageClickToLoad'),
         },
-        typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+        previewOrigin
       ),
-    [html, i18n.language, t]
+    [documentPath, html, i18n.language, previewOrigin, resolvedLocalImages, t]
   )
   const previewRef = useRef<HTMLDivElement>(null)
   const [pendingMermaidCount, setPendingMermaidCount] = useState(0)
@@ -227,6 +236,34 @@ export default function MarkdownPreview() {
     preview.addEventListener('click', onClick)
     return () => preview.removeEventListener('click', onClick)
   }, [])
+
+  useEffect(() => {
+    const preview = previewRef.current
+    if (!preview) return
+
+    const pendingLocalImages = Array.from(
+      preview.querySelectorAll<HTMLImageElement>('img[data-local-src][data-local-image="pending"]')
+    )
+    for (const image of pendingLocalImages) {
+      const localSource = image.dataset.localSrc
+      if (!localSource) continue
+
+      const key = buildLocalPreviewImageKey(localSource, documentPath)
+      if (resolvedLocalImages[key] || failedLocalImagesRef.current.has(key)) continue
+
+      void loadLocalPreviewImage(localSource, documentPath)
+        .then((resolvedSource) => {
+          failedLocalImagesRef.current.delete(key)
+          setResolvedLocalImages((current) =>
+            current[key] === resolvedSource ? current : { ...current, [key]: resolvedSource }
+          )
+        })
+        .catch((error) => {
+          failedLocalImagesRef.current.add(key)
+          console.error('Load local preview image error:', error)
+        })
+    }
+  }, [documentPath, previewHtml, resolvedLocalImages])
 
   useEffect(() => {
     const preview = previewRef.current
