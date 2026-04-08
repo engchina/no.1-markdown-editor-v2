@@ -7,6 +7,7 @@ import { useRecentFiles } from './useRecentFiles'
 import { applyTheme, getThemeById, THEMES } from '../themes'
 import { getFormatShortcutLabel } from '../components/Editor/formatShortcuts'
 import type { Language } from '../i18n'
+import { formatPrimaryShortcut } from '../lib/platform'
 
 export interface Command {
   id: string
@@ -28,6 +29,16 @@ export function useCommands(): Command[] {
   const { newFile, openFile, saveFile, saveFileAs } = useFileOps()
   const { exportHtml, exportPdf, exportMarkdown, copyAsHtml } = useExport()
   const { recentFiles, openRecent, clearRecent } = useRecentFiles()
+  const newShortcut = formatPrimaryShortcut('N')
+  const openShortcut = formatPrimaryShortcut('O')
+  const saveShortcut = formatPrimaryShortcut('S')
+  const saveAsShortcut = formatPrimaryShortcut('S', { shift: true })
+  const sidebarShortcut = formatPrimaryShortcut('\\')
+  const increaseFontShortcut = formatPrimaryShortcut('+')
+  const decreaseFontShortcut = formatPrimaryShortcut('-')
+  const resetFontShortcut = formatPrimaryShortcut('0')
+  const findShortcut = formatPrimaryShortcut('F')
+  const replaceShortcut = formatPrimaryShortcut('H')
 
   return useMemo<Command[]>(() => {
     const recentCommands = recentFiles.slice(0, 5).map((file) => ({
@@ -47,7 +58,7 @@ export function useCommands(): Command[] {
         label: t('menu.newFile'),
         icon: '📄',
         category: 'file',
-        shortcut: 'Ctrl+N',
+        shortcut: newShortcut,
         action: newFile,
       },
       {
@@ -55,7 +66,7 @@ export function useCommands(): Command[] {
         label: t('menu.openFile'),
         icon: '📂',
         category: 'file',
-        shortcut: 'Ctrl+O',
+        shortcut: openShortcut,
         action: () => {
           void openFile()
         },
@@ -65,7 +76,7 @@ export function useCommands(): Command[] {
         label: t('menu.saveFile'),
         icon: '💾',
         category: 'file',
-        shortcut: 'Ctrl+S',
+        shortcut: saveShortcut,
         action: () => {
           void saveFile()
         },
@@ -75,7 +86,7 @@ export function useCommands(): Command[] {
         label: t('menu.saveAs'),
         icon: '📝',
         category: 'file',
-        shortcut: 'Ctrl+Shift+S',
+        shortcut: saveAsShortcut,
         action: () => {
           void saveFileAs()
         },
@@ -129,7 +140,7 @@ export function useCommands(): Command[] {
         label: store.sidebarOpen ? t('commands.hideSidebar') : t('commands.showSidebar'),
         icon: '📋',
         category: 'view',
-        shortcut: 'Ctrl+\\',
+        shortcut: sidebarShortcut,
         action: () => store.setSidebarOpen(!store.sidebarOpen),
       },
       {
@@ -158,7 +169,7 @@ export function useCommands(): Command[] {
         label: t('commands.increaseFontSize'),
         icon: 'A+',
         category: 'view',
-        shortcut: 'Ctrl++',
+        shortcut: increaseFontShortcut,
         action: () => store.setFontSize(Math.min(store.fontSize + 1, 24)),
       },
       {
@@ -166,7 +177,7 @@ export function useCommands(): Command[] {
         label: t('commands.decreaseFontSize'),
         icon: 'A-',
         category: 'view',
-        shortcut: 'Ctrl+-',
+        shortcut: decreaseFontShortcut,
         action: () => store.setFontSize(Math.max(store.fontSize - 1, 11)),
       },
       {
@@ -174,7 +185,7 @@ export function useCommands(): Command[] {
         label: t('commands.resetFontSize'),
         icon: 'A',
         category: 'view',
-        shortcut: 'Ctrl+0',
+        shortcut: resetFontShortcut,
         action: () => store.setFontSize(14),
       },
       {
@@ -182,7 +193,7 @@ export function useCommands(): Command[] {
         label: t('commands.findInDocument'),
         icon: '🔍',
         category: 'edit',
-        shortcut: 'Ctrl+F',
+        shortcut: findShortcut,
         action: () => document.dispatchEvent(new CustomEvent('editor:search', { detail: { replace: false } })),
       },
       {
@@ -190,7 +201,7 @@ export function useCommands(): Command[] {
         label: t('commands.findReplace'),
         icon: '🔄',
         category: 'edit',
-        shortcut: 'Ctrl+H',
+        shortcut: replaceShortcut,
         action: () => document.dispatchEvent(new CustomEvent('editor:search', { detail: { replace: true } })),
       },
       {
@@ -418,12 +429,22 @@ export function useCommands(): Command[] {
     exportHtml,
     exportMarkdown,
     exportPdf,
+    findShortcut,
+    decreaseFontShortcut,
+    increaseFontShortcut,
     newFile,
+    newShortcut,
+    openShortcut,
     openFile,
     openRecent,
+    replaceShortcut,
+    resetFontShortcut,
     recentFiles,
     saveFile,
+    saveShortcut,
     saveFileAs,
+    saveAsShortcut,
+    sidebarShortcut,
     store.focusMode,
     store.fontSize,
     store.lineNumbers,

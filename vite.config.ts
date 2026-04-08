@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 const OPTIONAL_PREVIEW_CHUNK_PATTERN =
-  /\/assets\/(?:MarkdownPreview|markdown(?:[A-Za-z]+)?|vendor-markdown(?:-(?:math|html))?|vendor-mermaid(?:-parser-core)?|mermaid|.*katex[^"]*|.*rehype-katex[^"]*)/
+  /\/assets\/(?:MarkdownPreview|markdown(?:[A-Za-z]+)?|vendor-markdown(?:-(?:math|html))?|vendor-mermaid(?:-[^"]+)?|mermaid|.*katex[^"]*|.*rehype-katex[^"]*)/
 const OPTIONAL_EDITOR_CHUNK_PATTERN =
   /\/assets\/(?:EditorPane|CodeMirrorEditor|vendor-editor(?:-(?:search|language|language-web|autocomplete))?|optionalFeatures|formatCommands|wysiwyg|.*autocomplete[^"]*)/
 
@@ -28,6 +28,10 @@ export default defineConfig(async () => ({
     },
   },
   build: {
+    // Mermaid's upstream parser core bundles several grammars into a single optional
+    // lazy chunk. It's not on the initial load path, so we allow a slightly higher
+    // warning threshold to keep build output actionable for real regressions.
+    chunkSizeWarningLimit: 560,
     modulePreload: {
       resolveDependencies(_filename, deps) {
         return deps.filter((dep) => {
@@ -71,6 +75,7 @@ export default defineConfig(async () => ({
         },
         manualChunks(id) {
           const normalizedId = id.replaceAll('\\', '/')
+          const mermaidParserRuntimeChunk = getMermaidParserRuntimeChunkName(normalizedId)
           const isMermaidParserLeafModule =
             /\/node_modules\/@mermaid-js\/parser\/dist\/chunks\/mermaid-parser\.core\/(?:architecture|gitGraph|info|packet|pie|radar|treeView|wardley)-/u.test(
               normalizedId
@@ -85,6 +90,10 @@ export default defineConfig(async () => ({
           }
 
           if (!id.includes('node_modules')) return
+
+          if (mermaidParserRuntimeChunk) {
+            return mermaidParserRuntimeChunk
+          }
 
           const isMarkdownHtmlDependency =
             id.includes('rehype-raw') ||
@@ -112,13 +121,12 @@ export default defineConfig(async () => ({
             return 'vendor-editor-language-web'
           }
 
-          if (
-            id.includes('@mermaid-js/parser/dist/chunks/mermaid-parser.core/chunk-') ||
-            id.includes(`${path.sep}@mermaid-js${path.sep}parser${path.sep}dist${path.sep}chunks${path.sep}mermaid-parser.core${path.sep}chunk-`) ||
-            id.includes(`${path.sep}langium${path.sep}`) ||
-            id.includes(`${path.sep}chevrotain${path.sep}`)
-          ) {
-            return 'vendor-mermaid-parser-core'
+          if (id.includes(`${path.sep}langium${path.sep}`)) {
+            return 'vendor-mermaid-parser-langium'
+          }
+
+          if (id.includes(`${path.sep}chevrotain${path.sep}`)) {
+            return 'vendor-mermaid-parser-chevrotain'
           }
 
           if (
@@ -195,3 +203,12 @@ export default defineConfig(async () => ({
     },
   },
 }))
+
+function getMermaidParserRuntimeChunkName(normalizedId: string): string | null {
+  if (!normalizedId.includes('/node_modules/@mermaid-js/parser/dist/chunks/mermaid-parser.core/chunk-')) {
+    return null
+  }
+
+  const baseName = path.posix.basename(normalizedId, path.posix.extname(normalizedId))
+  return `vendor-mermaid-parser-${baseName}`
+}

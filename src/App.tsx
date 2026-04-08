@@ -8,9 +8,11 @@ import TitleBar from './components/TitleBar/TitleBar'
 import NotificationCenter from './components/Notifications/NotificationCenter'
 import { useAutoSave } from './hooks/useAutoSave'
 import { useDocumentDrop } from './hooks/useDocumentDrop'
+import { useExternalFileChanges } from './hooks/useExternalFileChanges'
 import { useFileOps } from './hooks/useFileOps'
 import { openDesktopDocumentPaths, SINGLE_INSTANCE_OPEN_FILES_EVENT } from './lib/desktopFileOpen'
 import { resolveFocusInlinePaddingPx, resolveFocusWidthPx } from './lib/focusWidth'
+import { matchesPrimaryShortcut } from './lib/platform'
 import { useEditorStore } from './store/editor'
 import { applyTheme, getThemeById } from './themes'
 
@@ -85,7 +87,6 @@ export default function App() {
     focusWidthCustomPx,
     typewriterMode,
     activeThemeId,
-    zoom,
   } = useEditorStore()
   const { saveAllDirtyTabs } = useFileOps()
   const [paletteMode, setPaletteMode] = useState<'command' | 'file' | null>(null)
@@ -99,6 +100,7 @@ export default function App() {
     '--focus-column-inline-padding': `${focusColumnPadding}px`,
   } as CSSProperties
   useDocumentDrop()
+  useExternalFileChanges()
 
   useEffect(() => {
     applyTheme(getThemeById(activeThemeId))
@@ -134,11 +136,10 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const mod = event.ctrlKey || event.metaKey
-      if (mod && event.shiftKey && event.key.toLowerCase() === 'p') {
+      if (matchesPrimaryShortcut(event, { key: 'p', shift: true })) {
         event.preventDefault()
         setPaletteMode('command')
-      } else if (mod && !event.shiftKey && event.key.toLowerCase() === 'p') {
+      } else if (matchesPrimaryShortcut(event, { key: 'p' })) {
         event.preventDefault()
         setPaletteMode('file')
       }
@@ -149,32 +150,31 @@ export default function App() {
         store.setFocusMode(!store.focusMode)
       }
 
-      if (mod) {
-        if (event.key === '=' || event.key === '+') {
-          event.preventDefault()
-          const store = useEditorStore.getState()
-          store.setZoom(Math.min(300, store.zoom + 10))
-        } else if (event.key === '-') {
-          event.preventDefault()
-          const store = useEditorStore.getState()
-          store.setZoom(Math.max(50, store.zoom - 10))
-        } else if (event.key === '0') {
-          event.preventDefault()
-          useEditorStore.getState().setZoom(100)
-        }
+      if (matchesPrimaryShortcut(event, { code: 'Backslash' })) {
+        event.preventDefault()
+        const store = useEditorStore.getState()
+        store.setSidebarOpen(!store.sidebarOpen)
+        return
+      }
+
+      if (event.altKey || !(event.ctrlKey || event.metaKey)) return
+
+      const store = useEditorStore.getState()
+      if (event.code === 'Equal' || event.key === '=' || event.key === '+') {
+        event.preventDefault()
+        store.setFontSize(Math.min(24, store.fontSize + 1))
+      } else if (event.code === 'Minus' || event.key === '-') {
+        event.preventDefault()
+        store.setFontSize(Math.max(11, store.fontSize - 1))
+      } else if (event.key === '0') {
+        event.preventDefault()
+        store.setFontSize(14)
       }
     }
 
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
-
-  useEffect(() => {
-    const scale = zoom / 100
-    ;(document.body.style as any).zoom = `${zoom}%`
-    document.body.style.width = `${100 / scale}vw`
-    document.body.style.height = `${100 / scale}vh`
-  }, [zoom])
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {

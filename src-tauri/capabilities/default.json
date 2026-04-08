@@ -19,6 +19,26 @@
     "fs:allow-write-file",
     "fs:allow-read-dir",
     "fs:allow-exists",
-    "opener:allow-open-url"
+    "fs:allow-rename",
+    "fs:allow-remove",
+    "fs:allow-watch",
+    "fs:allow-unwatch",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "http://*"
+        },
+        {
+          "url": "https://*"
+        },
+        {
+          "url": "mailto:*"
+        },
+        {
+          "url": "tel:*"
+        }
+      ]
+    }
   ]
 }

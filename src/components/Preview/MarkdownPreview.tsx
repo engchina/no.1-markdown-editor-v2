@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   countPendingMermaidShells,
@@ -15,6 +15,7 @@ import { pushErrorNotice } from '../../lib/notices'
 import { loadLocalPreviewImage } from '../../lib/previewLocalImage'
 import { buildLocalPreviewImageKey, rewritePreviewHtmlLocalImages } from '../../lib/previewLocalImages'
 import { rewritePreviewHtmlExternalImages } from '../../lib/previewExternalImages'
+import { getPreviewExternalLink } from '../../lib/previewLinks'
 import { loadExternalPreviewImage } from '../../lib/previewRemoteImage'
 import { useMarkdown } from '../../hooks/useMarkdown'
 import { useActiveTab, useEditorStore } from '../../store/editor'
@@ -26,11 +27,13 @@ export default function MarkdownPreview() {
   const fontSize = useEditorStore((state) => state.fontSize)
   const content = activeTab?.content ?? ''
   const documentPath = activeTab?.path ?? null
+  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
   const deferredContent = useDeferredValue(content)
   const html = useMarkdown(deferredContent)
   const [resolvedLocalImages, setResolvedLocalImages] = useState<Record<string, string>>({})
   const failedLocalImagesRef = useRef(new Set<string>())
   const previewOrigin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+  const previewLocationHref = typeof window === 'undefined' ? 'http://localhost/' : window.location.href
   const previewHtml = useMemo(
     () =>
       rewritePreviewHtmlExternalImages(
@@ -93,6 +96,39 @@ export default function MarkdownPreview() {
   const warmPendingMermaidSources = (preview: HTMLElement) => {
     warmMermaidTask(warmMermaidForSources(getPendingMermaidSources(preview)))
   }
+
+  const openExternalPreviewLink = useCallback(
+    async (href: string, label: string) => {
+      const messageText = t('dialog.openExternalMessage', { target: label })
+
+      try {
+        if (isTauri) {
+          const { confirm } = await import('@tauri-apps/plugin-dialog')
+          const approved = await confirm(messageText, {
+            title: t('dialog.openExternalTitle'),
+            kind: 'warning',
+            okLabel: t('dialog.openExternal'),
+            cancelLabel: t('dialog.stayInEditor'),
+          })
+
+          if (!approved) return
+
+          const { openUrl } = await import('@tauri-apps/plugin-opener')
+          await openUrl(href)
+          return
+        }
+
+        if (typeof window === 'undefined' || !window.confirm(messageText)) return
+        window.open(href, '_blank', 'noopener,noreferrer')
+      } catch (error) {
+        console.error('Open external preview link error:', error)
+        pushErrorNotice('notices.openExternalErrorTitle', 'notices.openExternalErrorMessage', {
+          values: { target: label },
+        })
+      }
+    },
+    [isTauri, t]
+  )
 
   const activateExternalImage = (image: HTMLImageElement) => {
     const externalSource = image.dataset.externalSrc
@@ -218,6 +254,17 @@ export default function MarkdownPreview() {
         return
       }
 
+      const anchor = (event.target as HTMLElement | null)?.closest<HTMLAnchorElement>('a[href]')
+      if (anchor) {
+        const externalLink = getPreviewExternalLink(anchor.getAttribute('href'), previewLocationHref)
+        if (externalLink) {
+          event.preventDefault()
+          event.stopPropagation()
+          void openExternalPreviewLink(externalLink.href, externalLink.label)
+          return
+        }
+      }
+
       const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-mermaid-action="render"]')
       if (!button) return
 
@@ -235,7 +282,7 @@ export default function MarkdownPreview() {
 
     preview.addEventListener('click', onClick)
     return () => preview.removeEventListener('click', onClick)
-  }, [])
+  }, [openExternalPreviewLink, previewLocationHref])
 
   useEffect(() => {
     const preview = previewRef.current
@@ -270,31 +317,30 @@ export default function MarkdownPreview() {
     if (!preview) return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return
-
       const externalImage = (event.target as HTMLElement | null)?.closest('img[data-external-src]') as HTMLImageElement | null
-      if (!externalImage) return
+      if ((event.key === 'Enter' || event.key === ' ') && externalImage) {
+        event.preventDefault()
+        event.stopPropagation()
+        activateExternalImage(externalImage)
+        return
+      }
+
+      if (event.key !== 'Enter') return
+
+      const anchor = (event.target as HTMLElement | null)?.closest<HTMLAnchorElement>('a[href]')
+      if (!anchor) return
+
+      const externalLink = getPreviewExternalLink(anchor.getAttribute('href'), previewLocationHref)
+      if (!externalLink) return
 
       event.preventDefault()
       event.stopPropagation()
-      activateExternalImage(externalImage)
+      void openExternalPreviewLink(externalLink.href, externalLink.label)
     }
 
     preview.addEventListener('keydown', onKeyDown)
     return () => preview.removeEventListener('keydown', onKeyDown)
-  }, [])
-
-  useEffect(() => {
-    const preview = previewRef.current
-    if (!preview) return
-
-    const blockedImages = Array.from(
-      preview.querySelectorAll<HTMLImageElement>('img[data-external-src][data-external-image="blocked"]')
-    )
-    for (const image of blockedImages) {
-      activateExternalImage(image)
-    }
-  }, [previewHtml])
+  }, [openExternalPreviewLink, previewLocationHref])
 
   useEffect(() => {
     const preview = previewRef.current

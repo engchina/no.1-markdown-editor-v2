@@ -4,6 +4,7 @@ import { useEditorStore, type ViewMode } from '../../store/editor'
 import { LANGUAGES, type Language } from '../../i18n'
 import { useFileOps } from '../../hooks/useFileOps'
 import { useExport } from '../../hooks/useExport'
+import { formatPrimaryShortcut } from '../../lib/platform'
 import ThemePanel from '../ThemePanel/ThemePanel'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 
@@ -256,23 +257,29 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
   const moreActionsButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
+  const newShortcut = formatPrimaryShortcut('N')
+  const openShortcut = formatPrimaryShortcut('O')
+  const saveShortcut = formatPrimaryShortcut('S')
+  const commandPaletteShortcut = formatPrimaryShortcut('P', { shift: true })
+  const sidebarShortcut = formatPrimaryShortcut('\\')
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       const mod = event.ctrlKey || event.metaKey
-      if (mod && event.key === 'n') {
+      const key = event.key.toLowerCase()
+      if (mod && key === 'n') {
         event.preventDefault()
         newFile()
       }
-      if (mod && event.key === 'o') {
+      if (mod && key === 'o') {
         event.preventDefault()
         void openFile()
       }
-      if (mod && event.shiftKey && event.key.toLowerCase() === 's') {
+      if (mod && event.shiftKey && key === 's') {
         event.preventDefault()
         void saveFileAs()
       }
-      if (mod && !event.shiftKey && event.key === 's') {
+      if (mod && !event.shiftKey && key === 's') {
         event.preventDefault()
         void saveFile()
       }
@@ -308,18 +315,22 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
         boxShadow: 'var(--shadow-elegant)',
       }}
     >
-      <ToolbarBtn title={t('toolbar.toggleSidebar')} onClick={() => setSidebarOpen(!sidebarOpen)} active={sidebarOpen}>
+      <ToolbarBtn
+        title={`${t('toolbar.toggleSidebar')} (${sidebarShortcut})`}
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        active={sidebarOpen}
+      >
         <AppIcon name="panel" size={16} />
       </ToolbarBtn>
 
       <ToolbarGroup label={t('menu.file')}>
-        <ToolbarBtn title={`${t('toolbar.new')} (Ctrl+N)`} onClick={newFile}>
+        <ToolbarBtn title={`${t('toolbar.new')} (${newShortcut})`} onClick={newFile}>
           <AppIcon name="filePlus" size={16} />
         </ToolbarBtn>
-        <ToolbarBtn title={`${t('toolbar.open')} (Ctrl+O)`} onClick={() => void openFile()}>
+        <ToolbarBtn title={`${t('toolbar.open')} (${openShortcut})`} onClick={() => void openFile()}>
           <AppIcon name="folderOpen" size={16} />
         </ToolbarBtn>
-        <ToolbarBtn title={`${t('toolbar.save')} (Ctrl+S)`} onClick={() => void saveFile()}>
+        <ToolbarBtn title={`${t('toolbar.save')} (${saveShortcut})`} onClick={() => void saveFile()}>
           <AppIcon name="save" size={16} />
         </ToolbarBtn>
       </ToolbarGroup>
@@ -402,10 +413,8 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
 
       <div className="flex-1" />
 
-      <ToolbarBtn title={t('toolbar.commandPalette')} onClick={() => onOpenPalette?.()}>
-        <span className="text-xs font-mono" style={{ fontSize: '13px' }}>
-          ⌘
-        </span>
+      <ToolbarBtn title={`${t('toolbar.commandPalette')} (${commandPaletteShortcut})`} onClick={() => onOpenPalette?.()}>
+        <AppIcon name="search" size={16} />
       </ToolbarBtn>
 
       <div className="relative">
@@ -436,24 +445,6 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
         <AppIcon name="sparkles" size={16} />
       </ToolbarBtn>
 
-      <select
-        value={language}
-        onChange={(event) => setLanguage(event.target.value as Language)}
-        className="cursor-pointer rounded-[10px] px-2 py-0.5 text-xs outline-none"
-        style={{
-          height: '32px',
-          background: 'var(--bg-secondary)',
-          color: 'var(--text-secondary)',
-          border: '1px solid var(--border)',
-        }}
-      >
-        {LANGUAGES.map((item) => (
-          <option key={item.code} value={item.code}>
-            {item.nativeLabel}
-          </option>
-        ))}
-      </select>
-
       <div className="relative">
         <ToolbarBtn
           title={t('toolbar.appearance')}
@@ -469,6 +460,24 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
       <ToolbarBtn title={t('toolbar.focusMode')} onClick={() => setFocusMode(!focusMode)} active={focusMode}>
         <AppIcon name="focus" size={16} />
       </ToolbarBtn>
+
+      <select
+        value={language}
+        onChange={(event) => setLanguage(event.target.value as Language)}
+        className="flex-shrink-0 cursor-pointer rounded-[10px] px-2 py-0.5 text-xs outline-none"
+        style={{
+          height: '32px',
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-secondary)',
+          border: '1px solid var(--border)',
+        }}
+      >
+        {LANGUAGES.map((item) => (
+          <option key={item.code} value={item.code}>
+            {item.nativeLabel}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

@@ -5,7 +5,8 @@
 /* ── CSS Custom Properties ── */
 :root {
   /* Light theme */
-  --bg-canvas: #E5E7EB; /* Subtle gray background for floating look */
+  --bg-canvas: #E5E7EB;
+  /* Subtle gray background for floating look */
   --bg-primary: #FCFCFD;
   --bg-secondary: #F4F4F5;
   --bg-tertiary: #E4E4E7;
@@ -43,7 +44,8 @@
 
 .dark {
   /* Dark theme — Catppuccin Mocha Refined */
-  --bg-canvas: #09090b; /* Very dark canvas for floating window */
+  --bg-canvas: #09090b;
+  /* Very dark canvas for floating window */
   --bg-primary: #1E1E2E;
   --bg-secondary: #181825;
   --bg-tertiary: #11111B;
@@ -77,11 +79,15 @@
 }
 
 /* ── Reset & Base ── */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
   padding: 0;
@@ -89,7 +95,8 @@ html, body, #root {
 }
 
 body {
-  background-color: var(--bg-canvas); /* The outer background */
+  background-color: var(--bg-canvas);
+  /* The outer background */
   color: var(--text-primary);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -99,8 +106,27 @@ body {
   transition: background-color 0.4s ease;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 /* Allow text selection in editor and preview */
-.cm-editor, .markdown-preview {
+.cm-editor,
+.markdown-preview {
   user-select: text;
 }
 
@@ -109,15 +135,18 @@ body {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--border) 60%, transparent);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
   border: 2px solid transparent;
@@ -136,9 +165,11 @@ body {
 .hover-scale {
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .hover-scale:hover {
   transform: scale(1.04);
 }
+
 .hover-scale:active {
   transform: scale(0.96);
 }
@@ -196,22 +227,65 @@ body {
 }
 
 /* Markdown syntax colors — light */
-.cm-header { color: #1D4ED8 !important; font-weight: 600; }
-.cm-strong { color: #7C3AED !important; font-weight: 700; }
-.cm-em { color: #DB2777 !important; font-style: italic; }
-.cm-link { color: #0369A1 !important; }
-.cm-url { color: #0EA5E9 !important; }
-.cm-quote { color: #6B7280 !important; }
-.cm-code { color: #B45309 !important; }
+.cm-header {
+  color: #1D4ED8 !important;
+  font-weight: 600;
+}
+
+.cm-strong {
+  color: #7C3AED !important;
+  font-weight: 700;
+}
+
+.cm-em {
+  color: #DB2777 !important;
+  font-style: italic;
+}
+
+.cm-link {
+  color: #0369A1 !important;
+}
+
+.cm-url {
+  color: #0EA5E9 !important;
+}
+
+.cm-quote {
+  color: #6B7280 !important;
+}
+
+.cm-code {
+  color: #B45309 !important;
+}
 
 /* Markdown syntax colors — dark */
-.dark .cm-header { color: #89B4FA !important; }
-.dark .cm-strong { color: #CBA6F7 !important; }
-.dark .cm-em { color: #F38BA8 !important; }
-.dark .cm-link { color: #89DCEB !important; }
-.dark .cm-url { color: #74C7EC !important; }
-.dark .cm-quote { color: #6C7086 !important; }
-.dark .cm-code { color: #FAB387 !important; }
+.dark .cm-header {
+  color: #89B4FA !important;
+}
+
+.dark .cm-strong {
+  color: #CBA6F7 !important;
+}
+
+.dark .cm-em {
+  color: #F38BA8 !important;
+}
+
+.dark .cm-link {
+  color: #89DCEB !important;
+}
+
+.dark .cm-url {
+  color: #74C7EC !important;
+}
+
+.dark .cm-quote {
+  color: #6C7086 !important;
+}
+
+.dark .cm-code {
+  color: #FAB387 !important;
+}
 
 /* ── Markdown Preview ── */
 .markdown-preview {
@@ -257,15 +331,24 @@ body {
   font-weight: 600;
 }
 
-.markdown-preview h1 { font-size: 2em; }
-.markdown-preview h2 { font-size: 1.5em; }
-.markdown-preview h3 { font-size: 1.25em; }
+.markdown-preview h1 {
+  font-size: 2em;
+}
+
+.markdown-preview h2 {
+  font-size: 1.5em;
+}
+
+.markdown-preview h3 {
+  font-size: 1.25em;
+}
 
 .markdown-preview a {
   color: var(--accent);
   text-decoration: none;
   transition: all 0.2s ease;
 }
+
 .markdown-preview a:hover {
   color: var(--accent-hover);
   text-decoration: underline;
@@ -289,6 +372,7 @@ body {
   overflow-x: auto;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
 }
+
 .markdown-preview pre:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
@@ -306,11 +390,13 @@ body {
   background: none;
   border-left: var(--md-quote-line-width) solid var(--md-quote-rule-color);
 }
-.markdown-preview blockquote > * {
+
+.markdown-preview blockquote>* {
   margin-top: 0;
   margin-bottom: 0;
 }
-.markdown-preview blockquote > * + * {
+
+.markdown-preview blockquote>*+* {
   margin-top: var(--md-quote-space);
 }
 
@@ -340,8 +426,8 @@ body {
   margin-bottom: 0.5em;
 }
 
-.markdown-preview li > ul,
-.markdown-preview li > ol {
+.markdown-preview li>ul,
+.markdown-preview li>ol {
   margin-top: 0.5em;
   margin-bottom: 0;
 }
@@ -549,6 +635,7 @@ body {
   background: var(--border);
   transition: background 0.15s;
 }
+
 .panel-divider:hover {
   background: var(--accent);
 }
@@ -560,8 +647,13 @@ body {
 }
 
 @keyframes focusFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 /* Centered writing column */
@@ -609,12 +701,40 @@ body {
 
 /* ── Animations ── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-in {
   animation: fadeIn 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .hover-scale:hover,
+  .hover-scale:active {
+    transform: none !important;
+  }
+
+  .animate-in {
+    animation: none !important;
+  }
 }
 
 /* ── YAML Front Matter ── */
@@ -626,15 +746,28 @@ body {
   margin: 0;
   font-size: 0.8em;
 }
-.front-matter table { border: none; margin: 0; width: 100%; }
-.front-matter td { border: none; padding: 2px 8px 2px 0; }
+
+.front-matter table {
+  border: none;
+  margin: 0;
+  width: 100%;
+}
+
+.front-matter td {
+  border: none;
+  padding: 2px 8px 2px 0;
+}
+
 .fm-key {
   font-weight: 600;
   color: var(--accent);
   white-space: nowrap;
   padding-right: 16px;
 }
-.fm-val { color: var(--text-secondary); }
+
+.fm-val {
+  color: var(--text-secondary);
+}
 
 /* ── Footnotes ── */
 .markdown-preview .footnotes {
@@ -644,8 +777,8 @@ body {
   font-size: 0.875em;
   color: var(--text-secondary);
 }
-.markdown-preview > :is(
-  p,
+
+.markdown-preview> :is(p,
   h1,
   h2,
   h3,
@@ -659,13 +792,12 @@ body {
   table,
   hr,
   img,
-  .front-matter
-) {
+  .front-matter) {
   margin-top: 0;
   margin-bottom: 0;
 }
-.markdown-preview > :is(
-  p,
+
+.markdown-preview> :is(p,
   h1,
   h2,
   h3,
@@ -679,9 +811,7 @@ body {
   table,
   hr,
   img,
-  .front-matter
-) + :is(
-  p,
+  .front-matter)+ :is(p,
   h1,
   h2,
   h3,
@@ -695,11 +825,14 @@ body {
   table,
   hr,
   img,
-  .front-matter
-) {
+  .front-matter) {
   margin-top: var(--md-block-space);
 }
-.markdown-preview .footnotes ol { padding-left: 1.5em; }
+
+.markdown-preview .footnotes ol {
+  padding-left: 1.5em;
+}
+
 .markdown-preview a[data-footnote-ref] {
   font-size: 0.75em;
   vertical-align: super;
@@ -707,4 +840,7 @@ body {
   color: var(--accent);
   font-weight: 600;
 }
-.markdown-preview a[data-footnote-backref] { color: var(--text-muted); }
+
+.markdown-preview a[data-footnote-backref] {
+  color: var(--text-muted);
+}

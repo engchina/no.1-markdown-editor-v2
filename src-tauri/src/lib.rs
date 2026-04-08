@@ -201,6 +201,26 @@ fn ensure_parent_directory(path: &str) -> Result<(), String> {
     std::fs::create_dir_all(parent).map_err(|error| error.to_string())
 }
 
+fn is_allowed_editor_navigation(url: &reqwest::Url) -> bool {
+    match url.scheme() {
+        "tauri" => is_editor_entry_path(url.path()),
+        "http" | "https" => {
+            is_editor_loopback_host(url.host_str()) && is_editor_entry_path(url.path())
+        }
+        _ => false,
+    }
+}
+
+fn is_editor_loopback_host(host: Option<&str>) -> bool {
+    host.is_some_and(|host| {
+        matches!(host, "localhost" | "127.0.0.1" | "::1") || host.ends_with(".localhost")
+    })
+}
+
+fn is_editor_entry_path(path: &str) -> bool {
+    matches!(path, "" | "/" | "/index.html")
+}
+
 fn collect_launch_paths() -> Vec<String> {
     let current_dir = std::env::current_dir().ok();
     collect_launch_paths_from_args(std::env::args_os().skip(1), current_dir.as_deref())
@@ -297,6 +317,11 @@ pub fn run() {
 
     builder
         .manage(pending_open_paths)
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("editor-navigation-guard")
+                .on_navigation(|_, url| is_allowed_editor_navigation(url))
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -323,6 +348,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::is_allowed_editor_navigation;
     use super::collect_launch_paths_from_args;
     use std::ffi::OsString;
     use std::fs;
@@ -402,5 +428,31 @@ mod tests {
 
         let _ = fs::remove_file(existing_path);
         let _ = fs::remove_dir(temp_dir);
+    }
+
+    #[test]
+    fn navigation_guard_allows_only_editor_entry_documents() {
+        for url in [
+            "tauri://localhost/",
+            "tauri://localhost/index.html",
+            "http://127.0.0.1:1420/",
+            "https://tauri.localhost/index.html",
+        ] {
+            let parsed = reqwest::Url::parse(url).expect("parse allowed url");
+            assert!(is_allowed_editor_navigation(&parsed), "expected to allow {url}");
+        }
+    }
+
+    #[test]
+    fn navigation_guard_blocks_external_and_in_app_page_replacements() {
+        for url in [
+            "https://example.com/",
+            "http://127.0.0.1:1420/guide.md",
+            "http://localhost:1420/image.png",
+            "file:///tmp/demo.md",
+        ] {
+            let parsed = reqwest::Url::parse(url).expect("parse blocked url");
+            assert!(!is_allowed_editor_navigation(&parsed), "expected to block {url}");
+        }
     }
 }

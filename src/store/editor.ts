@@ -11,6 +11,7 @@ import {
   isRestorableDraftTab,
   restoreDraftTabs,
 } from '../lib/draftRecovery'
+import { pathMatchesPrefix, remapPathPrefix } from '../lib/fileTreePaths'
 import { pushInfoNotice } from '../lib/notices'
 
 export type Theme = 'light' | 'dark'
@@ -72,6 +73,9 @@ interface EditorState {
   updateTabContent: (id: string, content: string) => void
   saveTab: (id: string) => void
   setTabPath: (id: string, path: string, name: string) => void
+  replaceTabFromDisk: (id: string, content: string) => void
+  remapTabsForPathChange: (oldPath: string, newPath: string) => void
+  closeTabsByPathPrefix: (pathPrefix: string) => void
 
   // Cursor
   cursorPos: CursorPos
@@ -251,6 +255,43 @@ export const useEditorStore = create<EditorState>()(
         set((s) => ({
           tabs: s.tabs.map((t) => (t.id === id ? { ...t, path, name } : t)),
         }))
+      },
+      replaceTabFromDisk: (id, content) => {
+        set((s) => ({
+          tabs: s.tabs.map((t) =>
+            t.id === id ? { ...t, content, savedContent: content, isDirty: false } : t
+          ),
+        }))
+      },
+      remapTabsForPathChange: (oldPath, newPath) => {
+        set((s) => ({
+          tabs: s.tabs.map((tab) => {
+            if (!tab.path) return tab
+            const remappedPath = remapPathPrefix(tab.path, oldPath, newPath)
+            if (!remappedPath) return tab
+
+            return {
+              ...tab,
+              path: remappedPath,
+              name: remappedPath.split(/[\\/]/).pop() ?? tab.name,
+            }
+          }),
+        }))
+      },
+      closeTabsByPathPrefix: (pathPrefix) => {
+        set((s) => {
+          const tabs = s.tabs.filter((tab) => !tab.path || !pathMatchesPrefix(tab.path, pathPrefix))
+          if (tabs.length === 0) {
+            const newTab = createNewTab()
+            return { tabs: [newTab], activeTabId: newTab.id }
+          }
+
+          const activeExists = tabs.some((tab) => tab.id === s.activeTabId)
+          return {
+            tabs,
+            activeTabId: activeExists ? s.activeTabId : tabs[Math.max(0, tabs.length - 1)].id,
+          }
+        })
       },
 
       // Cursor

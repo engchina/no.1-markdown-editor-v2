@@ -19,6 +19,7 @@ import katex from 'katex'
 import { ensureKatexStylesheet } from '../../lib/katexStylesheet'
 import { collectFencedCodeRanges, type TextRange } from './fencedCodeRanges'
 import { buildSortedRangeSet, type RangeSpec } from './sortedRangeSet'
+import { getTaskCheckboxChange } from './taskCheckbox'
 
 // ── Widgets ────────────────────────────────────────────────────────────────
 
@@ -70,17 +71,27 @@ class BlockMathWidget extends WidgetType {
 }
 
 class CheckboxWidget extends WidgetType {
-  constructor(private checked: boolean) { super() }
+  constructor(
+    private checked: boolean,
+    private from: number,
+    private label: string
+  ) {
+    super()
+  }
   toDOM() {
     const el = document.createElement('input')
     el.type = 'checkbox'
     el.checked = this.checked
     el.className = 'cm-wysiwyg-checkbox'
+    el.dataset.checkboxFrom = String(this.from)
+    el.setAttribute('aria-label', this.label || 'Task')
     el.style.cssText = 'cursor: pointer; margin-right: 4px; vertical-align: middle;'
     return el
   }
   ignoreEvent() { return false }
-  eq(other: CheckboxWidget) { return this.checked === other.checked }
+  eq(other: CheckboxWidget) {
+    return this.checked === other.checked && this.from === other.from && this.label === other.label
+  }
 }
 
 // ── Cursor range helpers ───────────────────────────────────────────────────
@@ -192,13 +203,14 @@ function buildDecorations(view: EditorView, fencedCodeRanges: readonly TextRange
         const boxStart = bulletEnd
         const boxEnd = boxStart + taskMatch[2].length + 2 // [x]
         const checked = taskMatch[2].toLowerCase() === 'x'
+        const label = text.replace(/^(\s*[-*+]\s)\[( |x|X)\]\s/, '').trim()
 
         if (!onLine) {
           queueDecoration(
             decorations,
             boxStart,
             boxEnd + 1, // include trailing space
-            Decoration.replace({ widget: new CheckboxWidget(checked) })
+            Decoration.replace({ widget: new CheckboxWidget(checked, boxStart, label) })
           )
         }
       }
@@ -338,6 +350,22 @@ function processPattern(
   }
 }
 
+function toggleTaskCheckbox(view: EditorView, target: EventTarget | null): boolean {
+  const checkbox = (target as HTMLElement | null)?.closest<HTMLInputElement>('.cm-wysiwyg-checkbox')
+  if (!checkbox) return false
+
+  const checkboxFrom = Number(checkbox.dataset.checkboxFrom)
+  if (!Number.isFinite(checkboxFrom)) return false
+
+  const line = view.state.doc.lineAt(checkboxFrom)
+  const change = getTaskCheckboxChange(line.text, line.from)
+  if (!change) return false
+
+  view.dispatch({ changes: change })
+  view.focus()
+  return true
+}
+
 // ── Plugin definition ──────────────────────────────────────────────────────
 
 export const wysiwygPlugin = ViewPlugin.fromClass(
@@ -366,6 +394,19 @@ export const wysiwygPlugin = ViewPlugin.fromClass(
   },
   {
     decorations: (v) => v.decorations,
+    eventHandlers: {
+      click(event, view) {
+        if (!toggleTaskCheckbox(view, event.target)) return false
+        event.preventDefault()
+        return true
+      },
+      keydown(event, view) {
+        if (event.key !== ' ' && event.key !== 'Enter') return false
+        if (!toggleTaskCheckbox(view, event.target)) return false
+        event.preventDefault()
+        return true
+      },
+    },
   }
 )
 

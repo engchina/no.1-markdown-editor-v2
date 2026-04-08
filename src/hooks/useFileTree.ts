@@ -1,8 +1,17 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useEditorStore } from '../store/editor'
 import { useFileTreeStore, type FileNode } from '../store/fileTree'
 import { useRecentFilesStore } from '../store/recentFiles'
 import { pushErrorNotice } from '../lib/notices'
+import {
+  ensureMarkdownFileName,
+  getPathBaseName,
+  pathMatchesPrefix,
+  validateMoveDestination,
+  validateFileTreeEntryName,
+  type FileTreeOperationFailureReason,
+  type FileTreeTargetLike,
+} from '../lib/fileTreePaths'
 
 export type { FileNode } from '../store/fileTree'
 
@@ -50,6 +59,39 @@ async function readDirTauri(dirPath: string): Promise<FileNode[]> {
     })
 }
 
+async function buildTreeSnapshot(dirPath: string, previousNodes: FileNode[] = []): Promise<FileNode[]> {
+  const nodes = await readDirTauri(dirPath)
+
+  return Promise.all(
+    nodes.map(async (node) => {
+      if (node.type !== 'dir') return node
+
+      const previousNode = previousNodes.find(
+        (candidate): candidate is FileNode & { type: 'dir' } => candidate.type === 'dir' && candidate.path === node.path
+      )
+      const expanded = previousNode?.expanded === true
+      if (!expanded) {
+        return { ...node, expanded: false, children: undefined }
+      }
+
+      try {
+        const children = await buildTreeSnapshot(node.path, previousNode.children ?? [])
+        return {
+          ...node,
+          expanded: true,
+          children,
+        }
+      } catch {
+        return {
+          ...node,
+          expanded: true,
+          children: [],
+        }
+      }
+    })
+  )
+}
+
 function updateTreeNode(
   tree: FileNode[],
   pathInTree: number[],
@@ -81,7 +123,91 @@ export function useFileTree() {
   const setTree = useFileTreeStore((state) => state.setTree)
   const setLoading = useFileTreeStore((state) => state.setLoading)
   const openDocument = useEditorStore((state) => state.openDocument)
+  const remapTabsForPathChange = useEditorStore((state) => state.remapTabsForPathChange)
+  const closeTabsByPathPrefix = useEditorStore((state) => state.closeTabsByPathPrefix)
   const addRecent = useRecentFilesStore((state) => state.addRecent)
+  const remapRecentForPathChange = useRecentFilesStore((state) => state.remapRecentForPathChange)
+  const removeRecentByPathPrefix = useRecentFilesStore((state) => state.removeRecentByPathPrefix)
+  const loadedRootRef = useRef<string | null>(null)
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const refreshTree = useCallback(
+    async (targetRootPath: string, previousTree: FileNode[] = []) => {
+      const snapshot = await buildTreeSnapshot(targetRootPath, previousTree)
+      setTree(snapshot)
+    },
+    [setTree]
+  )
+
+  useEffect(() => {
+    if (!isTauri || !rootPath || loadedRootRef.current === rootPath) return
+
+    loadedRootRef.current = rootPath
+    setLoading(true)
+
+    void refreshTree(rootPath)
+      .catch((error) => {
+        console.error('Restore folder error:', error)
+        loadedRootRef.current = null
+        setRootPath(null)
+        setTree([])
+        pushErrorNotice('notices.openFolderErrorTitle', 'notices.openFolderErrorMessage')
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [refreshTree, rootPath, setLoading, setRootPath, setTree])
+
+  useEffect(() => {
+    if (!isTauri || !rootPath) return
+
+    let disposed = false
+    let unwatch: (() => void) | undefined
+
+    const scheduleRefresh = () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = setTimeout(() => {
+        const currentTree = useFileTreeStore.getState().tree
+        setLoading(true)
+        void refreshTree(rootPath, currentTree)
+          .catch((error) => {
+            console.error('Refresh folder tree error:', error)
+            loadedRootRef.current = null
+            setRootPath(null)
+            setTree([])
+            pushErrorNotice('notices.openFolderErrorTitle', 'notices.openFolderErrorMessage')
+          })
+          .finally(() => {
+            setLoading(false)
+          })
+      }, 220)
+    }
+
+    void (async () => {
+      try {
+        const { watch } = await import('@tauri-apps/plugin-fs')
+        if (disposed) return
+
+        unwatch = await watch(rootPath, () => {
+          scheduleRefresh()
+        }, {
+          recursive: true,
+          delayMs: 180,
+        })
+      } catch (error) {
+        console.error('Watch folder tree error:', error)
+      }
+    })()
+
+    return () => {
+      disposed = true
+      if (unwatch) unwatch()
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
+    }
+  }, [refreshTree, rootPath, setLoading, setRootPath, setTree])
 
   const openFolder = useCallback(async () => {
     if (!isTauri) return
@@ -91,42 +217,47 @@ export function useFileTree() {
       const selected = await open({ directory: true, multiple: false })
       if (!selected || typeof selected !== 'string') return
 
+      loadedRootRef.current = selected
       setLoading(true)
       setRootPath(selected)
-      const nodes = await readDirTauri(selected)
-      setTree(nodes)
+      await refreshTree(selected)
     } catch (error) {
       console.error('Open folder error:', error)
+      loadedRootRef.current = null
+      setRootPath(null)
+      setTree([])
       pushErrorNotice('notices.openFolderErrorTitle', 'notices.openFolderErrorMessage')
     } finally {
       setLoading(false)
     }
-  }, [setLoading, setRootPath, setTree])
+  }, [refreshTree, setLoading, setRootPath, setTree])
 
   const toggleDir = useCallback(
     async (node: FileNode, pathInTree: number[]) => {
       if (!isTauri || node.type !== 'dir') return
 
-      const shouldLoadChildren = !node.expanded && !node.children
+      if (node.expanded) {
+        useFileTreeStore.setState((state) => ({
+          tree: updateTreeNode(state.tree, pathInTree, (target) => {
+            target.expanded = false
+          }),
+        }))
+        return
+      }
+
       useFileTreeStore.setState((state) => ({
         tree: updateTreeNode(state.tree, pathInTree, (target) => {
-          if (shouldLoadChildren) {
-            target.expanded = true
-            target.children = []
-            return
-          }
-
-          target.expanded = !target.expanded
+          target.expanded = true
+          target.children = []
         }),
       }))
 
-      if (!shouldLoadChildren) return
-
       try {
-        const children = await readDirTauri(node.path)
+        const children = await buildTreeSnapshot(node.path, node.children ?? [])
         useFileTreeStore.setState((state) => ({
           tree: updateTreeNode(state.tree, pathInTree, (target) => {
             target.children = children
+            target.expanded = true
           }),
         }))
       } catch (error) {
@@ -166,5 +297,199 @@ export function useFileTree() {
     [addRecent, openDocument]
   )
 
-  return { rootPath, tree, loading, openFolder, toggleDir, openFile }
+  const createEntry = useCallback(
+    async (
+      parentDirPath: string,
+      rawName: string,
+      type: 'file' | 'dir'
+    ): Promise<{ ok: true; path: string; name: string } | { ok: false; reason: 'empty' | 'reserved' | 'invalid' | 'exists' | 'unknown' }> => {
+      const normalizedInput = rawName.trim()
+      const validation = validateFileTreeEntryName(normalizedInput)
+      if (validation) {
+        return { ok: false, reason: validation }
+      }
+
+      const name = type === 'file' ? ensureMarkdownFileName(normalizedInput) : normalizedInput
+      const [{ join }, { exists, mkdir, writeTextFile }] = await Promise.all([
+        import('@tauri-apps/api/path'),
+        import('@tauri-apps/plugin-fs'),
+      ])
+
+      const targetPath = await join(parentDirPath, name)
+      if (await exists(targetPath)) {
+        return { ok: false, reason: 'exists' }
+      }
+
+      try {
+        if (type === 'dir') {
+          await mkdir(targetPath)
+        } else {
+          await writeTextFile(targetPath, '')
+        }
+
+        const currentTree = useFileTreeStore.getState().tree
+        if (rootPath) {
+          await refreshTree(rootPath, currentTree)
+        }
+
+        return { ok: true, path: targetPath, name }
+      } catch (error) {
+        console.error(`Create ${type} error:`, error)
+        return { ok: false, reason: 'unknown' }
+      }
+    },
+    [refreshTree, rootPath]
+  )
+
+  const createFile = useCallback(
+    async (parentDirPath: string, rawName: string) => {
+      const result = await createEntry(parentDirPath, rawName, 'file')
+      if (!result.ok) return result
+
+      openDocument({
+        path: result.path,
+        name: result.name,
+        content: '',
+        savedContent: '',
+        isDirty: false,
+      })
+      addRecent(result.path, result.name)
+      return result
+    },
+    [addRecent, createEntry, openDocument]
+  )
+
+  const createFolder = useCallback(
+    async (parentDirPath: string, rawName: string) => createEntry(parentDirPath, rawName, 'dir'),
+    [createEntry]
+  )
+
+  const renameNode = useCallback(
+    async (
+      node: FileTreeTargetLike,
+      rawName: string
+    ): Promise<{ ok: true; path: string; name: string } | { ok: false; reason: 'empty' | 'reserved' | 'invalid' | 'exists' | 'unknown' }> => {
+      const normalizedInput = rawName.trim()
+      const validation = validateFileTreeEntryName(normalizedInput)
+      if (validation) {
+        return { ok: false, reason: validation }
+      }
+
+      const currentName = node.name
+      const nextName =
+        node.type === 'file' && !/\.[A-Za-z0-9]+$/.test(normalizedInput) && /\.[A-Za-z0-9]+$/.test(currentName)
+          ? `${normalizedInput}${currentName.slice(currentName.lastIndexOf('.'))}`
+          : normalizedInput
+
+      try {
+        const [{ dirname, join }, { exists, rename }] = await Promise.all([
+          import('@tauri-apps/api/path'),
+          import('@tauri-apps/plugin-fs'),
+        ])
+        const parentDirPath = await dirname(node.path)
+        const nextPath = await join(parentDirPath, nextName)
+        if (nextPath === node.path) {
+          return { ok: true, path: nextPath, name: nextName }
+        }
+
+        if (await exists(nextPath)) {
+          return { ok: false, reason: 'exists' }
+        }
+
+        await rename(node.path, nextPath)
+        remapTabsForPathChange(node.path, nextPath)
+        remapRecentForPathChange(node.path, nextPath)
+        if (node.type === 'file') addRecent(nextPath, nextName)
+
+        const currentTree = useFileTreeStore.getState().tree
+        if (rootPath) {
+          await refreshTree(rootPath, currentTree)
+        }
+
+        return { ok: true, path: nextPath, name: nextName }
+      } catch (error) {
+        console.error('Rename node error:', error)
+        return { ok: false, reason: 'unknown' }
+      }
+    },
+    [addRecent, refreshTree, remapRecentForPathChange, remapTabsForPathChange, rootPath]
+  )
+
+  const deleteNode = useCallback(
+    async (node: FileTreeTargetLike): Promise<boolean> => {
+      try {
+        const { remove } = await import('@tauri-apps/plugin-fs')
+        await remove(node.path, { recursive: node.type === 'dir' })
+        closeTabsByPathPrefix(node.path)
+        removeRecentByPathPrefix(node.path)
+
+        const currentTree = useFileTreeStore.getState().tree.filter((entry) => !pathMatchesPrefix(entry.path, node.path))
+        if (rootPath) {
+          await refreshTree(rootPath, currentTree)
+        }
+
+        return true
+      } catch (error) {
+        console.error('Delete node error:', error)
+        return false
+      }
+    },
+    [closeTabsByPathPrefix, refreshTree, removeRecentByPathPrefix, rootPath]
+  )
+
+  const moveNode = useCallback(
+    async (
+      node: FileTreeTargetLike,
+      targetDirectoryPath: string
+    ): Promise<{ ok: true; path: string; name: string } | { ok: false; reason: FileTreeOperationFailureReason }> => {
+      const moveValidation = validateMoveDestination(node, targetDirectoryPath)
+      if (moveValidation) {
+        return { ok: false, reason: moveValidation }
+      }
+
+      try {
+        const [{ join }, { exists, rename }] = await Promise.all([
+          import('@tauri-apps/api/path'),
+          import('@tauri-apps/plugin-fs'),
+        ])
+        const nextPath = await join(targetDirectoryPath, getPathBaseName(node.path))
+        if (nextPath === node.path) {
+          return { ok: false, reason: 'same' }
+        }
+
+        if (await exists(nextPath)) {
+          return { ok: false, reason: 'exists' }
+        }
+
+        await rename(node.path, nextPath)
+        remapTabsForPathChange(node.path, nextPath)
+        remapRecentForPathChange(node.path, nextPath)
+
+        const currentTree = useFileTreeStore.getState().tree
+        if (rootPath) {
+          await refreshTree(rootPath, currentTree)
+        }
+
+        return { ok: true, path: nextPath, name: getPathBaseName(nextPath) }
+      } catch (error) {
+        console.error('Move node error:', error)
+        return { ok: false, reason: 'unknown' }
+      }
+    },
+    [refreshTree, remapRecentForPathChange, remapTabsForPathChange, rootPath]
+  )
+
+  return {
+    rootPath,
+    tree,
+    loading,
+    openFolder,
+    toggleDir,
+    openFile,
+    createFile,
+    createFolder,
+    renameNode,
+    deleteNode,
+    moveNode,
+  }
 }

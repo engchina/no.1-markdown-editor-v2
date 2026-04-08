@@ -248,7 +248,9 @@ export default function CommandPalette({ mode, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   const commands = useCommands()
   const { tabs } = useEditorStore()
@@ -309,14 +311,51 @@ export default function CommandPalette({ mode, onClose }: Props) {
   // Reset selection on filter change
   useEffect(() => { setSelectedIndex(0) }, [filtered.length, query])
 
-  // Focus input on mount
-  useEffect(() => { inputRef.current?.focus() }, [])
+  useEffect(() => {
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null
+    inputRef.current?.focus()
+
+    return () => {
+      previousFocusRef.current?.focus()
+    }
+  }, [])
 
   // Scroll selected item into view
   useEffect(() => {
-    const el = listRef.current?.querySelector(`[data-idx="${selectedIndex}"]`)
+    const el = listRef.current?.querySelector<HTMLButtonElement>(`button[data-idx="${selectedIndex}"]`)
     el?.scrollIntoView({ block: 'nearest' })
   }, [selectedIndex])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+
+      const dialog = dialogRef.current
+      if (!dialog) return
+
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((element) => !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true')
+
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const execute = useCallback(
     (cmd: Command) => {
@@ -359,6 +398,16 @@ export default function CommandPalette({ mode, onClose }: Props) {
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={mode === 'file' ? t('palette.file') : t('toolbar.commandPalette')}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            onClose()
+          }
+        }}
         className="w-full max-w-xl rounded-xl shadow-2xl overflow-hidden animate-in glass-panel"
         style={{
           background: 'var(--glass-bg)',
@@ -395,7 +444,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
         </div>
 
         {/* Results */}
-        <ul ref={listRef} className="flex-1 overflow-y-auto py-1">
+        <ul id="command-palette-results" ref={listRef} className="flex-1 overflow-y-auto py-1">
           {filtered.length === 0 && (
             <li className="px-4 py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
               {t('palette.noResults', { query })}
@@ -408,46 +457,51 @@ export default function CommandPalette({ mode, onClose }: Props) {
             return (
               <Fragment key={cmd.id}>
                 {showHeader && (
-                  <div
+                  <li
+                    aria-hidden="true"
                     className="px-4 py-1 text-xs font-semibold uppercase tracking-wider"
                     style={{ color: 'var(--text-muted)' }}
                   >
                     {t(`palette.${cmd.category}`, CATEGORY_LABEL[cmd.category] ?? cmd.category)}
-                  </div>
+                  </li>
                 )}
-                <li
-                  data-idx={idx}
-                  className="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors hover-scale"
-                  style={{
-                    background: idx === selectedIndex ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
-                    color: idx === selectedIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    transformOrigin: 'left center',
-                  }}
-                  onMouseEnter={() => setSelectedIndex(idx)}
-                  onClick={() => execute(cmd)}
-                >
-                  {getCommandIndicator(cmd, mode)}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{cmd.label}</div>
-                    {cmd.description && (
-                      <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-                        {cmd.description}
-                      </div>
+                <li>
+                  <button
+                    type="button"
+                    data-idx={idx}
+                    className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover-scale"
+                    style={{
+                      background: idx === selectedIndex ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
+                      color: idx === selectedIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      transformOrigin: 'left center',
+                    }}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                    onFocus={() => setSelectedIndex(idx)}
+                    onClick={() => execute(cmd)}
+                  >
+                    {getCommandIndicator(cmd, mode)}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">{cmd.label}</div>
+                      {cmd.description && (
+                        <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                          {cmd.description}
+                        </div>
+                      )}
+                    </div>
+                    {cmd.shortcut && (
+                      <kbd
+                        className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded"
+                        style={{
+                          background: 'var(--bg-tertiary)',
+                          color: 'var(--text-muted)',
+                          border: '1px solid var(--border)',
+                          fontFamily: 'monospace',
+                        }}
+                      >
+                        {cmd.shortcut}
+                      </kbd>
                     )}
-                  </div>
-                  {cmd.shortcut && (
-                    <kbd
-                      className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded"
-                      style={{
-                        background: 'var(--bg-tertiary)',
-                        color: 'var(--text-muted)',
-                        border: '1px solid var(--border)',
-                        fontFamily: 'monospace',
-                      }}
-                    >
-                      {cmd.shortcut}
-                    </kbd>
-                  )}
+                  </button>
                 </li>
               </Fragment>
             )

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useEditorStore, useActiveTab, type SidebarTab } from '../../store/editor'
 import { useRecentFiles } from '../../hooks/useRecentFiles'
+import { useWorkspaceSearch } from '../../hooks/useWorkspaceSearch'
+import { openDesktopDocumentPath } from '../../lib/desktopFileOpen'
 import { extractHeadings, type OutlineHeading as Heading } from '../../lib/outline'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 import FileTree from './FileTree'
@@ -106,42 +108,45 @@ function OutlinePanel({ headings }: { headings: Heading[] }) {
       {headings.map((h, i) => {
         const isActive = activeId === h.id
         return (
-          <li
-            key={i}
-            className="flex items-center rounded-lg px-2 py-1 cursor-pointer text-xs transition-all hover-scale"
-            style={{
-              paddingLeft: `${(h.level - 1) * 12 + 8}px`,
-              color: isActive ? 'var(--accent)' : h.level === 1 ? 'var(--text-primary)' : h.level === 2 ? 'var(--text-secondary)' : 'var(--text-muted)',
-              fontWeight: h.level <= 2 ? 500 : 400,
-              background: isActive ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent',
-              borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-            }}
-            onClick={() => {
-              if (activeTab && viewMode !== 'preview') {
-                setPendingNavigation({
-                  tabId: activeTab.id,
-                  line: h.line,
-                  column: 1,
-                  align: 'start',
-                })
-              }
+          <li key={i}>
+            <button
+              type="button"
+              className="flex w-full items-center rounded-lg px-2 py-1 text-left text-xs transition-all hover-scale"
+              style={{
+                paddingLeft: `${(h.level - 1) * 12 + 8}px`,
+                color: isActive ? 'var(--accent)' : h.level === 1 ? 'var(--text-primary)' : h.level === 2 ? 'var(--text-secondary)' : 'var(--text-muted)',
+                fontWeight: h.level <= 2 ? 500 : 400,
+                background: isActive ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent',
+                borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
+              }}
+              aria-current={isActive ? 'location' : undefined}
+              onClick={() => {
+                if (activeTab && viewMode !== 'preview') {
+                  setPendingNavigation({
+                    tabId: activeTab.id,
+                    line: h.line,
+                    column: 1,
+                    align: 'start',
+                  })
+                }
 
-              const preview = document.querySelector('.markdown-preview')
-              const target = h.id ? document.getElementById(h.id) : null
-              const el = target instanceof HTMLElement && preview?.contains(target) ? target : null
-              if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                el.animate([{ background: 'color-mix(in srgb, var(--accent) 20%, transparent)' }, { background: 'transparent' }], { duration: 1200 })
-              }
-            }}
-          >
-            <span
-              className="mr-1 text-xs"
-              style={{ color: isActive ? 'var(--accent)' : 'var(--text-muted)', minWidth: '20px', fontFamily: 'monospace' }}
+                const preview = document.querySelector('.markdown-preview')
+                const target = h.id ? document.getElementById(h.id) : null
+                const el = target instanceof HTMLElement && preview?.contains(target) ? target : null
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  el.animate([{ background: 'color-mix(in srgb, var(--accent) 20%, transparent)' }, { background: 'transparent' }], { duration: 1200 })
+                }
+              }}
             >
-              {'H' + h.level}
-            </span>
-            <span className="truncate">{h.text}</span>
+              <span
+                className="mr-1 text-xs"
+                style={{ color: isActive ? 'var(--accent)' : 'var(--text-muted)', minWidth: '20px', fontFamily: 'monospace' }}
+              >
+                {'H' + h.level}
+              </span>
+              <span className="truncate">{h.text}</span>
+            </button>
           </li>
         )
       })}
@@ -153,31 +158,10 @@ function OutlinePanel({ headings }: { headings: Heading[] }) {
 function SearchPanel() {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
-  const { tabs, setActiveTab, setPendingNavigation } = useEditorStore()
-
-  const results = useMemo(() => {
-    if (!query.trim()) return []
-    const q = query.toLowerCase()
-    const hits: { tabId: string; name: string; line: number; column: number; text: string }[] = []
-    for (const tab of tabs) {
-      const lines = tab.content.split(/\r?\n/)
-      for (let i = 0; i < lines.length; i++) {
-        const column = lines[i].toLowerCase().indexOf(q)
-        if (column !== -1) {
-          hits.push({
-            tabId: tab.id,
-            name: tab.name,
-            line: i + 1,
-            column: column + 1,
-            text: lines[i].trim(),
-          })
-          if (hits.length >= 100) break
-        }
-      }
-      if (hits.length >= 100) break
-    }
-    return hits
-  }, [query, tabs])
+  const { setActiveTab, setPendingNavigation } = useEditorStore()
+  const { results, searching, rootPath } = useWorkspaceSearch(query)
+  const searchScopeLabel = rootPath ? t('sidebar.searchWorkspace') : t('sidebar.searchOpenTabs')
+  let lastSource: 'tab' | 'workspace' | '' = ''
 
   return (
     <div className="flex flex-col gap-2">
@@ -185,37 +169,72 @@ function SearchPanel() {
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder={t('sidebar.searchOpenTabs')}
+        placeholder={searchScopeLabel}
         className="w-full rounded px-2 py-1 text-xs outline-none"
         style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
       />
       {query && (
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {results.length === 0 ? t('sidebar.noResults') : t('sidebar.results', { count: results.length })}
+          {searching
+            ? t('sidebar.searching')
+            : results.length === 0
+              ? t('sidebar.noResults')
+              : t('sidebar.results', { count: results.length })}
         </p>
       )}
       <ul className="space-y-0.5">
-        {results.map((r, i) => (
-          <li
-            key={i}
-            className="rounded px-2 py-1 cursor-pointer text-xs transition-colors"
-            style={{ color: 'var(--text-secondary)' }}
-            onClick={() => {
-              setActiveTab(r.tabId)
-              setPendingNavigation({ tabId: r.tabId, line: r.line, column: r.column })
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-          >
-            <div className="flex items-center gap-1 mb-0.5">
-              <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{r.name}</span>
-              <span style={{ color: 'var(--text-muted)' }}>:{r.line}</span>
-            </div>
-            <div className="truncate" style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '10px' }}>
-              {r.text.slice(0, 80)}
-            </div>
-          </li>
-        ))}
+        {results.map((result) => {
+          const showHeader = result.source !== lastSource
+          if (showHeader) lastSource = result.source
+
+          return (
+            <li key={result.id}>
+              {showHeader && (
+                <div
+                  className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  {result.source === 'tab' ? t('sidebar.searchSourceTabs') : t('sidebar.searchSourceWorkspace')}
+                </div>
+              )}
+              <button
+                type="button"
+                className="w-full rounded px-2 py-1 text-left text-xs transition-colors"
+                style={{ color: 'var(--text-secondary)' }}
+                onClick={async () => {
+                  if (result.tabId) {
+                    setActiveTab(result.tabId)
+                    setPendingNavigation({ tabId: result.tabId, line: result.line, column: result.column })
+                    return
+                  }
+
+                  if (!result.path) return
+                  const opened = await openDesktopDocumentPath(result.path)
+                  if (!opened) return
+
+                  const tab = useEditorStore.getState().tabs.find((entry) => entry.path === result.path)
+                  if (!tab) return
+
+                  setActiveTab(tab.id)
+                  setPendingNavigation({ tabId: tab.id, line: result.line, column: result.column })
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                <div className="mb-0.5 flex items-center gap-1">
+                  <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{result.name}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>:{result.line}</span>
+                </div>
+                <div className="truncate" style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '10px' }}>
+                  {result.path ?? t('palette.unsaved')}
+                </div>
+                <div className="truncate" style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '10px' }}>
+                  {result.text.slice(0, 80)}
+                </div>
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
@@ -250,6 +269,7 @@ function RecentPanel() {
       <div className="flex items-center justify-between mb-1 px-1">
         <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('sidebar.recentFilesTitle')}</span>
         <button
+          type="button"
           className="text-xs transition-colors"
           style={{ color: 'var(--text-muted)' }}
           onClick={clearRecent}
@@ -273,27 +293,29 @@ function RecentPanel() {
       )}
       <ul className="space-y-0.5">
         {recentFiles.map((f, i) => (
-          <li
-            key={i}
-            className={`rounded-xl px-3 py-2 text-xs transition-all duration-200 group border border-transparent ${canReopenRecent ? 'cursor-pointer' : 'cursor-help'}`}
-            onClick={() => { void openRecent(f) }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--bg-tertiary)';
-              e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--border) 50%, transparent)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.borderColor = 'transparent';
-            }}
-            title={f.path}
-          >
-            <div className="flex items-center justify-between gap-1">
-              <span className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>{f.name}</span>
-              <span className="flex-shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>{relativeTime(f.openedAt)}</span>
-            </div>
-            <div className="truncate mt-0.5" style={{ color: 'var(--text-muted)', fontSize: '10px', fontFamily: 'monospace' }}>
-              {f.path}
-            </div>
+          <li key={i}>
+            <button
+              type="button"
+              className={`group w-full rounded-xl border border-transparent px-3 py-2 text-left text-xs transition-all duration-200 ${canReopenRecent ? 'cursor-pointer' : 'cursor-help'}`}
+              onClick={() => { void openRecent(f) }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--bg-tertiary)'
+                e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--border) 50%, transparent)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = 'transparent'
+              }}
+              title={f.path}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>{f.name}</span>
+                <span className="flex-shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>{relativeTime(f.openedAt)}</span>
+              </div>
+              <div className="mt-0.5 truncate" style={{ color: 'var(--text-muted)', fontSize: '10px', fontFamily: 'monospace' }}>
+                {f.path}
+              </div>
+            </button>
           </li>
         ))}
       </ul>

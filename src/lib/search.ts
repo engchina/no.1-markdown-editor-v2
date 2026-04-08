@@ -2,6 +2,12 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+export interface DocumentSearchMatch {
+  line: number
+  column: number
+  text: string
+}
+
 interface CountSearchMatchesOptions {
   caseSensitive?: boolean
   regexp?: boolean
@@ -43,4 +49,32 @@ export function countSearchMatches(
   }
 
   return count
+}
+
+export function findDocumentMatches(
+  doc: string,
+  search: string,
+  maxResults = Number.POSITIVE_INFINITY
+): DocumentSearchMatch[] {
+  if (!search || maxResults <= 0) return []
+
+  const needle = search.toLowerCase()
+  const lines = doc.split(/\r?\n/)
+  const matches: DocumentSearchMatch[] = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const text = lines[index]
+    const column = text.toLowerCase().indexOf(needle)
+    if (column === -1) continue
+
+    matches.push({
+      line: index + 1,
+      column: column + 1,
+      text: text.trim(),
+    })
+
+    if (matches.length >= maxResults) break
+  }
+
+  return matches
 }

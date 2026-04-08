@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export interface FileNode {
   name: string
@@ -17,11 +18,19 @@ interface FileTreeState {
   setLoading: (loading: boolean) => void
 }
 
-export const useFileTreeStore = create<FileTreeState>((set) => ({
-  rootPath: null,
-  tree: [],
-  loading: false,
-  setRootPath: (rootPath) => set({ rootPath }),
-  setTree: (tree) => set({ tree }),
-  setLoading: (loading) => set({ loading }),
-}))
+export const useFileTreeStore = create<FileTreeState>()(
+  persist(
+    (set) => ({
+      rootPath: null,
+      tree: [],
+      loading: false,
+      setRootPath: (rootPath) => set({ rootPath }),
+      setTree: (tree) => set({ tree }),
+      setLoading: (loading) => set({ loading }),
+    }),
+    {
+      name: 'file-tree',
+      partialize: (state) => ({ rootPath: state.rootPath }),
+    }
+  )
+)

@@ -101,7 +101,7 @@ function TabBar() {
       }
 
       const saveRequested = window.confirm(
-        `${messageText}\n\nPress OK to save changes before closing.\nPress Cancel for discard options.`
+        `${messageText}\n\n${t('dialog.browserSavePrompt')}`
       )
       if (saveRequested) {
         const saved = await saveTabById(tab.id)
@@ -111,7 +111,7 @@ function TabBar() {
       }
 
       const discardRequested = window.confirm(
-        `${t('dialog.discardMessage', { name: tab.name })}\n\nPress OK to discard changes and close this tab.\nPress Cancel to keep the tab open.`
+        `${t('dialog.discardMessage', { name: tab.name })}\n\n${t('dialog.browserDiscardPrompt')}`
       )
 
       if (discardRequested) {
@@ -123,6 +123,7 @@ function TabBar() {
 
   return (
     <div
+      role="tablist"
       className="flex items-center overflow-x-auto flex-shrink-0"
       style={{
         background: 'var(--bg-secondary)',
@@ -133,7 +134,7 @@ function TabBar() {
       {tabs.map((tab) => (
         <div
           key={tab.id}
-          className="flex items-center gap-1 px-3 h-full cursor-pointer flex-shrink-0 group"
+          className="group flex h-full flex-shrink-0 items-center"
           style={{
             background: tab.id === activeTabId ? 'var(--editor-bg)' : 'transparent',
             borderRight: '1px solid var(--border)',
@@ -141,15 +142,25 @@ function TabBar() {
             fontSize: '13px',
             maxWidth: '180px',
           }}
-          onClick={() => setActiveTab(tab.id)}
         >
-          <span className="truncate">
-            {tab.isDirty ? '●  ' : ''}
-            {tab.name}
-          </span>
           <button
-            className="ml-1 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity flex-shrink-0"
+            type="button"
+            role="tab"
+            aria-selected={tab.id === activeTabId}
+            className="flex h-full min-w-0 items-center gap-1 px-3 text-left"
+            onClick={() => setActiveTab(tab.id)}
+          >
+            <span className="truncate">
+              {tab.isDirty ? '●  ' : ''}
+              {tab.name}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="mr-2 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red-400"
             style={{ lineHeight: 1, fontSize: '16px' }}
+            title={`${t('menu.closeFile')}: ${tab.name}`}
+            aria-label={`${t('menu.closeFile')}: ${tab.name}`}
             onClick={(event) => {
               event.stopPropagation()
               void requestCloseTab(tab.id)

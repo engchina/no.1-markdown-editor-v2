@@ -136,13 +136,6 @@ export async function warmMermaidForSource(source: string): Promise<void> {
     const diagramWarmer = mermaidDiagramWarmers[diagramType]
     if (diagramWarmer) {
       warmTasks.push(warmMermaidResource(`diagram:${diagramType}`, diagramWarmer))
-    } else {
-      warmTasks.push(
-        warmMermaidResource(`parser:${diagramType}`, async () => {
-          const { warmMermaidParser } = await import('./mermaidParser.ts')
-          await warmMermaidParser(diagramType)
-        })
-      )
     }
   }
 
