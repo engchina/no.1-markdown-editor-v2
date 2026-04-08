@@ -20,6 +20,7 @@ export type IconName =
   | 'image'
   | 'infoCircle'
   | 'italic'
+  | 'keyboard'
   | 'lineNumbers'
   | 'link'
   | 'list'
@@ -67,6 +68,7 @@ const PATHS: Record<IconName, string> = {
   image: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1 M8 9h.01 M6 17l4-4 3 3 3-4 2 5',
   infoCircle: 'M12 12v4 M12 8h.01 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
   italic: 'M19 4h-9 M14 20H5 M15 4L9 20',
+  keyboard: 'M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z M7 11h.01 M10 11h.01 M13 11h.01 M16 11h.01 M8 15h8',
   lineNumbers: 'M9 6h11 M9 12h11 M9 18h11 M5 6h.01 M5 12h.01 M5 18h.01',
   link: 'M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1.5 1.5 M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7L13.5 19.5',
   list: 'M8 6h12 M8 12h12 M8 18h12 M4 6h.01 M4 12h.01 M4 18h.01',

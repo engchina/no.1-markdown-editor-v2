@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEditorStore } from '../store/editor'
-import { pushErrorNotice, pushInfoNotice } from '../lib/notices'
+import { pushInfoNotice } from '../lib/notices'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -30,6 +30,8 @@ export function useExternalFileChanges() {
       timersRef.current.delete(path)
       warnedMissingRef.current.delete(path)
       warnedConflictRef.current.delete(path)
+      useEditorStore.getState().dismissExternalFileConflictByPath(path)
+      useEditorStore.getState().dismissExternalMissingFileByPath(path)
     }
   }, [watchedPaths])
 
@@ -112,12 +114,13 @@ async function verifyExternalFileChange(
     const { exists } = await import('@tauri-apps/plugin-fs')
     const onDisk = await exists(path)
     if (!onDisk) {
-      if (!warnedMissing.has(path)) {
-        warnedMissing.add(path)
-        pushErrorNotice('notices.externalFileMissingTitle', 'notices.externalFileMissingMessage', {
-          values: { name: currentTab.name },
-        })
-      }
+      useEditorStore.getState().dismissExternalFileConflictByPath(path)
+      useEditorStore.getState().upsertExternalMissingFile({
+        tabId: currentTab.id,
+        path,
+        name: currentTab.name,
+      })
+      warnedMissing.add(path)
       return
     }
   } catch (error) {
@@ -125,18 +128,19 @@ async function verifyExternalFileChange(
   }
 
   warnedMissing.delete(path)
+  useEditorStore.getState().dismissExternalMissingFileByPath(path)
 
   let diskContent = ''
   try {
     diskContent = await invoke<string>('read_file', { path })
   } catch (error) {
     console.error('External file reload error:', error)
-    if (!warnedMissing.has(path)) {
-      warnedMissing.add(path)
-      pushErrorNotice('notices.externalFileMissingTitle', 'notices.externalFileMissingMessage', {
-        values: { name: currentTab.name },
-      })
-    }
+    useEditorStore.getState().upsertExternalMissingFile({
+      tabId: currentTab.id,
+      path,
+      name: currentTab.name,
+    })
+    warnedMissing.add(path)
     return
   }
 
@@ -144,15 +148,18 @@ async function verifyExternalFileChange(
   if (!latestTab) return
   if (diskContent === latestTab.content && diskContent === latestTab.savedContent) {
     warnedConflict.delete(path)
+    useEditorStore.getState().dismissExternalFileConflictByPath(path)
     return
   }
 
   if (latestTab.isDirty) {
     if (warnedConflict.get(path) === diskContent) return
     warnedConflict.set(path, diskContent)
-    pushErrorNotice('notices.externalFileConflictTitle', 'notices.externalFileConflictMessage', {
-      values: { name: latestTab.name },
-      timeoutMs: 6400,
+    useEditorStore.getState().upsertExternalFileConflict({
+      tabId: latestTab.id,
+      path,
+      name: latestTab.name,
+      diskContent,
     })
     return
   }

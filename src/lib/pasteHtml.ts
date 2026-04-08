@@ -468,7 +468,7 @@ function serializeInlineNode(node: ClipboardHtmlAstNode, context: { listDepth: n
     case 's':
       return wrapInline('~~', serializeInlineChildren(node.children, context).trim())
     case 'code':
-      return wrapCodeSpan(extractTextContent(node, { preserveWhitespace: false }).trim())
+      return wrapCodeSpan(extractTextContent(node, { preserveWhitespace: true }).trim())
     case 'img':
       return serializeImage(node)
     case 'input':

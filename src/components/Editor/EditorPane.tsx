@@ -1,16 +1,12 @@
 import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import CodeMirrorEditor from './CodeMirrorEditor'
-import { useFileOps } from '../../hooks/useFileOps'
 import { countDocumentStats } from '../../lib/editorStats'
 import { useActiveTab, useEditorStore } from '../../store/editor'
-
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export default function EditorPane() {
   const { t } = useTranslation()
   const activeTab = useActiveTab()
-  const tabs = useEditorStore((state) => state.tabs)
   const updateTabContent = useEditorStore((state) => state.updateTabContent)
   const setWordCount = useEditorStore((state) => state.setWordCount)
 
@@ -50,126 +46,9 @@ export default function EditorPane() {
 
   return (
     <div className="h-full flex flex-col" style={{ background: 'var(--editor-bg)' }}>
-      {tabs.length > 1 && <TabBar />}
-
       <div className="flex-1 min-h-0">
         <CodeMirrorEditor key={activeTab.id} content={activeTab.content} onChange={handleChange} />
       </div>
-    </div>
-  )
-}
-
-function TabBar() {
-  const { t } = useTranslation()
-  const tabs = useEditorStore((state) => state.tabs)
-  const activeTabId = useEditorStore((state) => state.activeTabId)
-  const setActiveTab = useEditorStore((state) => state.setActiveTab)
-  const closeTab = useEditorStore((state) => state.closeTab)
-  const { saveTabById } = useFileOps()
-
-  const requestCloseTab = useCallback(
-    async (tabId: string) => {
-      const tab = useEditorStore.getState().tabs.find((entry) => entry.id === tabId)
-      if (!tab) return
-
-      if (!tab.isDirty) {
-        closeTab(tab.id)
-        return
-      }
-
-      const messageText = t('dialog.unsavedMessage', { name: tab.name })
-      if (isTauri) {
-        const { message } = await import('@tauri-apps/plugin-dialog')
-        const saveLabel = t('dialog.save')
-        const discardLabel = t('dialog.dontSave')
-        const cancelLabel = t('dialog.cancel')
-
-        const result = await message(messageText, {
-          title: t('dialog.unsavedChanges'),
-          kind: 'warning',
-          buttons: { yes: saveLabel, no: discardLabel, cancel: cancelLabel },
-        })
-
-        if (result === saveLabel) {
-          const saved = await saveTabById(tab.id)
-          if (!saved) return
-          closeTab(tab.id)
-        } else if (result === discardLabel) {
-          closeTab(tab.id)
-        }
-        return
-      }
-
-      const saveRequested = window.confirm(
-        `${messageText}\n\n${t('dialog.browserSavePrompt')}`
-      )
-      if (saveRequested) {
-        const saved = await saveTabById(tab.id)
-        if (!saved) return
-        closeTab(tab.id)
-        return
-      }
-
-      const discardRequested = window.confirm(
-        `${t('dialog.discardMessage', { name: tab.name })}\n\n${t('dialog.browserDiscardPrompt')}`
-      )
-
-      if (discardRequested) {
-        closeTab(tab.id)
-      }
-    },
-    [closeTab, saveTabById, t]
-  )
-
-  return (
-    <div
-      role="tablist"
-      className="flex items-center overflow-x-auto flex-shrink-0"
-      style={{
-        background: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--border)',
-        height: '36px',
-      }}
-    >
-      {tabs.map((tab) => (
-        <div
-          key={tab.id}
-          className="group flex h-full flex-shrink-0 items-center"
-          style={{
-            background: tab.id === activeTabId ? 'var(--editor-bg)' : 'transparent',
-            borderRight: '1px solid var(--border)',
-            color: tab.id === activeTabId ? 'var(--text-primary)' : 'var(--text-muted)',
-            fontSize: '13px',
-            maxWidth: '180px',
-          }}
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab.id === activeTabId}
-            className="flex h-full min-w-0 items-center gap-1 px-3 text-left"
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <span className="truncate">
-              {tab.isDirty ? '●  ' : ''}
-              {tab.name}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="mr-2 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:text-red-400"
-            style={{ lineHeight: 1, fontSize: '16px' }}
-            title={`${t('menu.closeFile')}: ${tab.name}`}
-            aria-label={`${t('menu.closeFile')}: ${tab.name}`}
-            onClick={(event) => {
-              event.stopPropagation()
-              void requestCloseTab(tab.id)
-            }}
-          >
-            ×
-          </button>
-        </div>
-      ))}
     </div>
   )
 }

@@ -423,7 +423,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
           style={{ borderBottom: '1px solid var(--border)', height: '52px' }}
         >
           <span style={{ color: 'var(--text-muted)' }}>
-            {mode === 'file' ? <AppIcon name="file" size={16} /> : <AppIcon name="search" size={16} />}
+            {mode === 'file' ? <AppIcon name="file" size={16} /> : <AppIcon name="keyboard" size={16} />}
           </span>
           <input
             ref={inputRef}

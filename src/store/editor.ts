@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import i18n, { type Language } from '../i18n'
+import i18n, { type Language } from '../i18n/index.ts'
 import {
   clampFocusWidthPx,
   FOCUS_WIDTH_PRESET_VALUES,
@@ -39,6 +39,21 @@ export interface PendingNavigation {
   align?: 'nearest' | 'start' | 'end' | 'center'
 }
 
+export interface ExternalFileConflict {
+  tabId: string
+  path: string
+  name: string
+  diskContent: string
+  detectedAt: number
+}
+
+export interface ExternalMissingFile {
+  tabId: string
+  path: string
+  name: string
+  detectedAt: number
+}
+
 interface EditorState {
   // Theme
   theme: Theme
@@ -74,8 +89,23 @@ interface EditorState {
   saveTab: (id: string) => void
   setTabPath: (id: string, path: string, name: string) => void
   replaceTabFromDisk: (id: string, content: string) => void
+  resolveExternalFileConflict: (id: string, content: string, diskContent: string) => void
+  relinkTabToPath: (id: string, path: string, name: string, savedContent: string) => void
   remapTabsForPathChange: (oldPath: string, newPath: string) => void
   closeTabsByPathPrefix: (pathPrefix: string) => void
+  convertTabToDraft: (id: string) => void
+  externalFileConflicts: ExternalFileConflict[]
+  upsertExternalFileConflict: (
+    conflict: Omit<ExternalFileConflict, 'detectedAt'> & { detectedAt?: number }
+  ) => void
+  dismissExternalFileConflict: (tabId: string) => void
+  dismissExternalFileConflictByPath: (path: string) => void
+  externalMissingFiles: ExternalMissingFile[]
+  upsertExternalMissingFile: (
+    missing: Omit<ExternalMissingFile, 'detectedAt'> & { detectedAt?: number }
+  ) => void
+  dismissExternalMissingFile: (tabId: string) => void
+  dismissExternalMissingFileByPath: (path: string) => void
 
   // Cursor
   cursorPos: CursorPos
@@ -228,12 +258,22 @@ export const useEditorStore = create<EditorState>()(
           const tabs = s.tabs.filter((t) => t.id !== id)
           if (tabs.length === 0) {
             const newTab = createNewTab()
-            return { tabs: [newTab], activeTabId: newTab.id }
+            return {
+              tabs: [newTab],
+              activeTabId: newTab.id,
+              externalFileConflicts: s.externalFileConflicts.filter((conflict) => conflict.tabId !== id),
+              externalMissingFiles: s.externalMissingFiles.filter((missing) => missing.tabId !== id),
+            }
           }
           const activeId = s.activeTabId === id
             ? tabs[Math.max(0, s.tabs.findIndex((t) => t.id === id) - 1)].id
             : s.activeTabId
-          return { tabs, activeTabId: activeId }
+          return {
+            tabs,
+            activeTabId: activeId,
+            externalFileConflicts: s.externalFileConflicts.filter((conflict) => conflict.tabId !== id),
+            externalMissingFiles: s.externalMissingFiles.filter((missing) => missing.tabId !== id),
+          }
         })
       },
       setActiveTab: (activeTabId) => set({ activeTabId }),
@@ -261,6 +301,39 @@ export const useEditorStore = create<EditorState>()(
           tabs: s.tabs.map((t) =>
             t.id === id ? { ...t, content, savedContent: content, isDirty: false } : t
           ),
+          externalFileConflicts: s.externalFileConflicts.filter((conflict) => conflict.tabId !== id),
+          externalMissingFiles: s.externalMissingFiles.filter((missing) => missing.tabId !== id),
+        }))
+      },
+      resolveExternalFileConflict: (id, content, diskContent) => {
+        set((s) => ({
+          tabs: s.tabs.map((tab) =>
+            tab.id === id
+              ? {
+                  ...tab,
+                  content,
+                  savedContent: diskContent,
+                  isDirty: content !== diskContent,
+                }
+              : tab
+          ),
+          externalFileConflicts: s.externalFileConflicts.filter((conflict) => conflict.tabId !== id),
+        }))
+      },
+      relinkTabToPath: (id, path, name, savedContent) => {
+        set((s) => ({
+          tabs: s.tabs.map((tab) =>
+            tab.id === id
+              ? {
+                  ...tab,
+                  path,
+                  name,
+                  savedContent,
+                  isDirty: tab.content !== savedContent,
+                }
+              : tab
+          ),
+          externalMissingFiles: s.externalMissingFiles.filter((missing) => missing.tabId !== id),
         }))
       },
       remapTabsForPathChange: (oldPath, newPath) => {
@@ -274,6 +347,26 @@ export const useEditorStore = create<EditorState>()(
               ...tab,
               path: remappedPath,
               name: remappedPath.split(/[\\/]/).pop() ?? tab.name,
+            }
+          }),
+          externalFileConflicts: s.externalFileConflicts.map((conflict) => {
+            const remappedPath = remapPathPrefix(conflict.path, oldPath, newPath)
+            if (!remappedPath) return conflict
+
+            return {
+              ...conflict,
+              path: remappedPath,
+              name: remappedPath.split(/[\\/]/).pop() ?? conflict.name,
+            }
+          }),
+          externalMissingFiles: s.externalMissingFiles.map((missing) => {
+            const remappedPath = remapPathPrefix(missing.path, oldPath, newPath)
+            if (!remappedPath) return missing
+
+            return {
+              ...missing,
+              path: remappedPath,
+              name: remappedPath.split(/[\\/]/).pop() ?? missing.name,
             }
           }),
         }))
@@ -290,8 +383,97 @@ export const useEditorStore = create<EditorState>()(
           return {
             tabs,
             activeTabId: activeExists ? s.activeTabId : tabs[Math.max(0, tabs.length - 1)].id,
+            externalFileConflicts: s.externalFileConflicts.filter(
+              (conflict) => !pathMatchesPrefix(conflict.path, pathPrefix)
+            ),
+            externalMissingFiles: s.externalMissingFiles.filter(
+              (missing) => !pathMatchesPrefix(missing.path, pathPrefix)
+            ),
           }
         })
+      },
+      convertTabToDraft: (id) => {
+        set((s) => ({
+          tabs: s.tabs.map((tab) =>
+            tab.id === id
+              ? { ...tab, path: null, savedContent: '', isDirty: true }
+              : tab
+          ),
+          externalFileConflicts: s.externalFileConflicts.filter((conflict) => conflict.tabId !== id),
+          externalMissingFiles: s.externalMissingFiles.filter((missing) => missing.tabId !== id),
+        }))
+      },
+      externalFileConflicts: [],
+      upsertExternalFileConflict: (conflict) => {
+        set((s) => {
+          const existingIndex = s.externalFileConflicts.findIndex((entry) => entry.tabId === conflict.tabId)
+          if (existingIndex === -1) {
+            return {
+              externalFileConflicts: [
+                ...s.externalFileConflicts,
+                { ...conflict, detectedAt: conflict.detectedAt ?? Date.now() },
+              ],
+            }
+          }
+
+          return {
+            externalFileConflicts: s.externalFileConflicts.map((entry, index) =>
+              index === existingIndex
+                ? {
+                    ...entry,
+                    ...conflict,
+                    detectedAt: conflict.detectedAt ?? entry.detectedAt,
+                  }
+                : entry
+            ),
+          }
+        })
+      },
+      dismissExternalFileConflict: (tabId) => {
+        set((s) => ({
+          externalFileConflicts: s.externalFileConflicts.filter((conflict) => conflict.tabId !== tabId),
+        }))
+      },
+      dismissExternalFileConflictByPath: (path) => {
+        set((s) => ({
+          externalFileConflicts: s.externalFileConflicts.filter((conflict) => conflict.path !== path),
+        }))
+      },
+      externalMissingFiles: [],
+      upsertExternalMissingFile: (missing) => {
+        set((s) => {
+          const existingIndex = s.externalMissingFiles.findIndex((entry) => entry.tabId === missing.tabId)
+          if (existingIndex === -1) {
+            return {
+              externalMissingFiles: [
+                ...s.externalMissingFiles,
+                { ...missing, detectedAt: missing.detectedAt ?? Date.now() },
+              ],
+            }
+          }
+
+          return {
+            externalMissingFiles: s.externalMissingFiles.map((entry, index) =>
+              index === existingIndex
+                ? {
+                    ...entry,
+                    ...missing,
+                    detectedAt: missing.detectedAt ?? entry.detectedAt,
+                  }
+                : entry
+            ),
+          }
+        })
+      },
+      dismissExternalMissingFile: (tabId) => {
+        set((s) => ({
+          externalMissingFiles: s.externalMissingFiles.filter((missing) => missing.tabId !== tabId),
+        }))
+      },
+      dismissExternalMissingFileByPath: (path) => {
+        set((s) => ({
+          externalMissingFiles: s.externalMissingFiles.filter((missing) => missing.path !== path),
+        }))
       },
 
       // Cursor

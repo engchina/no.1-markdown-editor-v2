@@ -3,9 +3,12 @@ import { useTranslation } from 'react-i18next'
 import Toolbar from './components/Toolbar/Toolbar'
 import Sidebar from './components/Sidebar/Sidebar'
 import StatusBar from './components/StatusBar/StatusBar'
+import DocumentTabs from './components/DocumentTabs/DocumentTabs'
 import ResizableDivider from './components/Layout/ResizableDivider'
 import TitleBar from './components/TitleBar/TitleBar'
 import NotificationCenter from './components/Notifications/NotificationCenter'
+import ExternalFileConflictDialog from './components/ExternalFileConflicts/ExternalFileConflictDialog'
+import ExternalMissingFileDialog from './components/ExternalFileConflicts/ExternalMissingFileDialog'
 import { useAutoSave } from './hooks/useAutoSave'
 import { useDocumentDrop } from './hooks/useDocumentDrop'
 import { useExternalFileChanges } from './hooks/useExternalFileChanges'
@@ -327,6 +330,8 @@ export default function App() {
       )}
 
       <NotificationCenter />
+      <ExternalMissingFileDialog />
+      <ExternalFileConflictDialog />
 
       {isTauri && <TitleBar />}
 
@@ -376,9 +381,11 @@ export default function App() {
         )}
 
         <div
-          className="flex flex-1 min-w-0 rounded-2xl overflow-hidden shadow-elegant relative"
+          className="relative flex flex-1 min-w-0 flex-col overflow-hidden rounded-2xl shadow-elegant"
           style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
         >
+          {!focusMode && <DocumentTabs />}
+
           {focusMode ? (
             <div className="flex-1 min-w-0 overflow-hidden flex items-start justify-center focus-mode-container h-full">
               <div className="focus-mode-column h-full w-full">
@@ -386,10 +393,10 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-1 min-w-0 h-full">
+            <div className="flex flex-1 min-h-0 min-w-0">
               {showEditor && (
                 <div
-                  className="flex-shrink-0 overflow-hidden"
+                  className="min-h-0 flex-shrink-0 overflow-hidden"
                   style={{ width: showPreview ? `${editorRatio * 100}%` : '100%' }}
                 >
                   {renderEditorPane()}
@@ -406,7 +413,7 @@ export default function App() {
               )}
 
               {showPreview && (
-                <div className="flex-1 min-w-0 overflow-hidden">
+                <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
                   {previewActivated ? (
                     <Suspense fallback={<PreviewPlaceholder onActivate={() => setPreviewActivated(true)} />}>
                       <MarkdownPreview />

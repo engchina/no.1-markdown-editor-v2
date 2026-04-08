@@ -147,6 +147,43 @@ test('renderClipboardHtmlAstToMarkdown preserves heading, links, and nested list
   )
 })
 
+test('renderClipboardHtmlAstToMarkdown keeps inline code literals unescaped in paragraphs and tables', async () => {
+  const root = parseHtml(`
+    <p><code>(v1) -[e]-> (v2)</code></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Direction</th>
+          <th>Arrow token</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Right</td>
+          <td><code>-[ ]-></code></td>
+        </tr>
+      </tbody>
+    </table>
+  `)
+
+  const markdown = renderClipboardHtmlAstToMarkdown(root)
+  const html = await renderMarkdown(markdown)
+
+  assert.equal(
+    markdown,
+    [
+      '`(v1) -[e]-> (v2)`',
+      '',
+      '| Direction | Arrow token |',
+      '| --- | --- |',
+      '| Right | `-[ ]->` |',
+    ].join('\n')
+  )
+  assert.doesNotMatch(markdown, /\\\[/)
+  assert.match(html, /<code>\(v1\) -\[e]-> \(v2\)<\/code>/)
+  assert.match(html, /<code>-\[ ]-><\/code>/)
+})
+
 test('renderClipboardHtmlAstToMarkdown unwraps links that contain block descendants instead of emitting multiline markdown links', () => {
   const root = parseHtml(
     '<a href="https://qiita.com/yushibats"><div><img src="https://example.com/avatar.png" /></div>@yushibats</a>' +

@@ -17,9 +17,11 @@ import {
   indentOnInput,
   syntaxHighlighting,
   defaultHighlightStyle,
+  HighlightStyle,
   bracketMatching,
   foldKeymap,
 } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 
 export const lightTheme = EditorView.theme(
   {
@@ -68,7 +70,16 @@ export const lightTheme = EditorView.theme(
   { dark: false }
 )
 
-export const markdownHighlight = syntaxHighlighting(defaultHighlightStyle, { fallback: true })
+const markdownUnderlineOverride = HighlightStyle.define([
+  // CodeMirror's default markdown style underlines links and headings.
+  // In the source editor this reads like rendered content, so remove it.
+  { tag: [tags.link, tags.heading], textDecoration: 'none' },
+])
+
+export const markdownHighlight = [
+  syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+  syntaxHighlighting(markdownUnderlineOverride),
+]
 
 export function buildCoreExtensions(options: {
   onChange: (content: string) => void

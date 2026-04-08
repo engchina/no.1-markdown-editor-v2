@@ -414,7 +414,7 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
       <div className="flex-1" />
 
       <ToolbarBtn title={`${t('toolbar.commandPalette')} (${commandPaletteShortcut})`} onClick={() => onOpenPalette?.()}>
-        <AppIcon name="search" size={16} />
+        <AppIcon name="keyboard" size={16} />
       </ToolbarBtn>
 
       <div className="relative">
@@ -428,14 +428,6 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
         </ToolbarBtn>
         {showExport && <ExportMenu onClose={() => setShowExport(false)} triggerRef={exportButtonRef} />}
       </div>
-
-      <ToolbarGroup label={t('toolbar.viewMode')}>
-        {VIEW_MODES.map(({ mode, icon }) => (
-          <ToolbarBtn key={mode} title={t(`viewMode.${mode}`)} onClick={() => setViewMode(mode)} active={viewMode === mode}>
-            <AppIcon name={icon} size={15} />
-          </ToolbarBtn>
-        ))}
-      </ToolbarGroup>
 
       <ToolbarBtn
         title={`${t('themePanel.wysiwyg')}${wysiwygMode ? ' (ON)' : ''}`}
@@ -460,6 +452,14 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
       <ToolbarBtn title={t('toolbar.focusMode')} onClick={() => setFocusMode(!focusMode)} active={focusMode}>
         <AppIcon name="focus" size={16} />
       </ToolbarBtn>
+
+      <ToolbarGroup label={t('toolbar.viewMode')}>
+        {VIEW_MODES.map(({ mode, icon }) => (
+          <ToolbarBtn key={mode} title={t(`viewMode.${mode}`)} onClick={() => setViewMode(mode)} active={viewMode === mode}>
+            <AppIcon name={icon} size={15} />
+          </ToolbarBtn>
+        ))}
+      </ToolbarGroup>
 
       <select
         value={language}
