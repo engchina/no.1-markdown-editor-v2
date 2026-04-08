@@ -3,10 +3,10 @@ import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
 import rehypeSanitize from 'rehype-sanitize'
-import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
 import { containsLikelyRawHtml } from './markdownHtml.ts'
+import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const workerProcessor = unified()
@@ -15,7 +15,7 @@ const workerProcessor = unified()
   .use(remarkSoftBreaks)
   .use(remarkRehype)
   .use(rehypeSanitize, sanitizeSchema)
-  .use(rehypeSlug)
+  .use(rehypeHeadingIds)
   .use(rehypeStringify)
 
 export async function renderMarkdownInWorker(markdown: string): Promise<string> {

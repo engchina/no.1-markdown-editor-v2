@@ -1,3 +1,5 @@
+import { claimHeadingId, createHeadingIdState, type HeadingIdState, slugifyHeading } from './headingIds.ts'
+
 export interface OutlineHeading {
   level: number
   text: string
@@ -5,22 +7,12 @@ export interface OutlineHeading {
   line: number
 }
 
-export function slugifyHeading(text: string): string {
-  const slug = text
-    .trim()
-    .normalize('NFKD')
-    .replace(/\p{Mark}+/gu, '')
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}\u3040-\u30ff\u3400-\u9fff]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-
-  return slug || 'section'
-}
+export { slugifyHeading }
 
 export function extractHeadings(markdown: string): OutlineHeading[] {
   const lines = markdown.split(/\r?\n/)
   const headings: OutlineHeading[] = []
-  const slugCounts = new Map<string, number>()
+  const headingIds = createHeadingIdState()
   let inFrontMatter = false
   let frontMatterHandled = false
   let fenceMarker: string | null = null
@@ -56,7 +48,7 @@ export function extractHeadings(markdown: string): OutlineHeading[] {
 
     const atxMatch = line.match(/^\s{0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/)
     if (atxMatch) {
-      pushHeading(headings, slugCounts, atxMatch[1].length, atxMatch[2], index + 1)
+      pushHeading(headings, headingIds, atxMatch[1].length, atxMatch[2], index + 1)
       continue
     }
 
@@ -68,7 +60,7 @@ export function extractHeadings(markdown: string): OutlineHeading[] {
     if (!setextMatch) continue
 
     const level = nextLine.includes('=') ? 1 : 2
-    pushHeading(headings, slugCounts, level, line, index + 1)
+    pushHeading(headings, headingIds, level, line, index + 1)
     index += 1
   }
 
@@ -77,7 +69,7 @@ export function extractHeadings(markdown: string): OutlineHeading[] {
 
 function pushHeading(
   headings: OutlineHeading[],
-  slugCounts: Map<string, number>,
+  headingIds: HeadingIdState,
   level: number,
   rawText: string,
   line: number
@@ -85,14 +77,10 @@ function pushHeading(
   const text = rawText.trim()
   if (!text) return
 
-  const baseId = slugifyHeading(text)
-  const count = slugCounts.get(baseId) ?? 0
-  slugCounts.set(baseId, count + 1)
-
   headings.push({
     level,
     text,
-    id: count === 0 ? baseId : `${baseId}-${count}`,
+    id: claimHeadingId(text, headingIds),
     line,
   })
 }

@@ -5,10 +5,10 @@ import remarkMath from 'remark-math'
 import remarkRehype from 'remark-rehype'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
-import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import rehypeKatex from 'rehype-katex'
 import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
+import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithMathAndHtml = unified()
@@ -20,7 +20,7 @@ const processorWithMathAndHtml = unified()
   .use(rehypeRaw)
   .use(rehypeSanitize, sanitizeSchema)
   .use(rehypeKatex)
-  .use(rehypeSlug)
+  .use(rehypeHeadingIds)
   .use(rehypeStringify)
 
 export async function renderMarkdownWithMathAndHtml(markdown: string): Promise<string> {

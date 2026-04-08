@@ -12,9 +12,14 @@ import { containsLikelyMath } from '../src/lib/markdownMath.ts'
 import { isExternalImageSource, rewritePreviewHtmlExternalImages } from '../src/lib/previewExternalImages.ts'
 import { buildFrontMatterHtml } from '../src/lib/markdownShared.ts'
 import { renderMarkdownInWorker } from '../src/lib/markdownWorker.ts'
+import { extractHeadings } from '../src/lib/outline.ts'
 
 function countRenderedBreaks(html: string): number {
   return html.match(/<br\s*\/?>/g)?.length ?? 0
+}
+
+function extractHeadingIds(html: string): string[] {
+  return Array.from(html.matchAll(/<h[1-6]\s+id="([^"]*)"/g), (match) => match[1])
 }
 
 test('stripFrontMatter parses CRLF front matter blocks', () => {
@@ -77,6 +82,23 @@ test('renderMarkdown preserves soft paragraph line breaks in preview output', as
 
   assert.equal(countRenderedBreaks(html), 2)
   assert.match(html, /<p>Line 1<br\s*\/?>\s*Line 2<br\s*\/?>\s*Line 3<\/p>/)
+})
+
+test('renderMarkdown keeps preview heading ids aligned with outline ids for non-Latin and symbol-only titles', async () => {
+  const markdown = [
+    '# デ',
+    '# -',
+    '# *',
+    '# プ',
+    '# Café',
+  ].join('\n')
+
+  const expectedIds = extractHeadings(markdown).map((heading) => heading.id)
+  const html = await renderMarkdown(markdown)
+  const workerHtml = await renderMarkdownInWorker(markdown)
+
+  assert.deepEqual(extractHeadingIds(html), expectedIds)
+  assert.deepEqual(extractHeadingIds(workerHtml), expectedIds)
 })
 
 test('renderMarkdown keeps soft line breaks when raw html is present', async () => {

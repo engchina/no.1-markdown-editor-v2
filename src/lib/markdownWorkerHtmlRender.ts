@@ -4,9 +4,9 @@ import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
-import rehypeSlug from 'rehype-slug'
 import rehypeStringify from 'rehype-stringify'
 import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from './markdownShared.ts'
+import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const workerHtmlProcessor = unified()
@@ -16,7 +16,7 @@ const workerHtmlProcessor = unified()
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
   .use(rehypeSanitize, sanitizeSchema)
-  .use(rehypeSlug)
+  .use(rehypeHeadingIds)
   .use(rehypeStringify)
 
 export async function renderMarkdownWithHtmlInWorker(markdown: string): Promise<string> {

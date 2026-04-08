@@ -126,9 +126,9 @@ function OutlinePanel({ headings }: { headings: Heading[] }) {
                 })
               }
 
-              // Scroll preview panel to heading using rehype-slug generated IDs
               const preview = document.querySelector('.markdown-preview')
-              const el = preview?.querySelector(`#${CSS.escape(h.id)}`) ?? document.getElementById(h.id)
+              const target = h.id ? document.getElementById(h.id) : null
+              const el = target instanceof HTMLElement && preview?.contains(target) ? target : null
               if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                 el.animate([{ background: 'color-mix(in srgb, var(--accent) 20%, transparent)' }, { background: 'transparent' }], { duration: 1200 })
