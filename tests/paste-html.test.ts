@@ -147,6 +147,26 @@ test('renderClipboardHtmlAstToMarkdown preserves heading, links, and nested list
   )
 })
 
+test('renderClipboardHtmlAstToMarkdown unwraps links that contain block descendants instead of emitting multiline markdown links', () => {
+  const root = parseHtml(
+    '<a href="https://qiita.com/yushibats"><div><img src="https://example.com/avatar.png" /></div>@yushibats</a>' +
+    '<span><span>in</span><a href="https://qiita.com/organizations/oracle"><img src="https://example.com/org.png" alt="" /><span>日本オラクル株式会社</span></a></span>'
+  )
+
+  const markdown = renderClipboardHtmlAstToMarkdown(root)
+
+  assert.equal(
+    markdown,
+    [
+      '![img](https://example.com/avatar.png)',
+      '',
+      '@yushibats',
+      '',
+      'in[![img](https://example.com/org.png)日本オラクル株式会社](https://qiita.com/organizations/oracle)',
+    ].join('\n')
+  )
+})
+
 test('renderClipboardHtmlAstToMarkdown removes flattened duplicate text around equivalent semantic headings', () => {
   const root = parseHtml(`
     Markdown Reference
@@ -301,6 +321,30 @@ test('convertClipboardHtmlToMarkdown extracts clipboard html fragments and prefe
         '- Block Elements',
         '',
         '  - [Paragraph and line breaks](#paragraph-and-line-breaks)',
+      ].join('\n')
+    )
+  } finally {
+    globalThis.DOMParser = originalDomParser
+  }
+})
+
+test('convertClipboardHtmlToMarkdown matches Typora-style output for block-descendant author chips', () => {
+  const originalDomParser = globalThis.DOMParser
+  globalThis.DOMParser = FakeDOMParser as unknown as typeof DOMParser
+
+  try {
+    const markdown = convertClipboardHtmlToMarkdown(
+      '<div data-logly-image="true" class="style-i43zkt"><div class="style-17gh4w8"><a href="https://qiita.com/yushibats" class="style-mavs84"><div class="style-kcbbwa"><img height="24" loading="lazy" src="https://qiita-user-profile-images.imgix.net/https%3A%2F%2Fqiita-image-store.s3.ap-northeast-1.amazonaws.com%2F0%2F3963468%2Fprofile-images%2F1752041958?ixlib=rb-4.0.0&amp;auto=compress%2Cformat&amp;lossless=0&amp;w=48&amp;s=fa6d8199a5e904063c965dae6aba030d" width="24" class="style-1wqqt93"></div>@<!-- -->yushibats</a><span class="style-1e7czb6"><span>in</span><a href="https://qiita.com/organizations/oracle" class="style-1o5v0u9"><img src="https://qiita-organization-images.imgix.net/https%3A%2F%2Fs3-ap-northeast-1.amazonaws.com%2Fqiita-organization-image%2F30955fa7f039a85c449ff480a2a7dbc5d9ff5ab0%2Foriginal.jpg%3F1452145683?ixlib=rb-4.0.0&amp;auto=compress%2Cformat&amp;s=bf701062776d83e01a458f70c5943af3" alt="" height="20" width="20" class="style-rdqgjc"><span class="style-8uhtka">日本オラクル株式会社</span></a></span></div></div>'
+    )
+
+    assert.equal(
+      markdown,
+      [
+        '![img](https://qiita-user-profile-images.imgix.net/https%3A%2F%2Fqiita-image-store.s3.ap-northeast-1.amazonaws.com%2F0%2F3963468%2Fprofile-images%2F1752041958?ixlib=rb-4.0.0&auto=compress%2Cformat&lossless=0&w=48&s=fa6d8199a5e904063c965dae6aba030d)',
+        '',
+        '@yushibats',
+        '',
+        'in[![img](https://qiita-organization-images.imgix.net/https%3A%2F%2Fs3-ap-northeast-1.amazonaws.com%2Fqiita-organization-image%2F30955fa7f039a85c449ff480a2a7dbc5d9ff5ab0%2Foriginal.jpg%3F1452145683?ixlib=rb-4.0.0&auto=compress%2Cformat&s=bf701062776d83e01a458f70c5943af3)日本オラクル株式会社](https://qiita.com/organizations/oracle)',
       ].join('\n')
     )
   } finally {

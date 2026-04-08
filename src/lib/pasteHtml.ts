@@ -266,7 +266,7 @@ function serializeBlocks(nodes: ClipboardHtmlAstNode[], context: { listDepth: nu
       continue
     }
 
-    if (!BLOCK_TAGS.has(node.tagName)) {
+    if (!isBlockLikeNode(node)) {
       inlineBuffer += serializeInlineNode(node, context)
       inlineComparisonBuffer += extractComparisonText(node)
       continue
@@ -414,7 +414,7 @@ function serializeBlockNode(node: ClipboardHtmlAstNode, context: { listDepth: nu
 }
 
 function serializeContainerNode(children: ClipboardHtmlAstNode[], context: { listDepth: number }): string {
-  if (children.some((child) => child.type === 'element' && child.tagName && BLOCK_TAGS.has(child.tagName))) {
+  if (children.some((child) => isBlockLikeNode(child))) {
     return serializeBlocks(children, context).join('\n\n')
   }
 
@@ -437,7 +437,7 @@ function serializeInlineChildren(nodes: ClipboardHtmlAstNode[], context: { listD
       continue
     }
 
-    if (BLOCK_TAGS.has(node.tagName)) {
+    if (isBlockLikeNode(node)) {
       const blockResult = serializeBlockNode(node, context)
       if (blockResult) {
         if (output.length > 0 && !output.endsWith('\n')) output += '\n\n'
@@ -517,6 +517,9 @@ function serializeFootnoteReference(node: ClipboardHtmlAstNode): string | null {
 
 function serializeLink(node: ClipboardHtmlAstNode, context: { listDepth: number }): string {
   const href = sanitizeUrl(node.attributes?.href)
+  if (isBlockContainerLink(node)) {
+    return serializeContainerNode(node.children, context)
+  }
   const content = serializeInlineChildren(node.children, context).trim()
   if (!href) return content
   // Drop decorative/empty anchors (heading permalink icons, font-awesome-only links, etc.)
@@ -546,7 +549,8 @@ function serializeImage(node: ClipboardHtmlAstNode): string {
   const src = getImageSource(node.attributes)
   if (!src) return ''
 
-  const alt = escapeMarkdownText(node.attributes?.alt?.trim() ?? '')
+  // Typora-style clipboard conversions use a stable placeholder when the source image lacks alt text.
+  const alt = escapeMarkdownText(node.attributes?.alt?.trim() || 'img')
   const title = node.attributes?.title?.trim()
   const destination = formatMarkdownDestination(src)
   const titleSuffix = title ? ` "${title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : ''
@@ -840,6 +844,21 @@ function looksLikePlaceholderImage(url: string): boolean {
     /^data:image\/gif;base64,R0lGODlhAQAB/i.test(url) ||
     /(?:spacer|blank|pixel)\.(?:gif|png|jpg|jpeg|webp)(?:$|[?#])/i.test(url)
   )
+}
+
+function isBlockLikeNode(node: ClipboardHtmlAstNode): boolean {
+  return node.type === 'element' && !!node.tagName && (BLOCK_TAGS.has(node.tagName) || isBlockContainerLink(node))
+}
+
+function isBlockContainerLink(node: ClipboardHtmlAstNode): boolean {
+  return node.type === 'element' && node.tagName === 'a' && hasBlockDescendant(node)
+}
+
+function hasBlockDescendant(node: ClipboardHtmlAstNode): boolean {
+  return node.children.some((child) => {
+    if (child.type !== 'element' || !child.tagName) return false
+    return BLOCK_TAGS.has(child.tagName) || hasBlockDescendant(child)
+  })
 }
 
 function htmlAddsStructure(node: ClipboardHtmlAstNode): boolean {

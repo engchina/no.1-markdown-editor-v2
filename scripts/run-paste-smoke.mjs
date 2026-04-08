@@ -25,7 +25,7 @@ const MIME_TYPES = {
 function buildPersistedEditorState() {
   return {
     state: {
-      viewMode: 'split',
+      viewMode: 'source',
       sidebarWidth: 220,
       sidebarOpen: true,
       sidebarTab: 'outline',
@@ -216,9 +216,20 @@ async function readClipboardPayload(page) {
 
 async function readEditorMarkdown(page) {
   return page.evaluate(() => {
-    const content = document.querySelector('.cm-content')
-    return (content?.textContent ?? '').replace(/\u00a0/g, ' ').trim()
+    const lines = Array.from(document.querySelectorAll('.cm-line'))
+    return lines.map((line) => (line.textContent ?? '').replace(/\u00a0/g, ' ')).join('\n').trim()
   })
+}
+
+async function resetEditor(page) {
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForSelector('.cm-content')
+}
+
+async function selectAllEditor(page) {
+  const modifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+  await page.locator('.cm-content').click()
+  await page.keyboard.press(`${modifier}+A`)
 }
 
 async function main() {
@@ -277,6 +288,37 @@ async function main() {
     const markdown = await readEditorMarkdown(page)
     failureDiagnostics.editorMarkdown = markdown
     assert.equal(markdown, '# Markdown Reference')
+
+    await resetEditor(page)
+    await selectAllEditor(page)
+
+    await seedClipboardWithHtml(
+      page,
+      '<div data-logly-image="true"><div><a href="https://qiita.com/yushibats"><div><img src="https://example.com/avatar.png" /></div>@yushibats</a><span><span>in</span><a href="https://qiita.com/organizations/oracle"><img src="https://example.com/org.png" alt="" /><span>日本オラクル株式会社</span></a></span></div></div>',
+      '@yushibats in 日本オラクル株式会社'
+    )
+    const chipClipboardPayload = await readClipboardPayload(page)
+    failureDiagnostics.clipboardHtml = chipClipboardPayload.html
+    failureDiagnostics.clipboardText = chipClipboardPayload.text
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V')
+
+    const expectedChipMarkdown = [
+      '![img](https://example.com/avatar.png)',
+      '',
+      '@yushibats',
+      '',
+      'in[![img](https://example.com/org.png)日本オラクル株式会社](https://qiita.com/organizations/oracle)',
+    ].join('\n')
+
+    await waitForCondition(async () => {
+      const nextMarkdown = await readEditorMarkdown(page)
+      failureDiagnostics.editorMarkdown = nextMarkdown
+      return nextMarkdown === expectedChipMarkdown
+    }, 'Typora-style block descendant link paste')
+
+    const chipMarkdown = await readEditorMarkdown(page)
+    failureDiagnostics.editorMarkdown = chipMarkdown
+    assert.equal(chipMarkdown, expectedChipMarkdown)
     assert.equal(pageErrors.length, 0, `Unexpected page errors:\n${pageErrors.join('\n')}`)
 
     console.log('Web paste smoke test passed.')
