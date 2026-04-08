@@ -1,11 +1,11 @@
 {
   "productName": "No.1 Markdown Editor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "identifier": "com.no1.markdown-editor",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeDevCommand": "npm run dev -- --host 127.0.0.1 --port 1420 --strictPort",
+    "beforeDevCommand": "npm run dev:web -- --host 127.0.0.1 --port 1420 --strictPort",
     "beforeBuildCommand": "npm run build"
   },
   "app": {

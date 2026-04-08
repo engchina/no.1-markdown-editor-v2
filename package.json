@@ -1,10 +1,12 @@
 {
   "name": "no1-markdown-editor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/run-tauri.mjs dev",
+    "dev:web": "vite",
+    "dev:tauri": "node scripts/run-tauri.mjs dev",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "node scripts/run-tests.mjs",
