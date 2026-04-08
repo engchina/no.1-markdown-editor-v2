@@ -1,4 +1,4 @@
-# no.1-markdown-editor-v2
+# no.1-markdown-editor
 No.1 Markdown Editor, Free Forever
 
 Project mission and execution principles are defined in `AGENTS.md`.
