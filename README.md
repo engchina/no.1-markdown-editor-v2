@@ -5,7 +5,7 @@ Project mission and execution principles are defined in `AGENTS.md`.
 
 ## Screen
 
-![image](./images/image-1775637774548.png)
+![image](./images/screen.png)
 
 ## Install
 
