@@ -16,6 +16,7 @@ export type IconName =
   | 'folderOpen'
   | 'focus'
   | 'globe'
+  | 'highlight'
   | 'hr'
   | 'image'
   | 'infoCircle'
@@ -64,6 +65,7 @@ const PATHS: Record<IconName, string> = {
   folderOpen: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 1.8 2.8l-1 8A2 2 0 0 1 17.8 20H6.2a2 2 0 0 1-2-1.7L3 7z',
   focus: 'M8 3H5a2 2 0 0 0-2 2v3 M16 3h3a2 2 0 0 1 2 2v3 M8 21H5a2 2 0 0 1-2-2v-3 M16 21h3a2 2 0 0 0 2-2v-3',
   globe: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20 M2 12h20 M12 2a15 15 0 0 1 0 20 M12 2a15 15 0 0 0 0 20',
+  highlight: 'M9 11l-6 6v3h9l3-3 M22 12l-7-7-3 3 7 7 3-3 M3 21h12',
   hr: 'M4 12h16',
   image: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1 M8 9h.01 M6 17l4-4 3 3 3-4 2 5',
   infoCircle: 'M12 12v4 M12 8h.01 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',

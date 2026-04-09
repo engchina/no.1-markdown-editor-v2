@@ -357,7 +357,7 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           <AppIcon name="strikethrough" size={16} />
         </ToolbarBtn>
         <ToolbarBtn title={t('toolbar.highlight')} onClick={() => emitFormat('highlight')}>
-          <ToolbarTextMark label="==" />
+          <AppIcon name="highlight" size={16} />
         </ToolbarBtn>
 
         <div className="relative">

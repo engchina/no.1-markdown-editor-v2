@@ -162,6 +162,61 @@ a:focus-visible {
   box-shadow: var(--shadow-sm);
 }
 
+.command-palette {
+  height: min(440px, calc(100vh - 160px));
+}
+
+.command-palette__results {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 8px 12px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.command-palette__empty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.command-palette__empty-copy {
+  max-width: 26ch;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.command-palette__item {
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
+}
+
+.command-palette__item:hover,
+.command-palette__item:focus-visible {
+  background: color-mix(in srgb, var(--bg-secondary) 84%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+  color: var(--text-primary);
+}
+
+.command-palette__item--selected {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-primary));
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  box-shadow: 0 12px 28px -24px color-mix(in srgb, var(--accent) 54%, transparent);
+  color: var(--text-primary);
+}
+
 .hover-scale {
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }

@@ -239,7 +239,7 @@ export function useCommands(): Command[] {
       {
         id: 'edit.highlight',
         label: t('toolbar.highlight'),
-        icon: '==',
+        icon: 'highlight',
         category: 'edit',
         action: () => emitFormat('highlight'),
       },

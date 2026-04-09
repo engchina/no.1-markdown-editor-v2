@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCommands, type Command } from '../../hooks/useCommands'
 import { useRecentFiles } from '../../hooks/useRecentFiles'
@@ -11,14 +11,6 @@ interface Props {
 }
 
 const CATEGORY_ORDER = ['file', 'edit', 'view', 'export', 'theme', 'language'] as const
-const CATEGORY_LABEL: Record<string, string> = {
-  file: 'File',
-  edit: 'Edit',
-  view: 'View',
-  theme: 'Themes',
-  export: 'Export',
-  language: 'Language',
-}
 const COMMAND_PRIORITY = new Map<string, number>([
   ['file.new', 10],
   ['file.open', 11],
@@ -29,16 +21,17 @@ const COMMAND_PRIORITY = new Map<string, number>([
   ['edit.italic', 111],
   ['edit.underline', 112],
   ['edit.strikethrough', 113],
-  ['edit.link', 114],
-  ['edit.code', 115],
-  ['edit.quote', 116],
-  ['edit.ul', 117],
-  ['edit.ol', 118],
-  ['edit.task', 119],
-  ['edit.codeBlock', 120],
-  ['edit.table', 121],
-  ['edit.hr', 122],
-  ['edit.image', 123],
+  ['edit.highlight', 114],
+  ['edit.link', 115],
+  ['edit.code', 116],
+  ['edit.quote', 117],
+  ['edit.ul', 118],
+  ['edit.ol', 119],
+  ['edit.task', 120],
+  ['edit.codeBlock', 121],
+  ['edit.table', 122],
+  ['edit.hr', 123],
+  ['edit.image', 124],
   ['edit.h1', 130],
   ['edit.h2', 131],
   ['edit.h3', 132],
@@ -210,6 +203,8 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
       return <SvgBadge name="underline" />
     case 'edit.strikethrough':
       return <SvgBadge name="strikethrough" />
+    case 'edit.highlight':
+      return <SvgBadge name="highlight" />
     case 'edit.code':
       return <SvgBadge name="code" />
     case 'edit.codeBlock':
@@ -255,6 +250,12 @@ export default function CommandPalette({ mode, onClose }: Props) {
   const commands = useCommands()
   const { tabs } = useEditorStore()
   const { recentFiles, openRecent } = useRecentFiles()
+  const emptyMessage =
+    query.trim().length > 0
+      ? t('palette.noResults', { query })
+      : mode === 'file'
+        ? t('palette.fileEmpty')
+        : t('palette.idleTitle')
 
   const filtered = useMemo(() => {
     if (mode === 'file') {
@@ -301,10 +302,6 @@ export default function CommandPalette({ mode, onClose }: Props) {
       .filter((c) => fuzzyMatch(query, c.label) || (c.description && fuzzyMatch(query, c.description)))
       .sort((a, b) => compareCommands(a, b, query))
 
-    if (!query) {
-      // Group by category when no query
-      return CATEGORY_ORDER.flatMap((cat) => results.filter((c) => c.category === cat))
-    }
     return results
   }, [query, commands, tabs, mode, openRecent, recentFiles, t])
 
@@ -388,9 +385,6 @@ export default function CommandPalette({ mode, onClose }: Props) {
     [filtered, selectedIndex, execute, onClose]
   )
 
-  // Grouping
-  let lastCategory = ''
-
   return (
     <div
       className="fixed inset-0 z-[100] flex items-start justify-center pt-24"
@@ -408,11 +402,10 @@ export default function CommandPalette({ mode, onClose }: Props) {
             onClose()
           }
         }}
-        className="w-full max-w-xl rounded-xl shadow-2xl overflow-hidden animate-in glass-panel"
+        className="command-palette w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl animate-in glass-panel"
         style={{
           background: 'var(--glass-bg)',
           borderColor: 'var(--glass-border)',
-          maxHeight: '60vh',
           display: 'flex',
           flexDirection: 'column',
         }}
@@ -444,69 +437,52 @@ export default function CommandPalette({ mode, onClose }: Props) {
         </div>
 
         {/* Results */}
-        <ul id="command-palette-results" ref={listRef} className="flex-1 overflow-y-auto py-1">
-          {filtered.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-              {t('palette.noResults', { query })}
-            </li>
-          )}
-          {filtered.map((cmd, idx) => {
-            const showHeader = !query && mode === 'command' && cmd.category !== lastCategory
-            if (showHeader) lastCategory = cmd.category
-
-            return (
-              <Fragment key={cmd.id}>
-                {showHeader && (
-                  <li
-                    aria-hidden="true"
-                    className="px-4 py-1 text-xs font-semibold uppercase tracking-wider"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    {t(`palette.${cmd.category}`, CATEGORY_LABEL[cmd.category] ?? cmd.category)}
-                  </li>
-                )}
-                <li>
-                  <button
-                    type="button"
-                    data-idx={idx}
-                    className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors hover-scale"
-                    style={{
-                      background: idx === selectedIndex ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
-                      color: idx === selectedIndex ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      transformOrigin: 'left center',
-                    }}
-                    onMouseEnter={() => setSelectedIndex(idx)}
-                    onFocus={() => setSelectedIndex(idx)}
-                    onClick={() => execute(cmd)}
-                  >
-                    {getCommandIndicator(cmd, mode)}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{cmd.label}</div>
-                      {cmd.description && (
-                        <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-                          {cmd.description}
-                        </div>
-                      )}
-                    </div>
-                    {cmd.shortcut && (
-                      <kbd
-                        className="flex-shrink-0 text-xs px-1.5 py-0.5 rounded"
-                        style={{
-                          background: 'var(--bg-tertiary)',
-                          color: 'var(--text-muted)',
-                          border: '1px solid var(--border)',
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {cmd.shortcut}
-                      </kbd>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <ul id="command-palette-results" ref={listRef} className="command-palette__results">
+            {filtered.length === 0 && (
+              <li className="command-palette__empty">
+                <div className="command-palette__empty-copy">{emptyMessage}</div>
+              </li>
+            )}
+            {filtered.map((cmd, idx) => (
+              <li key={cmd.id}>
+                <button
+                  type="button"
+                  data-idx={idx}
+                  className={`command-palette__item flex w-full items-center gap-3 px-4 py-2.5 text-left ${
+                    idx === selectedIndex ? 'command-palette__item--selected' : ''
+                  }`}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                  onFocus={() => setSelectedIndex(idx)}
+                  onClick={() => execute(cmd)}
+                >
+                  {getCommandIndicator(cmd, mode)}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{cmd.label}</div>
+                    {cmd.description && (
+                      <div className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {cmd.description}
+                      </div>
                     )}
-                  </button>
-                </li>
-              </Fragment>
-            )
-          })}
-        </ul>
+                  </div>
+                  {cmd.shortcut && (
+                    <kbd
+                      className="flex-shrink-0 rounded px-1.5 py-0.5 text-xs"
+                      style={{
+                        background: 'var(--bg-tertiary)',
+                        color: 'var(--text-muted)',
+                        border: '1px solid var(--border)',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {cmd.shortcut}
+                    </kbd>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {/* Footer */}
         <div
