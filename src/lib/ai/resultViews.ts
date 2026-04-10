@@ -5,7 +5,6 @@ export type AIInsertTarget =
   | 'replace-selection'
   | 'at-cursor'
   | 'insert-below'
-  | 'insert-under-heading'
   | 'new-note'
 
 export function hasAIDiffPreview(
@@ -23,14 +22,10 @@ export function hasAIInsertPreview(
   return outputTarget !== 'replace-selection' && draftText.trim().length > 0
 }
 
-export function getAIInsertTargets(hasSelection: boolean, hasHeading: boolean): AIInsertTarget[] {
+export function getAIInsertTargets(hasSelection: boolean): AIInsertTarget[] {
   const targets: AIInsertTarget[] = hasSelection
     ? ['replace-selection', 'at-cursor', 'insert-below']
     : ['at-cursor', 'insert-below']
-
-  if (hasHeading) {
-    targets.push('insert-under-heading')
-  }
 
   targets.push('new-note')
 

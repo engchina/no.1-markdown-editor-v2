@@ -1,11 +1,10 @@
 export type AIIntent = 'ask' | 'edit' | 'generate' | 'review'
-export type AIScope = 'selection' | 'current-block' | 'current-heading' | 'document'
+export type AIScope = 'selection' | 'current-block' | 'document'
 export type AIOutputTarget =
   | 'chat-only'
   | 'replace-selection'
   | 'at-cursor'
   | 'insert-below'
-  | 'insert-under-heading'
   | 'new-note'
 export type AISelectedTextRole = 'transform-target' | 'reference-only'
 export type AIDocumentLanguage = 'zh' | 'en' | 'ja' | 'mixed'
@@ -38,13 +37,11 @@ export type AIComposerSource =
   | 'sidebar-tab'
 export type AIProviderKind = 'openai-compatible'
 export type AIStorageKind = 'keyring' | 'unsupported'
-export type AIExplicitContextKind = 'note' | 'heading' | 'search'
+export type AIExplicitContextKind = 'note' | 'search'
 export type AIPromptMentionKind = AIExplicitContextKind
 export type AIProvenanceKind = 'apply' | 'ghost-text' | 'new-note'
 export type AIPromptMentionErrorCode =
-  | 'current-heading-unavailable'
   | 'note-not-found'
-  | 'heading-not-found'
   | 'search-empty-query'
   | 'search-no-results'
 
@@ -148,8 +145,6 @@ export interface AIApplySnapshot {
   anchorOffset: number
   blockFrom: number
   blockTo: number
-  headingFrom?: number
-  headingTo?: number
   docText: string
 }
 

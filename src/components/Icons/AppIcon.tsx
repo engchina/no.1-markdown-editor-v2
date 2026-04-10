@@ -34,6 +34,7 @@ export type IconName =
   | 'print'
   | 'quote'
   | 'replace'
+  | 'redo'
   | 'save'
   | 'search'
   | 'sparkles'
@@ -43,6 +44,7 @@ export type IconName =
   | 'task'
   | 'trash'
   | 'typewriter'
+  | 'undo'
   | 'underline'
   | 'wrap'
   | 'chevronRight'
@@ -84,6 +86,7 @@ const PATHS: Record<IconName, string> = {
   print: 'M6 9V4h12v5 M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1 M7 14h10v6H7z',
   quote: 'M5 4v16 M9 7h10 M9 12h7 M9 17h10',
   replace: 'M4 7h8 M9 3l3 4-3 4 M20 17h-8 M15 13l-3 4 3 4',
+  redo: 'M15 14l5-4-5-4 M20 10h-8a6 6 0 0 0-6 6v1',
   save: 'M5 3h11l5 5v13H5z M8 3v5h8 M8 21v-7h8v7',
   search: 'M21 21l-4.3-4.3 M17 10a7 7 0 1 1-14 0a7 7 0 0 1 14 0',
   sparkles: 'M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3 M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z',
@@ -93,6 +96,7 @@ const PATHS: Record<IconName, string> = {
   task: 'M9 11l2 2 4-4 M5 4h14v16H5z',
   trash: 'M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6 M10 11v6 M14 11v6',
   typewriter: 'M4 8h16v8H4z M6 16v4h12v-4 M8 8V5h8v3 M8 12h.01 M12 12h.01 M16 12h.01',
+  undo: 'M9 14l-5-4 5-4 M4 10h8a6 6 0 0 1 6 6v1',
   underline: 'M8 4v8a4 4 0 0 0 8 0V4 M5 20h14',
   wrap: 'M4 7h11a4 4 0 1 1 0 8H8 M8 11l-4 4 4 4 M14 17h1',
   chevronRight: 'M9 6l6 6-6 6',

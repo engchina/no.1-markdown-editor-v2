@@ -7,6 +7,7 @@ import {
   FOCUS_WIDTH_PRESET_VALUES,
   type FocusWidthMode,
 } from '../lib/focusWidth'
+import { clearEditorStateSnapshot } from '../lib/editorStateCache.ts'
 import {
   countRestorableDraftTabs,
   isRestorableDraftTab,
@@ -265,6 +266,7 @@ export const useEditorStore = create<EditorState>()(
         return nextActiveId
       },
       closeTab: (id) => {
+        clearEditorStateSnapshot(id)
         set((s) => {
           const tabs = s.tabs.filter((t) => t.id !== id)
           if (tabs.length === 0) {
@@ -384,6 +386,10 @@ export const useEditorStore = create<EditorState>()(
       },
       closeTabsByPathPrefix: (pathPrefix) => {
         set((s) => {
+          s.tabs
+            .filter((tab) => tab.path && pathMatchesPrefix(tab.path, pathPrefix))
+            .forEach((tab) => clearEditorStateSnapshot(tab.id))
+
           const tabs = s.tabs.filter((tab) => !tab.path || !pathMatchesPrefix(tab.path, pathPrefix))
           if (tabs.length === 0) {
             const newTab = createNewTab()

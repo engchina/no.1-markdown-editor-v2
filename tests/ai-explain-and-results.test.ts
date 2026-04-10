@@ -60,8 +60,6 @@ test('result view helpers distinguish diff previews from insertion previews', ()
 })
 
 test('getAIInsertTargets exposes replace only when a selection exists', () => {
-  assert.deepEqual(getAIInsertTargets(true, true), ['replace-selection', 'at-cursor', 'insert-below', 'insert-under-heading', 'new-note'])
-  assert.deepEqual(getAIInsertTargets(true, false), ['replace-selection', 'at-cursor', 'insert-below', 'new-note'])
-  assert.deepEqual(getAIInsertTargets(false, true), ['at-cursor', 'insert-below', 'insert-under-heading', 'new-note'])
-  assert.deepEqual(getAIInsertTargets(false, false), ['at-cursor', 'insert-below', 'new-note'])
+  assert.deepEqual(getAIInsertTargets(true), ['replace-selection', 'at-cursor', 'insert-below', 'new-note'])
+  assert.deepEqual(getAIInsertTargets(false), ['at-cursor', 'insert-below', 'new-note'])
 })

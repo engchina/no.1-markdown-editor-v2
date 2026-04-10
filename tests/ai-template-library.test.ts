@@ -14,7 +14,7 @@ test('AI template library definitions cover the current reusable prompt starters
 
   assert.deepEqual(
     definitions.map((definition) => definition.id),
-    ['ask', 'continueWriting', 'newNote', 'workspaceRun', 'insertUnderHeading', 'translate', 'rewrite', 'summarize', 'review', 'generateBelow']
+    ['ask', 'continueWriting', 'newNote', 'translate', 'rewrite', 'summarize', 'review', 'generateBelow']
   )
 })
 
@@ -25,8 +25,6 @@ test('AI template library resolves localized models and open details', () => {
   assert.equal(byId.ask.prompt, '')
   assert.equal(byId.continueWriting.prompt, 'ai.templates.continueWritingPrompt')
   assert.equal(byId.newNote.prompt, 'ai.templates.newNotePrompt')
-  assert.equal(byId.workspaceRun.prompt, 'ai.templates.workspaceRunPrompt')
-  assert.equal(byId.insertUnderHeading.prompt, 'ai.templates.insertUnderHeadingPrompt')
   assert.equal(byId.review.prompt, 'ai.templates.reviewPrompt')
   assert.equal(byId.generateBelow.prompt, 'ai.templates.generateBelowPrompt')
 
@@ -47,19 +45,6 @@ test('AI template library resolves localized models and open details', () => {
     intent: 'generate',
     outputTarget: 'new-note',
     prompt: 'ai.templates.newNotePrompt',
-  })
-  assert.deepEqual(createAITemplateOpenDetail('workspaceRun', t, 'command-palette'), {
-    source: 'command-palette',
-    intent: 'generate',
-    outputTarget: 'chat-only',
-    prompt: 'ai.templates.workspaceRunPrompt',
-  })
-  assert.deepEqual(createAITemplateOpenDetail('insertUnderHeading', t, 'sidebar-tab'), {
-    source: 'sidebar-tab',
-    intent: 'generate',
-    scope: 'current-heading',
-    outputTarget: 'insert-under-heading',
-    prompt: 'ai.templates.insertUnderHeadingPrompt',
   })
 })
 

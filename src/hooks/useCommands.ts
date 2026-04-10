@@ -11,6 +11,11 @@ import { createAITemplateOpenDetail } from '../lib/ai/templateLibrary'
 import { getFormatShortcutLabel } from '../components/Editor/formatShortcuts'
 import type { Language } from '../i18n'
 import { formatPrimaryShortcut } from '../lib/platform'
+import {
+  dispatchEditorHistory,
+  getEditorRedoShortcutLabel,
+  getEditorUndoShortcutLabel,
+} from '../lib/editorHistory.ts'
 
 export interface Command {
   id: string
@@ -43,6 +48,8 @@ export function useCommands(): Command[] {
   const findShortcut = formatPrimaryShortcut('F')
   const replaceShortcut = formatPrimaryShortcut('H')
   const aiShortcut = formatPrimaryShortcut('J')
+  const undoShortcut = getEditorUndoShortcutLabel()
+  const redoShortcut = getEditorRedoShortcutLabel()
 
   return useMemo<Command[]>(() => {
     const recentCommands = recentFiles.slice(0, 5).map((file) => ({
@@ -193,6 +200,24 @@ export function useCommands(): Command[] {
         action: () => store.setFontSize(14),
       },
       {
+        id: 'edit.undo',
+        label: t('commands.undo'),
+        category: 'edit',
+        shortcut: undoShortcut,
+        action: () => {
+          dispatchEditorHistory('undo')
+        },
+      },
+      {
+        id: 'edit.redo',
+        label: t('commands.redo'),
+        category: 'edit',
+        shortcut: redoShortcut,
+        action: () => {
+          dispatchEditorHistory('redo')
+        },
+      },
+      {
         id: 'edit.find',
         label: t('commands.findInDocument'),
         icon: '🔍',
@@ -252,30 +277,6 @@ export function useCommands(): Command[] {
         category: 'ai',
         action: () => {
           dispatchEditorAIOpen({ ...createAITemplateOpenDetail('newNote', t, 'command-palette') })
-        },
-      },
-      {
-        id: 'ai.workspaceRun',
-        label: t('commands.aiWorkspaceRun'),
-        icon: '✨',
-        category: 'ai',
-        action: () => {
-          dispatchEditorAIOpen({ ...createAITemplateOpenDetail('workspaceRun', t, 'command-palette') })
-        },
-      },
-      {
-        id: 'ai.insertUnderHeading',
-        label: t('commands.aiInsertUnderHeading'),
-        icon: '✨',
-        category: 'ai',
-        action: () => {
-          dispatchEditorAIOpen({
-            source: 'command-palette',
-            intent: 'generate',
-            scope: 'current-heading',
-            outputTarget: 'insert-under-heading',
-            prompt: t('ai.templates.insertUnderHeadingPrompt'),
-          })
         },
       },
       {
@@ -540,6 +541,7 @@ export function useCommands(): Command[] {
     replaceShortcut,
     resetFontShortcut,
     recentFiles,
+    redoShortcut,
     saveFile,
     saveShortcut,
     saveFileAs,
@@ -551,6 +553,7 @@ export function useCommands(): Command[] {
     store.sidebarOpen,
     store.typewriterMode,
     store.wysiwygMode,
+    undoShortcut,
     store.wordWrap,
     t,
   ])

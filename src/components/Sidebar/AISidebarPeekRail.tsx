@@ -23,10 +23,6 @@ import {
   saveAIHistoryArchiveText,
   saveAIHistoryJsonText,
 } from '../../lib/ai/historyArchiveFile.ts'
-import {
-  buildAIHistoryWorkspaceRunPrompt,
-  collectAIHistoryWorkspaceHandoffTargets,
-} from '../../lib/ai/historyWorkspaceHandoff.ts'
 import { buildAIHistoryProviderAuditInsights } from '../../lib/ai/providerHistoryAuditAnalysis.ts'
 import {
   buildAIHistoryProviderAuditReport,
@@ -48,7 +44,6 @@ import type {
   AIDocumentSessionHistoryEntry,
   AIHistoryCollectionRetrievalPolicy,
   AIHistoryProviderRerankBudget,
-  AIHistorySavedViewAutomationMode,
   AIHistorySavedViewRetrievalPreset,
   AIHistorySavedViewStatusFilter,
   AIWorkspaceExecutionHistoryRecord,
@@ -113,8 +108,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
   const [savedViewNameInput, setSavedViewNameInput] = useState('')
   const [savedViewBudgetOverrideInput, setSavedViewBudgetOverrideInput] =
     useState<'inherit' | AIHistoryProviderRerankBudget>('inherit')
-  const [savedViewAutomationModeInput, setSavedViewAutomationModeInput] =
-    useState<AIHistorySavedViewAutomationMode>('manual')
   const [historyStatusFilter, setHistoryStatusFilter] =
     useState<AIHistorySavedViewStatusFilter>('all')
   const [historyWorkspaceFacet, setHistoryWorkspaceFacet] =
@@ -129,10 +122,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
   const [auditBudgetFilter, setAuditBudgetFilter] = useState<'all' | AIHistoryProviderRerankBudget>('all')
   const [auditCompareIds, setAuditCompareIds] = useState<string[]>([])
   const templates = useMemo(() => getAITemplateModels(t), [t])
-  const workspaceRunTemplate = useMemo(
-    () => templates.find((template) => template.id === 'workspaceRun') ?? null,
-    [templates]
-  )
   const slashCommands = useMemo(() => createAISlashCommandEntries(t), [t])
   const threadKey = activeTab ? getAIDocumentThreadKey(activeTab.id, activeTab.path) : null
   const threadId = threadKey ? threadIdsByDocument[threadKey] ?? null : null
@@ -281,7 +270,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
     aiDefaultSelectedTextRole === 'reference-only'
       ? t('ai.preferences.roleReferenceOnly')
       : t('ai.preferences.roleTransformTarget')
-  const requestStateLabel = t(`ai.requestState.${composer.requestState}`)
   const shortcut = formatPrimaryShortcut('J')
   const meta = getPeekMeta(view, t)
   const providerRerankScopeLabel = activeSavedView
@@ -296,14 +284,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
     savedViewPreset: activeSavedView ? activeSavedViewRetrievalPreset : null,
     t,
   })
-  const currentWorkspaceHandoffTargets = useMemo(
-    () =>
-      collectAIHistoryWorkspaceHandoffTargets(displayedHistoryMatches, {
-        currentDocumentKey: threadKey,
-        limit: 4,
-      }),
-    [displayedHistoryMatches, threadKey]
-  )
 
   async function handleExportHistory() {
     try {
@@ -458,14 +438,13 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
         pinnedOnly: historyPinnedOnly,
         providerBudgetOverride:
           savedViewBudgetOverrideInput === 'inherit' ? null : savedViewBudgetOverrideInput,
-        automationMode: savedViewAutomationModeInput,
+        automationMode: 'manual',
       },
     })
     if (!viewId) return
 
     setSavedViewNameInput('')
     setSavedViewBudgetOverrideInput('inherit')
-    setSavedViewAutomationModeInput('manual')
     setActiveSavedViewId(viewId)
   }
 
@@ -499,10 +478,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
     setHistoryStatusFilter(nextView.retrievalPreset.statusFilter)
     setHistoryPinnedOnly(nextView.retrievalPreset.pinnedOnly)
     setActiveSavedViewId(nextView.id)
-
-    if (nextView.retrievalPreset.automationMode !== 'manual') {
-      void handleRunSavedViewAutomation(viewId)
-    }
   }
 
   function handleSavedViewStatusFilterChange(
@@ -523,196 +498,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
     updateHistorySavedViewRetrievalPreset(viewId, {
       providerBudgetOverride: providerBudgetOverride === 'inherit' ? null : providerBudgetOverride,
     })
-  }
-
-  function handleSavedViewAutomationModeChange(
-    viewId: string,
-    automationMode: AIHistorySavedViewAutomationMode
-  ) {
-    updateHistorySavedViewRetrievalPreset(viewId, { automationMode })
-  }
-
-  function resolveHistoryBaseCandidatesForView(collectionId: string | null) {
-    if (collectionId) {
-      const collection = historyCollections.find((item) => item.id === collectionId)
-      if (collection) {
-        return collection.entryRefs
-          .map((ref) => historyEntriesByRef.get(`${ref.documentKey}::${ref.entryId}`) ?? null)
-          .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-      }
-    }
-
-    return allHistoryEntries.filter((entry) => entry.documentKey !== threadKey)
-  }
-
-  function resolveSavedViewMatches(viewId: string) {
-    const view = historySavedViews.find((item) => item.id === viewId)
-    if (!view) return []
-
-    const candidates = resolveHistoryBaseCandidatesForView(view.collectionId).filter(
-      (entry) =>
-        matchesAIHistorySavedViewStatusFilter(entry.status, view.retrievalPreset.statusFilter) &&
-        (!view.retrievalPreset.pinnedOnly || entry.pinned)
-    )
-    const query = view.query.trim()
-    if (query.length > 0) {
-      const related = retrieveAIHistoryCandidates(candidates, query)
-      if (related.length > 0) return related
-    }
-
-    return sortHistoryCandidates(candidates).map((candidate) => ({
-      candidate,
-      score: 0,
-      matchKind: 'recency' as const,
-      matchedTerms: [],
-    }))
-  }
-
-  function openWorkspaceRunFromTargets(
-    targets: readonly ReturnType<typeof collectAIHistoryWorkspaceHandoffTargets>[number][],
-    options: {
-      seedQuery: string
-      scopeLabel: string
-    }
-  ) {
-    if (!workspaceRunTemplate || targets.length === 0) return
-
-    dispatchEditorAIOpen({
-      source: SIDEBAR_TAB_SOURCE,
-      intent: workspaceRunTemplate.intent,
-      outputTarget: workspaceRunTemplate.outputTarget,
-      prompt: buildAIHistoryWorkspaceRunPrompt({
-        targets,
-        templatePrompt: workspaceRunTemplate.prompt,
-        seedQuery: options.seedQuery,
-        scopeLabel: options.scopeLabel,
-      }),
-    })
-    onClose()
-  }
-
-  function handleDraftWorkspaceRunFromCurrentView() {
-    openWorkspaceRunFromTargets(currentWorkspaceHandoffTargets, {
-      seedQuery: relatedSeedQuery,
-      scopeLabel: activeSavedView
-        ? t('ai.sidebar.historyProviderPreviewScopeSavedView', { name: activeSavedView.name })
-        : activeCollection
-          ? t('ai.sidebar.historyProviderPreviewScopeCollection', { name: activeCollection.name })
-        : t('ai.sidebar.crossDocumentHistoryTitle'),
-    })
-  }
-
-  function resolveSavedViewProviderRerankSettings(view: NonNullable<typeof activeSavedView>) {
-    const collection = view.collectionId
-      ? historyCollections.find((item) => item.id === view.collectionId) ?? null
-      : null
-    const collectionPolicy = collection?.retrievalPolicy
-    const enabled = resolveAIHistoryCollectionProviderRerankEnabled(
-      aiHistoryProviderRerankEnabled,
-      collectionPolicy
-    )
-    const baseBudget = resolveAIHistoryCollectionProviderRerankBudget(
-      aiHistoryProviderRerankBudget,
-      collectionPolicy
-    )
-    const budget = resolveAIHistorySavedViewProviderRerankBudget(baseBudget, view.retrievalPreset)
-
-    return {
-      enabled,
-      budget,
-    }
-  }
-
-  async function collectSavedViewWorkspaceRunTargets(
-    view: NonNullable<typeof activeSavedView>,
-    preferProviderRanking: boolean
-  ) {
-    const baseMatches = resolveSavedViewMatches(view.id)
-    if (preferProviderRanking) {
-      const query = view.query.trim()
-      const providerSettings = resolveSavedViewProviderRerankSettings(view)
-
-      if (providerSettings.enabled && query && baseMatches.length > 0) {
-        setProviderRetrievalState('running')
-        setProviderRetrievalError(null)
-
-        try {
-          const result = await rerankAIHistoryCandidatesWithProvider({
-            query,
-            candidates: baseMatches.map((match) => match.candidate),
-            activeDocumentName: activeTab?.name ?? t('app.untitled'),
-            budget: providerSettings.budget,
-          })
-
-          setProviderRetrievalMatches(result.matches)
-          setProviderRetrievalState('ready')
-          addHistoryProviderRerankAudit({
-            query,
-            budget: providerSettings.budget,
-            collectionId: view.collectionId,
-            savedViewId: view.id,
-            retrievalStatusFilter: view.retrievalPreset.statusFilter,
-            retrievalPinnedOnly: view.retrievalPreset.pinnedOnly,
-            candidateCount: baseMatches.length,
-            sentCount: result.sentCount,
-            providerModel: result.providerModel,
-            status: 'success',
-            errorMessage: null,
-          })
-
-          return collectAIHistoryWorkspaceHandoffTargets(result.matches, {
-            currentDocumentKey: threadKey,
-            limit: 4,
-          })
-        } catch (error) {
-          const reason = error instanceof Error ? error.message : String(error)
-          setProviderRetrievalState('error')
-          setProviderRetrievalError(reason)
-          addHistoryProviderRerankAudit({
-            query,
-            budget: providerSettings.budget,
-            collectionId: view.collectionId,
-            savedViewId: view.id,
-            retrievalStatusFilter: view.retrievalPreset.statusFilter,
-            retrievalPinnedOnly: view.retrievalPreset.pinnedOnly,
-            candidateCount: baseMatches.length,
-            sentCount: estimateAIHistoryProviderRerankSendCount(baseMatches.length, providerSettings.budget),
-            providerModel: null,
-            status: 'error',
-            errorMessage: reason,
-          })
-        }
-      }
-    }
-
-    return collectAIHistoryWorkspaceHandoffTargets(baseMatches, {
-      currentDocumentKey: threadKey,
-      limit: 4,
-    })
-  }
-
-  async function handleDraftWorkspaceRunFromSavedView(
-    viewId: string,
-    preferProviderRanking = false
-  ) {
-    const view = historySavedViews.find((item) => item.id === viewId)
-    if (!view) return
-
-    const targets = await collectSavedViewWorkspaceRunTargets(view, preferProviderRanking)
-    openWorkspaceRunFromTargets(targets, {
-      seedQuery: view.query,
-      scopeLabel: t('ai.sidebar.historyProviderPreviewScopeSavedView', { name: view.name }),
-    })
-  }
-
-  async function handleRunSavedViewAutomation(viewId: string) {
-    const view = historySavedViews.find((item) => item.id === viewId)
-    if (!view || view.retrievalPreset.automationMode === 'manual') return
-
-    await handleDraftWorkspaceRunFromSavedView(
-      viewId,
-      view.retrievalPreset.automationMode === 'provider-ranked-workspace-run-draft'
-    )
   }
 
   function handleReplayProviderAudit(entryId: string) {
@@ -743,6 +528,19 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
     setProviderRetrievalState('idle')
   }
 
+  function reuseHistoryEntry(
+    entry: Pick<AIDocumentSessionHistoryEntry, 'intent' | 'scope' | 'outputTarget' | 'prompt'>
+  ) {
+    dispatchEditorAIOpen({
+      source: SIDEBAR_TAB_SOURCE,
+      intent: entry.intent,
+      scope: entry.scope,
+      outputTarget: entry.outputTarget,
+      prompt: entry.prompt,
+    })
+    onClose()
+  }
+
   function toggleAuditCompare(entryId: string) {
     setAuditCompareIds((current) => {
       if (current.includes(entryId)) return current.filter((id) => id !== entryId)
@@ -756,7 +554,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
     setHistoryWorkspaceFacet('all')
     setHistoryPinnedOnly(false)
     setSavedViewBudgetOverrideInput('inherit')
-    setSavedViewAutomationModeInput('manual')
     setActiveCollectionId(null)
     setActiveSavedViewId(null)
   }
@@ -929,7 +726,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <PeekPill label={t(`ai.outputTarget.${template.outputTarget}`)} />
-                  {template.scope === 'current-heading' && <PeekPill label={t('ai.context.heading')} />}
                 </div>
               </button>
             ))}
@@ -938,26 +734,173 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
 
         {view === 'session' && (
           <div className="grid gap-3">
-            <div className="grid grid-cols-2 gap-2">
-              <PeekMetric label={t('ai.sidebar.activeStatus')} value={status.label} icon={status.icon} accent={status.accent} />
-              <PeekMetric label={t('ai.explain.requestState')} value={requestStateLabel} icon="panel" />
-              <PeekMetric label={t('ai.sidebar.defaultTarget')} value={t(`ai.outputTarget.${aiDefaultWriteTarget}`)} icon="edit" />
-              <PeekMetric label={t('ai.sidebar.selectedRole')} value={selectedRoleLabel} icon="outline" />
-              <PeekMetric label={t('ai.sidebar.historyCount')} value={String(sessionHistory.length)} icon="copy" />
-              <PeekMetric
-                label={t('ai.sidebar.lastSource')}
-                value={latestSession ? getAISidebarSourceLabel(latestSession.source, t) : t('ai.sidebar.historyEmptyShort')}
-                icon="keyboard"
-              />
-            </div>
+            <section
+              className="rounded-[20px] border px-4 py-4"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--accent) 20%, var(--border))',
+                background:
+                  'linear-gradient(160deg, color-mix(in srgb, var(--accent) 8%, var(--bg-primary)) 0%, color-mix(in srgb, var(--bg-secondary) 82%, transparent) 100%)',
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.sidebar.lastRun')}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
+                    {latestSession ? t('ai.sidebar.lastRunDetail') : t('ai.sidebar.lastRunEmptyDetail')}
+                  </p>
+                </div>
 
-            <PeekField label={t('ai.sidebar.document')} value={activeTab?.name ?? t('app.untitled')} />
-            <PeekField
-              label={t('ai.sidebar.thread')}
-              value={threadId ?? threadKey ?? t('ai.sidebar.threadPending')}
-              copyable={Boolean(threadId || threadKey)}
-              copyLabel={t('ai.copy')}
-            />
+                {latestSession && (
+                  <span
+                    className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
+                      background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {formatSessionTimestamp(latestSession.updatedAt, i18n.language)}
+                  </span>
+                )}
+              </div>
+
+              {latestSession ? (
+                <div className="mt-3">
+                  <SessionHistoryCard
+                    entry={latestSession}
+                    locale={i18n.language}
+                    reuseLabel={t('ai.sidebar.historyReuseHere')}
+                    onTogglePin={() => {
+                      if (!activeTab) return
+                      toggleSessionHistoryPin(activeTab.id, activeTab.path, latestSession.id)
+                    }}
+                    onRemove={() => {
+                      if (!activeTab) return
+                      removeSessionHistoryEntry(activeTab.id, activeTab.path, latestSession.id)
+                    }}
+                    onReuse={() => reuseHistoryEntry(latestSession)}
+                  />
+                </div>
+              ) : (
+                <div
+                  data-ai-sidebar-session-last-run-empty="true"
+                  className="mt-3 rounded-2xl border px-4 py-4"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--border) 74%, transparent)',
+                    background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
+                  }}
+                >
+                  <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {t('ai.sidebar.historyEmptyShort')}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.sidebar.lastRunEmptyDetail')}
+                  </p>
+                </div>
+              )}
+            </section>
+
+            <section
+              className="rounded-[20px] border px-4 py-4"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
+                background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
+              }}
+            >
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+                  {t('ai.sidebar.historyOverviewTitle')}
+                </div>
+                <p className="mt-1 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
+                  {t('ai.sidebar.historyOverviewDetail')}
+                </p>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <PeekMetric label={t('ai.sidebar.activeStatus')} value={status.label} icon={status.icon} accent={status.accent} />
+                <PeekMetric label={t('ai.sidebar.defaultTarget')} value={t(`ai.outputTarget.${aiDefaultWriteTarget}`)} icon="edit" />
+                <PeekMetric label={t('ai.sidebar.selectedRole')} value={selectedRoleLabel} icon="outline" />
+                <PeekMetric label={t('ai.sidebar.historyCount')} value={String(sessionHistory.length)} icon="copy" />
+              </div>
+
+              <div className="mt-3 grid gap-2">
+                <PeekField label={t('ai.sidebar.document')} value={activeTab?.name ?? t('app.untitled')} />
+                <PeekField
+                  label={t('ai.sidebar.thread')}
+                  value={threadId ?? threadKey ?? t('ai.sidebar.threadPending')}
+                  copyable={Boolean(threadId || threadKey)}
+                  copyLabel={t('ai.copy')}
+                />
+              </div>
+            </section>
+
+            <section
+              className="rounded-[20px] border px-4 py-4"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
+                background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.sidebar.historyTitle')}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.sidebar.historyTitleDetail')}
+                  </p>
+                </div>
+                <span
+                  className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
+                    background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  {sessionHistory.length}
+                </span>
+              </div>
+
+              {sessionHistory.length > 0 ? (
+                <div className="mt-3 grid gap-3">
+                  {sessionHistory.map((entry) => (
+                    <SessionHistoryCard
+                      key={entry.id}
+                      entry={entry}
+                      locale={i18n.language}
+                      onTogglePin={() => {
+                        if (!activeTab) return
+                        toggleSessionHistoryPin(activeTab.id, activeTab.path, entry.id)
+                      }}
+                      onRemove={() => {
+                        if (!activeTab) return
+                        removeSessionHistoryEntry(activeTab.id, activeTab.path, entry.id)
+                      }}
+                      onReuse={() => reuseHistoryEntry(entry)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  data-ai-sidebar-session-empty="true"
+                  className="mt-3 rounded-2xl border px-4 py-4"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--border) 74%, transparent)',
+                    background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
+                  }}
+                >
+                  <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {t('ai.sidebar.historyEmpty')}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.sidebar.historyEmptyDetail')}
+                  </p>
+                </div>
+              )}
+            </section>
 
             <section
               className="rounded-[20px] border px-4 py-4"
@@ -1285,32 +1228,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                       <option value="deep">{t('ai.preferences.historyProviderBudgetOption.deep')}</option>
                     </select>
                   </label>
-                  <div className="mt-3 grid gap-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.sidebar.savedViewPresetAutomation')}
-                    </span>
-                    <select
-                      value={savedViewAutomationModeInput}
-                      onChange={(event) =>
-                        setSavedViewAutomationModeInput(
-                          event.target.value as AIHistorySavedViewAutomationMode
-                        )
-                      }
-                      data-ai-sidebar-history-view-create-preset-workspace-run="true"
-                      className="rounded-xl border px-3 py-2 text-sm outline-none"
-                      style={{
-                        borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
-                        background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <option value="manual">{t('ai.sidebar.savedViewPresetAutomationOption.manual')}</option>
-                      <option value="workspace-run-draft">{t('ai.sidebar.savedViewPresetAutomationOption.workspaceRunDraft')}</option>
-                      <option value="provider-ranked-workspace-run-draft">
-                        {t('ai.sidebar.savedViewPresetAutomationOption.providerRankedWorkspaceRunDraft')}
-                      </option>
-                    </select>
-                  </div>
                 </div>
               </div>
 
@@ -1502,13 +1419,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                                   )}
                                 />
                                 {view.retrievalPreset.pinnedOnly && <PeekPill label={t('ai.sidebar.historyFilterPinnedOnly')} />}
-                                {view.retrievalPreset.automationMode !== 'manual' && (
-                                  <PeekPill
-                                    label={t(
-                                      `ai.sidebar.savedViewPresetAutomationBadge.${mapSavedViewAutomationModeToLocaleKey(view.retrievalPreset.automationMode)}`
-                                    )}
-                                  />
-                                )}
                                 <PeekPill
                                   label={
                                     view.retrievalPreset.providerBudgetOverride
@@ -1538,41 +1448,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                               </button>
                               <button
                                 type="button"
-                                data-ai-sidebar-history-view-workspace-run={view.id}
-                                onClick={() => handleDraftWorkspaceRunFromSavedView(view.id)}
-                                className="rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors"
-                                style={{
-                                  borderColor: 'color-mix(in srgb, var(--accent) 24%, var(--border))',
-                                  background: 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))',
-                                  color: 'var(--text-primary)',
-                                }}
-                                disabled={
-                                  !workspaceRunTemplate ||
-                                  collectAIHistoryWorkspaceHandoffTargets(resolveSavedViewMatches(view.id), {
-                                    currentDocumentKey: threadKey,
-                                    limit: 4,
-                                  }).length === 0
-                                }
-                              >
-                                {t('ai.sidebar.historyWorkspaceHandoffAction')}
-                              </button>
-                              {view.retrievalPreset.automationMode !== 'manual' && (
-                                <button
-                                  type="button"
-                                  data-ai-sidebar-history-view-automation-run={view.id}
-                                  onClick={() => void handleRunSavedViewAutomation(view.id)}
-                                  className="rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors"
-                                  style={{
-                                    borderColor: 'color-mix(in srgb, var(--accent) 24%, var(--border))',
-                                    background: 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))',
-                                    color: 'var(--text-primary)',
-                                  }}
-                                >
-                                  {t('ai.sidebar.savedViewPresetAutomationRun')}
-                                </button>
-                              )}
-                              <button
-                                type="button"
                                 data-ai-sidebar-history-view-delete={view.id}
                                 onClick={() => deleteHistorySavedView(view.id)}
                                 className="rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors"
@@ -1590,7 +1465,7 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                           {activeSavedViewId === view.id && (
                             <div
                               data-ai-sidebar-history-view-preset-panel={view.id}
-                              className="mt-3 grid gap-2 md:grid-cols-4"
+                              className="mt-3 grid gap-2 md:grid-cols-3"
                             >
                               <label className="grid gap-1">
                                 <span className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
@@ -1645,33 +1520,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                                     : t('ai.sidebar.historyFilterPinnedAll')}
                                 </button>
                               </div>
-                              <div className="grid gap-1">
-                                <span className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
-                                  {t('ai.sidebar.savedViewPresetAutomation')}
-                                </span>
-                                <select
-                                  value={view.retrievalPreset.automationMode}
-                                  onChange={(event) =>
-                                    handleSavedViewAutomationModeChange(
-                                      view.id,
-                                      event.target.value as AIHistorySavedViewAutomationMode
-                                    )
-                                  }
-                                  data-ai-sidebar-history-view-preset-workspace-run={view.id}
-                                  className="rounded-xl border px-3 py-2 text-sm outline-none"
-                                  style={{
-                                    borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
-                                    background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
-                                    color: 'var(--text-primary)',
-                                  }}
-                                >
-                                  <option value="manual">{t('ai.sidebar.savedViewPresetAutomationOption.manual')}</option>
-                                  <option value="workspace-run-draft">{t('ai.sidebar.savedViewPresetAutomationOption.workspaceRunDraft')}</option>
-                                  <option value="provider-ranked-workspace-run-draft">
-                                    {t('ai.sidebar.savedViewPresetAutomationOption.providerRankedWorkspaceRunDraft')}
-                                  </option>
-                                </select>
-                              </div>
                               <label className="grid gap-1">
                                 <span className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
                                   {t('ai.sidebar.savedViewPresetBudget')}
@@ -1710,91 +1558,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                   )}
                 </div>
               </div>
-            </section>
-
-            <section
-              className="rounded-[20px] border px-4 py-4"
-              style={{
-                borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
-                background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
-              }}
-            >
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: status.accent }}>
-                {status.label}
-              </div>
-              <p className="mt-2 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>
-                {status.detail}
-              </p>
-            </section>
-
-            <section
-              className="rounded-[20px] border px-4 py-4"
-              style={{
-                borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
-                background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
-              }}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
-                  {t('ai.sidebar.historyTitle')}
-                </div>
-                <span
-                  className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
-                    background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  {sessionHistory.length}
-                </span>
-              </div>
-
-              {sessionHistory.length > 0 ? (
-                <div className="mt-3 grid gap-3">
-                  {sessionHistory.map((entry) => (
-                    <SessionHistoryCard
-                      key={entry.id}
-                      entry={entry}
-                      locale={i18n.language}
-                      onTogglePin={() => {
-                        if (!activeTab) return
-                        toggleSessionHistoryPin(activeTab.id, activeTab.path, entry.id)
-                      }}
-                      onRemove={() => {
-                        if (!activeTab) return
-                        removeSessionHistoryEntry(activeTab.id, activeTab.path, entry.id)
-                      }}
-                      onReuse={() => {
-                        dispatchEditorAIOpen({
-                          source: SIDEBAR_TAB_SOURCE,
-                          intent: entry.intent,
-                          scope: entry.scope,
-                          outputTarget: entry.outputTarget,
-                          prompt: entry.prompt,
-                        })
-                        onClose()
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div
-                  data-ai-sidebar-session-empty="true"
-                  className="mt-3 rounded-2xl border px-4 py-4"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--border) 74%, transparent)',
-                    background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                  }}
-                >
-                  <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    {t('ai.sidebar.historyEmpty')}
-                  </div>
-                  <p className="mt-2 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                    {t('ai.sidebar.historyEmptyDetail')}
-                  </p>
-                </div>
-              )}
             </section>
 
             <section
@@ -2461,75 +2224,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                 ) : (
                   <div className="mt-3 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
                     {t('ai.sidebar.historyProviderAuditEmpty')}
-                  </div>
-                )}
-              </div>
-
-              <div
-                data-ai-sidebar-history-workspace-handoff="true"
-                className="mt-3 rounded-2xl border px-4 py-4"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--border) 74%, transparent)',
-                  background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.sidebar.historyWorkspaceHandoffTitle')}
-                    </div>
-                    <div className="mt-1 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.sidebar.historyWorkspaceHandoffDetail')}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    data-ai-sidebar-history-workspace-run="true"
-                    onClick={handleDraftWorkspaceRunFromCurrentView}
-                    className="rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                    style={{
-                      borderColor:
-                        workspaceRunTemplate && currentWorkspaceHandoffTargets.length > 0
-                          ? 'color-mix(in srgb, var(--accent) 24%, var(--border))'
-                          : 'color-mix(in srgb, var(--border) 76%, transparent)',
-                      background:
-                        workspaceRunTemplate && currentWorkspaceHandoffTargets.length > 0
-                          ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))'
-                          : 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
-                      color: 'var(--text-primary)',
-                    }}
-                    disabled={!workspaceRunTemplate || currentWorkspaceHandoffTargets.length === 0}
-                  >
-                    {t('ai.sidebar.historyWorkspaceHandoffAction')}
-                  </button>
-                </div>
-                {currentWorkspaceHandoffTargets.length > 0 ? (
-                  <div className="mt-3 grid gap-2">
-                    <div className="text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.sidebar.historyWorkspaceHandoffCount', { count: currentWorkspaceHandoffTargets.length })}
-                    </div>
-                    {currentWorkspaceHandoffTargets.map((target) => (
-                      <div
-                        key={target.documentKey}
-                        data-ai-sidebar-history-workspace-target={target.documentKey}
-                        className="rounded-xl border px-3 py-3"
-                        style={{
-                          borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
-                          background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
-                        }}
-                      >
-                        <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                          {target.label}
-                        </div>
-                        <div className="mt-1 text-[11px] leading-4" style={{ color: 'var(--text-muted)' }}>
-                          {target.detail}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                    {t('ai.sidebar.historyWorkspaceHandoffEmpty')}
                   </div>
                 )}
               </div>
@@ -3271,11 +2965,6 @@ function describeSavedViewRetrievalPreset(
   ]
 
   if (preset.pinnedOnly) parts.push(t('ai.sidebar.historyFilterPinnedOnly'))
-  if (preset.automationMode !== 'manual') {
-    parts.push(
-      t(`ai.sidebar.savedViewPresetAutomationBadge.${mapSavedViewAutomationModeToLocaleKey(preset.automationMode)}`)
-    )
-  }
 
   if (preset.providerBudgetOverride) {
     parts.push(
@@ -3292,18 +2981,6 @@ function describeSavedViewRetrievalPreset(
   }
 
   return parts.join(' · ')
-}
-
-function mapSavedViewAutomationModeToLocaleKey(mode: AIHistorySavedViewAutomationMode) {
-  switch (mode) {
-    case 'workspace-run-draft':
-      return 'workspaceRunDraft'
-    case 'provider-ranked-workspace-run-draft':
-      return 'providerRankedWorkspaceRunDraft'
-    case 'manual':
-    default:
-      return 'manual'
-  }
 }
 
 function mapCollectionPolicyModeToLocaleKey(
@@ -3527,7 +3204,7 @@ function getPeekMeta(view: AISidebarPeekView, t: (key: string) => string): { ico
 
   if (view === 'session') {
     return {
-      icon: 'outline',
+      icon: 'clock',
       title: t('ai.sidebar.peekSession'),
       detail: t('ai.sidebar.peekSessionDetail'),
     }

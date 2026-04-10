@@ -44,32 +44,34 @@ test('resolveAIApplyChange inserts below the captured block with readable spacin
   assert.equal(change.text, '\n\nInserted block')
 })
 
+test('resolveAIApplyChange inserts below the final selected block instead of the first one', () => {
+  const doc = '# Intro\n\nFirst paragraph.\n\nSecond paragraph.'
+  const selectedText = '# Intro\n\nFirst paragraph.'
+  const change = resolveAIApplyChange(
+    'insert-below',
+    {
+      ...snapshot,
+      selectionFrom: 0,
+      selectionTo: selectedText.length,
+      blockFrom: 0,
+      blockTo: '# Intro'.length,
+      docText: doc,
+    },
+    doc,
+    'Inserted block'
+  )
+
+  assert.equal(change.range.from, selectedText.length)
+  assert.equal(change.range.to, selectedText.length)
+  assert.equal(change.text, '\n\nInserted block')
+})
+
 test('resolveAIApplyChange inserts at cursor without extra formatting', () => {
   const change = resolveAIApplyChange('at-cursor', snapshot, snapshot.docText, '!')
   assert.deepEqual(change, {
     range: { from: 11, to: 11 },
     text: '!',
   })
-})
-
-test('resolveAIApplyChange inserts under the captured heading before the next heading peer', () => {
-  const doc = ['# Intro', '', 'First paragraph.', '', '## Next', '', 'Second paragraph.'].join('\n')
-  const headingTo = doc.indexOf('## Next')
-  const change = resolveAIApplyChange(
-    'insert-under-heading',
-    {
-      ...snapshot,
-      headingFrom: 0,
-      headingTo,
-      docText: doc,
-    },
-    doc,
-    'Inserted under heading.'
-  )
-
-  assert.equal(change.range.from, headingTo)
-  assert.equal(change.range.to, headingTo)
-  assert.equal(change.text, 'Inserted under heading.\n\n')
 })
 
 test('resolveAIApplyChange rejects new-note targets because they do not mutate the current document', () => {

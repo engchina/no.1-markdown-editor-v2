@@ -1,11 +1,9 @@
-import { extractHeadings } from '../outline.ts'
 import {
   buildWorkspaceSearchResults,
   findWorkspaceDocumentReference,
   type WorkspaceSearchResult,
   type WorkspaceSearchableTab,
 } from '../workspaceSearch.ts'
-import { getOffsetAtLine } from './context.ts'
 import type {
   AIApplySnapshot,
   AIContextPacket,
@@ -16,9 +14,8 @@ import type {
 } from './types'
 
 const NOTE_ATTACHMENT_MAX_CHARS = 12000
-const HEADING_ATTACHMENT_MAX_CHARS = 9000
 const SEARCH_RESULTS_LIMIT = 5
-const MENTION_PATTERN = /@(note|heading|search)(?:\(([^)]*)\))?/giu
+const MENTION_PATTERN = /@(note|search)(?:\(([^)]*)\))?/giu
 
 export function parseAIPromptMentions(prompt: string): {
   cleanPrompt: string
@@ -82,9 +79,6 @@ export async function resolveAIPromptMentions(options: {
     switch (mention.kind) {
       case 'note':
         results.push(await resolveNoteMention(mention, options))
-        break
-      case 'heading':
-        results.push(resolveHeadingMention(mention, options.baseContext, options.sourceSnapshot))
         break
       case 'search':
         results.push(await resolveSearchMention(mention, options))
@@ -189,66 +183,6 @@ async function resolveNoteMention(
   }
 }
 
-function resolveHeadingMention(
-  mention: AIPromptMention,
-  context: AIContextPacket | null,
-  sourceSnapshot: AIApplySnapshot | null
-): AIPromptMentionResolution {
-  const content = sourceSnapshot?.docText ?? ''
-  if (!content.trim()) {
-    return buildMentionError(mention, 'heading-not-found')
-  }
-
-  if (!mention.query) {
-    if (
-      sourceSnapshot?.headingFrom === undefined ||
-      sourceSnapshot.headingTo === undefined ||
-      !context?.headingPath?.length
-    ) {
-      return buildMentionError(mention, 'current-heading-unavailable')
-    }
-
-    const headingText = content.slice(sourceSnapshot.headingFrom, sourceSnapshot.headingTo).trim()
-    if (!headingText) {
-      return buildMentionError(mention, 'current-heading-unavailable')
-    }
-
-    const clipped = clipMentionContent(headingText, HEADING_ATTACHMENT_MAX_CHARS)
-    return {
-      mention,
-      status: 'resolved',
-      attachment: {
-        id: `heading:current:${context.headingPath.join('>')}`,
-        kind: 'heading',
-        label: context.headingPath.join(' > '),
-        detail: context.fileName,
-        content: clipped.content,
-        truncated: clipped.truncated,
-      },
-    }
-  }
-
-  const resolvedHeading = findHeadingSectionByQuery(content, mention.query)
-  if (!resolvedHeading) {
-    return buildMentionError(mention, 'heading-not-found')
-  }
-
-  const clipped = clipMentionContent(resolvedHeading.content, HEADING_ATTACHMENT_MAX_CHARS)
-  return {
-    mention,
-    status: 'resolved',
-    attachment: {
-      id: `heading:query:${resolvedHeading.path.join('>')}`,
-      kind: 'heading',
-      label: resolvedHeading.path.join(' > '),
-      detail: context?.fileName ?? 'Untitled',
-      content: clipped.content,
-      query: mention.query,
-      truncated: clipped.truncated,
-    },
-  }
-}
-
 async function resolveSearchMention(
   mention: AIPromptMention,
   options: {
@@ -289,63 +223,6 @@ async function resolveSearchMention(
       query,
     },
   }
-}
-
-function findHeadingSectionByQuery(
-  content: string,
-  query: string
-): {
-  path: string[]
-  content: string
-} | null {
-  const headings = extractHeadings(content)
-  const normalizedQuery = normalizeMentionQuery(query)
-  if (!normalizedQuery || headings.length === 0) return null
-
-  let bestIndex = -1
-  let bestScore = 0
-
-  for (let index = 0; index < headings.length; index += 1) {
-    const heading = headings[index]
-    const score = scoreHeadingQuery(heading.text, normalizedQuery)
-    if (score > bestScore) {
-      bestScore = score
-      bestIndex = index
-    }
-  }
-
-  if (bestIndex === -1) return null
-
-  const selected = headings[bestIndex]
-  const nextPeer = headings.slice(bestIndex + 1).find((heading) => heading.level <= selected.level)
-  const from = getOffsetAtLine(content, selected.line)
-  const to = nextPeer ? getOffsetAtLine(content, nextPeer.line) : content.length
-
-  return {
-    path: buildHeadingPath(headings, bestIndex),
-    content: content.slice(from, to).trim(),
-  }
-}
-
-function buildHeadingPath(headings: ReturnType<typeof extractHeadings>, index: number): string[] {
-  const path: string[] = []
-
-  for (let currentIndex = 0; currentIndex <= index; currentIndex += 1) {
-    const heading = headings[currentIndex]
-    path.splice(Math.max(heading.level - 1, 0))
-    path[heading.level - 1] = heading.text
-  }
-
-  return path.filter(Boolean)
-}
-
-function scoreHeadingQuery(headingText: string, normalizedQuery: string): number {
-  const normalizedHeading = normalizeMentionQuery(headingText)
-  if (!normalizedHeading) return 0
-  if (normalizedHeading === normalizedQuery) return 1000
-  if (normalizedHeading.startsWith(normalizedQuery)) return 700
-  if (normalizedHeading.includes(normalizedQuery)) return 520
-  return 0
 }
 
 function clipMentionContent(content: string, maxChars: number): {

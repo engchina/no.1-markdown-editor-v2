@@ -18,6 +18,8 @@ const COMMAND_PRIORITY = new Map<string, number>([
   ['file.save', 12],
   ['file.saveAs', 13],
   ['file.recent.clear', 19],
+  ['edit.undo', 100],
+  ['edit.redo', 101],
   ['edit.bold', 110],
   ['edit.italic', 111],
   ['edit.underline', 112],
@@ -202,6 +204,10 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
       return <SvgBadge name="search" />
     case 'edit.replace':
       return <SvgBadge name="replace" />
+    case 'edit.undo':
+      return <SvgBadge name="undo" />
+    case 'edit.redo':
+      return <SvgBadge name="redo" />
     case 'edit.bold':
       return <SvgBadge name="bold" />
     case 'edit.italic':

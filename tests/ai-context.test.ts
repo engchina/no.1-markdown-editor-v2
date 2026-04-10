@@ -145,8 +145,6 @@ test('resolveAIPromptMentions attaches current note, matching heading, and searc
     anchorOffset: currentDocument.indexOf('Opening paragraph.'),
     blockFrom: 0,
     blockTo: currentDocument.indexOf('# Outro'),
-    headingFrom: 0,
-    headingTo: currentDocument.indexOf('# Outro'),
     docText: currentDocument,
   }
 

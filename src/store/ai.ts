@@ -268,16 +268,11 @@ function sanitizeHistorySavedViewRetrievalPreset(value: unknown): AIHistorySaved
   if (!value || typeof value !== 'object') return createDefaultAIHistorySavedViewRetrievalPreset()
 
   const candidate = value as Partial<AIHistorySavedViewRetrievalPreset>
-  const legacyCandidate = value as Record<string, unknown>
-  const legacyWorkspaceRunOnApply =
-    legacyCandidate.workspaceRunOnApply === true
   return {
     statusFilter: sanitizeHistorySavedViewStatusFilter(candidate.statusFilter),
     pinnedOnly: candidate.pinnedOnly === true,
     providerBudgetOverride: sanitizeOptionalHistoryProviderRerankBudget(candidate.providerBudgetOverride),
-    automationMode: legacyWorkspaceRunOnApply
-      ? 'workspace-run-draft'
-      : sanitizeAIHistorySavedViewAutomationMode(candidate.automationMode),
+    automationMode: sanitizeAIHistorySavedViewAutomationMode(candidate.automationMode),
   }
 }
 

@@ -93,9 +93,7 @@ function buildAIUserPrompt(prompt: string, context: AIContextPacket): string {
       const descriptor =
         attachment.kind === 'note'
           ? 'Attached note'
-          : attachment.kind === 'heading'
-            ? 'Attached heading section'
-            : 'Attached workspace search'
+          : 'Attached workspace search'
       const truncatedSuffix = attachment.truncated ? ' (truncated)' : ''
       const querySuffix = attachment.query ? ` [query: ${attachment.query}]` : ''
 

@@ -11,7 +11,6 @@ test('resolveAIOpenOutputTarget respects the default write target for edit/gener
   assert.equal(resolveAIOpenOutputTarget('generate', undefined, false, 'insert-below'), 'insert-below')
   assert.equal(resolveAIOpenOutputTarget('edit', undefined, true, 'replace-selection'), 'replace-selection')
   assert.equal(resolveAIOpenOutputTarget('edit', undefined, false, 'replace-selection'), 'at-cursor')
-  assert.equal(resolveAIOpenOutputTarget('generate', 'insert-under-heading', false, 'insert-below'), 'insert-under-heading')
   assert.equal(resolveAIOpenOutputTarget('generate', 'new-note', false, 'insert-below'), 'new-note')
 })
 

@@ -170,10 +170,8 @@ export function getAISidebarStatus({
 
 export function getAITemplateIcon(templateId: AITemplateId): IconName {
   switch (templateId) {
-    case 'workspaceRun':
-      return 'folderOpen'
-    case 'insertUnderHeading':
-      return 'outline'
+    case 'newNote':
+      return 'filePlus'
     case 'translate':
       return 'globe'
     case 'rewrite':

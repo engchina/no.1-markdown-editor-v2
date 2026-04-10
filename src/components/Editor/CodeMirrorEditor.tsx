@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Compartment, EditorState, EditorSelection, type Extension, type StateEffect } from '@codemirror/state'
-import { isolateHistory } from '@codemirror/commands'
+import { isolateHistory, redo, undo } from '@codemirror/commands'
 import { EditorView } from '@codemirror/view'
 import {
   buildCoreExtensions,
@@ -38,7 +38,7 @@ import {
   readAIProvenanceMarks,
   setAIProvenanceMarks,
 } from '../../lib/ai/provenance.ts'
-import { buildAIContextPacket, resolveCurrentBlockRange, resolveCurrentHeadingRange } from '../../lib/ai/context.ts'
+import { buildAIContextPacket, resolveCurrentBlockRange } from '../../lib/ai/context.ts'
 import { isAIApplySnapshotStale, resolveAIApplyChange } from '../../lib/ai/apply.ts'
 import {
   EDITOR_AI_APPLY_EVENT,
@@ -63,6 +63,19 @@ import { getTauriFilePersistence, persistImageFilesAsMarkdown } from '../../lib/
 import { prepareImageMarkdownInsertion } from '../../lib/imageMarkdownInsertion'
 import { convertClipboardHtmlToMarkdown } from '../../lib/pasteHtml'
 import { pushErrorNotice, pushInfoNotice } from '../../lib/notices'
+import {
+  primeAIUndoHistorySnapshot,
+  restoreEditorStateSnapshot,
+  saveEditorStateSnapshot,
+} from '../../lib/editorStateCache.ts'
+import {
+  EDITOR_HISTORY_EVENT,
+  type EditorHistoryAction,
+  type EditorHistoryDetail,
+  isTextInputLikeTarget,
+  matchesEditorRedoShortcut,
+  matchesEditorUndoShortcut,
+} from '../../lib/editorHistory.ts'
 import { useAIStore } from '../../store/ai'
 import { useActiveTab, useEditorStore } from '../../store/editor'
 import SearchBar from '../Search/SearchBar'
@@ -269,6 +282,24 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     view.dispatch({ effects: compartment.reconfigure(extension) })
   }, [])
 
+  const runHistoryAction = useCallback(
+    (action: EditorHistoryAction): boolean => {
+      const view = viewRef.current
+      if (!view) return false
+
+      const command = action === 'redo' ? redo : undo
+      const didRun = command(view)
+      if (!didRun) return false
+
+      syncGhostTextState(view)
+      syncProvenanceState(view)
+      updateSelectionBubble(view)
+      view.focus()
+      return true
+    },
+    [syncGhostTextState, syncProvenanceState, updateSelectionBubble]
+  )
+
   const ensureSearchSupport = useCallback(async () => {
     if (searchSupport) return searchSupport
 
@@ -335,75 +366,87 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container || viewRef.current) return
+    const tabId = activeTab?.id
+    if (!container || viewRef.current || !tabId) return
 
-    const state = EditorState.create({
-      doc: content,
-      extensions: [
-        ...buildCoreExtensions({
-          onChange: (nextContent: string) => {
-            if (!isUpdatingRef.current) onChangeRef.current(nextContent)
-          },
-          onCursorChange: handleCursorChange,
-          onSelectionChange: (view) => {
-            syncGhostTextState(view)
-            syncProvenanceState(view)
-            updateSelectionBubble(view)
-          },
-        }),
-        EditorView.updateListener.of((update) => {
-          if (!update.docChanged) return
-          if (useAIStore.getState().composer.open) return
+    const extensions = [
+      ...buildCoreExtensions({
+        onChange: (nextContent: string) => {
+          if (!isUpdatingRef.current) onChangeRef.current(nextContent)
+        },
+        onCursorChange: handleCursorChange,
+        onSelectionChange: (view) => {
+          syncGhostTextState(view)
+          syncProvenanceState(view)
+          updateSelectionBubble(view)
+        },
+      }),
+      EditorView.updateListener.of((update) => {
+        if (!update.docChanged) return
+        if (useAIStore.getState().composer.open) return
 
-          const selection = update.state.selection.main
-          if (update.state.selection.ranges.length !== 1 || !selection.empty) return
+        const selection = update.state.selection.main
+        if (update.state.selection.ranges.length !== 1 || !selection.empty) return
 
-          const line = update.state.doc.lineAt(selection.head)
-          const before = line.text.slice(0, selection.head - line.from)
-          if (!matchAISlashCommandQuery(before)) return
+        const line = update.state.doc.lineAt(selection.head)
+        const before = line.text.slice(0, selection.head - line.from)
+        if (!matchAISlashCommandQuery(before)) return
 
-          const view = update.view
-          queueMicrotask(() => {
-            void ensureAutocompleteExtensions()
-              .then((extensions) => {
-                if (viewRef.current !== view) return null
-                reconfigure(autocompleteCompartmentRef.current, extensions)
-                return ensureAutocompleteModule()
-              })
-              .then((autocomplete) => {
-                if (!autocomplete) return
-                if (viewRef.current !== view) return
-                if (useAIStore.getState().composer.open) return
-                view.focus()
-                autocomplete.closeCompletion(view)
-                autocomplete.startCompletion(view)
-              })
-          })
-        }),
-        lineNumbersCompartmentRef.current.of(lineNumbers ? buildLineNumberExtensions() : []),
-        wordWrapCompartmentRef.current.of(buildWordWrapExtensions(wordWrap)),
-        placeholderCompartmentRef.current.of(buildPlaceholderExtensions(t('placeholder'))),
-        languageCompartmentRef.current.of([]),
-        searchCompartmentRef.current.of([]),
-        autocompleteCompartmentRef.current.of([]),
-        ...createAIGhostTextExtensions(),
-        ...createAIProvenanceExtensions(),
-        wysiwygCompartmentRef.current.of([]),
-      ],
-    })
+        const view = update.view
+        queueMicrotask(() => {
+          void ensureAutocompleteExtensions()
+            .then((extensions) => {
+              if (viewRef.current !== view) return null
+              reconfigure(autocompleteCompartmentRef.current, extensions)
+              return ensureAutocompleteModule()
+            })
+            .then((autocomplete) => {
+              if (!autocomplete) return
+              if (viewRef.current !== view) return
+              if (useAIStore.getState().composer.open) return
+              view.focus()
+              autocomplete.closeCompletion(view)
+              autocomplete.startCompletion(view)
+            })
+        })
+      }),
+      lineNumbersCompartmentRef.current.of(lineNumbers ? buildLineNumberExtensions() : []),
+      wordWrapCompartmentRef.current.of(buildWordWrapExtensions(wordWrap)),
+      placeholderCompartmentRef.current.of(buildPlaceholderExtensions(t('placeholder'))),
+      languageCompartmentRef.current.of([]),
+      searchCompartmentRef.current.of([]),
+      autocompleteCompartmentRef.current.of([]),
+      ...createAIGhostTextExtensions(),
+      ...createAIProvenanceExtensions(),
+      wysiwygCompartmentRef.current.of([]),
+    ]
+
+    const state =
+      restoreEditorStateSnapshot({
+        tabId,
+        content,
+        extensions,
+      }) ??
+      EditorState.create({
+        doc: content,
+        extensions,
+      })
 
     const view = new EditorView({ state, parent: container })
     viewRef.current = view
     view.focus()
-    handleCursorChange(1, 1)
+    const cursor = view.state.selection.main.head
+    const line = view.state.doc.lineAt(cursor)
+    handleCursorChange(line.number, cursor - line.from + 1)
     updateSelectionBubble(view)
 
     return () => {
+      saveEditorStateSnapshot(tabId, view.state)
       view.destroy()
       viewRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [updateSelectionBubble])
+  }, [activeTab?.id, content, handleCursorChange, t, updateSelectionBubble])
 
   useEffect(() => {
     void ensureAutocompleteExtensions()
@@ -541,6 +584,42 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     document.addEventListener('editor:format', handler)
     return () => document.removeEventListener('editor:format', handler)
   }, [])
+
+  useEffect(() => {
+    const onHistoryRequested = (event: Event) => {
+      const detail = (event as CustomEvent<EditorHistoryDetail>).detail
+      runHistoryAction(detail.action)
+    }
+
+    document.addEventListener(EDITOR_HISTORY_EVENT, onHistoryRequested)
+    return () => document.removeEventListener(EDITOR_HISTORY_EVENT, onHistoryRequested)
+  }, [runHistoryAction])
+
+  useEffect(() => {
+    const onGlobalHistoryShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
+
+      const action = matchesEditorUndoShortcut(event)
+        ? 'undo'
+        : matchesEditorRedoShortcut(event)
+          ? 'redo'
+          : null
+      if (!action) return
+
+      const view = viewRef.current
+      if (!view) return
+
+      const target = event.target
+      if (target instanceof Node && view.dom.contains(target)) return
+      if (isTextInputLikeTarget(target)) return
+
+      event.preventDefault()
+      runHistoryAction(action)
+    }
+
+    document.addEventListener('keydown', onGlobalHistoryShortcut)
+    return () => document.removeEventListener('keydown', onGlobalHistoryShortcut)
+  }, [runHistoryAction])
 
   useEffect(() => {
     const onFormatShortcut = (event: KeyboardEvent) => {
@@ -783,15 +862,8 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
             }
           : undefined,
       })
-      const hasHeadingContext = !!context.headingPath?.length
-      const finalOutputTarget =
-        outputTarget === 'insert-under-heading' && !hasHeadingContext
-          ? 'insert-below'
-          : outputTarget
-      const finalScope =
-        requestedScope === 'current-heading' && !hasHeadingContext
-          ? 'current-block'
-          : context.scope
+      const finalOutputTarget = outputTarget
+      const finalScope = context.scope
 
       if (finalOutputTarget !== outputTarget || finalScope !== context.scope) {
         context = {
@@ -839,6 +911,11 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
           content: detail.text,
           savedContent: '',
           isDirty: true,
+        })
+        primeAIUndoHistorySnapshot({
+          tabId,
+          beforeContent: '',
+          afterContent: detail.text,
         })
         const provenanceRange = detail.provenance
           ? resolveInsertedProvenanceRange(0, detail.text)
@@ -1217,7 +1294,6 @@ function createAIApplySnapshot(view: EditorView, tabId: string) {
     from: selection.head,
     to: selection.head,
   }
-  const headingRange = resolveCurrentHeadingRange(docText, selection.head)
 
   return {
     tabId,
@@ -1226,8 +1302,6 @@ function createAIApplySnapshot(view: EditorView, tabId: string) {
     anchorOffset: selection.head,
     blockFrom: blockRange.from,
     blockTo: blockRange.to,
-    headingFrom: headingRange?.from,
-    headingTo: headingRange?.to,
     docText,
   }
 }

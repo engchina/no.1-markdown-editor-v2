@@ -5,8 +5,6 @@ export type AITemplateId =
   | 'ask'
   | 'continueWriting'
   | 'newNote'
-  | 'workspaceRun'
-  | 'insertUnderHeading'
   | 'translate'
   | 'rewrite'
   | 'summarize'
@@ -54,23 +52,6 @@ const TEMPLATE_DEFINITIONS: AITemplateDefinition[] = [
     promptKey: 'ai.templates.newNotePrompt',
     labelKey: 'ai.templateLibrary.newNoteLabel',
     detailKey: 'ai.templateLibrary.newNoteDetail',
-  },
-  {
-    id: 'workspaceRun',
-    intent: 'generate',
-    outputTarget: 'chat-only',
-    promptKey: 'ai.templates.workspaceRunPrompt',
-    labelKey: 'ai.templateLibrary.workspaceRunLabel',
-    detailKey: 'ai.templateLibrary.workspaceRunDetail',
-  },
-  {
-    id: 'insertUnderHeading',
-    intent: 'generate',
-    scope: 'current-heading',
-    outputTarget: 'insert-under-heading',
-    promptKey: 'ai.templates.insertUnderHeadingPrompt',
-    labelKey: 'ai.templateLibrary.insertUnderHeadingLabel',
-    detailKey: 'ai.templateLibrary.insertUnderHeadingDetail',
   },
   {
     id: 'translate',

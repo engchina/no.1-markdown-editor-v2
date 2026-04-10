@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppIcon from '../Icons/AppIcon'
 import { useAIStore } from '../../store/ai'
@@ -20,11 +20,6 @@ import { buildAIExplainDetails } from '../../lib/ai/explain.ts'
 import { buildAIContextChipModels } from '../../lib/ai/contextChips.ts'
 import { getAIDocumentLanguageLabelKey } from '../../lib/ai/documentLanguageLabels.ts'
 import {
-  attachAIPromptMentionContext,
-  parseAIPromptMentions,
-  resolveAIPromptMentions,
-} from '../../lib/ai/mentions.ts'
-import {
   buildMarkdownPreviewLines,
   getMarkdownPreviewLineBadge,
   type MarkdownPreviewLineKind,
@@ -40,8 +35,8 @@ import {
 import { getAITemplateModels, type AITemplateId, type AITemplateModel } from '../../lib/ai/templateLibrary.ts'
 import { resolveAIOpenOutputTarget } from '../../lib/ai/opening.ts'
 import { formatPrimaryShortcut, matchesPrimaryShortcut } from '../../lib/platform.ts'
-import type { AIIntent, AIProviderState, AIPromptMentionResolution } from '../../lib/ai/types.ts'
-import { findWorkspaceDocumentReferences, type WorkspaceDocumentReference } from '../../lib/workspaceSearch.ts'
+import type { AIIntent, AIProviderState } from '../../lib/ai/types.ts'
+import { findWorkspaceDocumentReferences } from '../../lib/workspaceSearch.ts'
 import {
   buildAIWorkspaceExecutionAgentResumeState,
   buildAIWorkspaceExecutionHistoryRecord,
@@ -60,6 +55,7 @@ import {
 } from '../../lib/ai/workspaceExecution.ts'
 import { createAIProvenanceMark } from '../../lib/ai/provenance.ts'
 import { openDesktopDocumentPath } from '../../lib/desktopFileOpen.ts'
+import { primeAIUndoHistorySnapshot } from '../../lib/editorStateCache.ts'
 import { focusElementWithoutScroll } from '../../hooks/useDialogFocusRestore'
 
 const INTENT_ORDER = ['ask', 'edit', 'generate', 'review'] as const
@@ -75,7 +71,6 @@ const OUTPUT_TARGET_ORDER = [
   'replace-selection',
   'at-cursor',
   'insert-below',
-  'insert-under-heading',
   'new-note',
 ] as const
 
@@ -134,7 +129,6 @@ export default function AIComposer() {
   const providerKeyInputRef = useRef<HTMLInputElement>(null)
   const requestRunIdRef = useRef(0)
   const activeRequestIdRef = useRef<string | null>(null)
-  const mentionRequestIdRef = useRef(0)
   const disposedRef = useRef(false)
   const activeSessionHistoryRef = useRef<{
     tabId: string
@@ -168,11 +162,6 @@ export default function AIComposer() {
   const [modelInput, setModelInput] = useState('')
   const [projectInput, setProjectInput] = useState('')
   const [apiKeyInput, setApiKeyInput] = useState('')
-  const [mentionResolutions, setMentionResolutions] = useState<AIPromptMentionResolution[]>([])
-  const [mentionLoading, setMentionLoading] = useState(false)
-  const [workspaceNoteQuery, setWorkspaceNoteQuery] = useState('')
-  const [workspaceNoteResults, setWorkspaceNoteResults] = useState<WorkspaceDocumentReference[]>([])
-  const [workspaceNoteLoading, setWorkspaceNoteLoading] = useState(false)
   const [workspaceExecutionStates, setWorkspaceExecutionStates] = useState<Record<string, {
     status: WorkspaceExecutionTaskStatus
     message?: string
@@ -193,45 +182,14 @@ export default function AIComposer() {
     errorMessage: null,
   })
   const [workspaceAgentSession, setWorkspaceAgentSession] = useState<WorkspaceAgentSessionState | null>(null)
-  const workspaceNoteRequestIdRef = useRef(0)
   const workspaceAgentRunIdRef = useRef(0)
   const workspacePreflightRequestIdRef = useRef(0)
   const workspaceProducedDraftsRef = useRef<Record<string, AIWorkspaceExecutionProducedDraft>>({})
 
   const hasSelection = !!composer.context?.selectedText
-  const hasHeadingContext = !!composer.context?.headingPath?.length
   const canReplaceSelection = hasSelection
-  const parsedPromptMentions = useMemo(
-    () => parseAIPromptMentions(composer.prompt),
-    [composer.prompt]
-  )
-  const deferredPromptMentions = useDeferredValue(parsedPromptMentions)
-  const deferredWorkspaceNoteQuery = useDeferredValue(workspaceNoteQuery.trim())
-  const effectivePrompt = parsedPromptMentions.cleanPrompt
-  const noteMentions = useMemo(
-    () => parsedPromptMentions.mentions.filter((mention) => mention.kind === 'note'),
-    [parsedPromptMentions.mentions]
-  )
-  const attachedNoteQueries = useMemo(
-    () =>
-      new Set(
-        noteMentions.map((mention) => normalizeWorkspaceContextQuery(mention.query))
-      ),
-    [noteMentions]
-  )
-  const currentNoteAttached = noteMentions.some((mention) => mention.query === null)
-  const openTabContextSuggestions = useMemo(
-    () =>
-      openTabs
-        .filter((tab) => tab.id !== composer.context?.tabId && tab.content.trim().length > 0)
-        .slice(0, 4),
-    [composer.context?.tabId, openTabs]
-  )
-  const effectiveContext = useMemo(
-    () => attachAIPromptMentionContext(composer.context, mentionResolutions),
-    [composer.context, mentionResolutions]
-  )
-  const hasMentionErrors = mentionResolutions.some((resolution) => resolution.status === 'error')
+  const effectivePrompt = composer.prompt.trim()
+  const effectiveContext = composer.context
   const hasConnection =
     !!providerState?.config?.baseUrl &&
     !!providerState?.config?.model &&
@@ -248,8 +206,6 @@ export default function AIComposer() {
   const hasWorkspaceExecutionTasks = (workspaceExecution?.tasks.length ?? 0) > 0
   const canSubmit =
     composer.requestState !== 'streaming' &&
-    !mentionLoading &&
-    !hasMentionErrors &&
     !!effectivePrompt.trim() &&
     !!effectiveContext &&
     hasConnection
@@ -266,7 +222,7 @@ export default function AIComposer() {
   const desktopOnlyMode = !isAIRuntimeAvailable()
   const hasDiffPreview = hasAIDiffPreview(composer.outputTarget, composer.diffBaseText, normalizedDraft)
   const hasInsertPreview = hasAIInsertPreview(composer.outputTarget, normalizedDraft)
-  const insertTargets = getAIInsertTargets(hasSelection, hasHeadingContext)
+  const insertTargets = getAIInsertTargets(hasSelection)
   const runShortcutLabel = formatPrimaryShortcut('Enter')
   const applyShortcutLabel = formatPrimaryShortcut('Enter', { shift: true })
   const diffBlocks =
@@ -297,10 +253,6 @@ export default function AIComposer() {
     ]
   )
   const templateModels = useMemo(() => getAITemplateModels(t), [t])
-  const workspaceRunTemplate = useMemo(
-    () => templateModels.find((template) => template.id === 'workspaceRun') ?? null,
-    [templateModels]
-  )
   const completedWorkspaceTaskIds = useMemo(
     () =>
       Object.entries(workspaceExecutionStates)
@@ -308,8 +260,6 @@ export default function AIComposer() {
         .map(([taskId]) => taskId),
     [workspaceExecutionStates]
   )
-  const attachedNoteAttachmentCount =
-    effectiveContext?.explicitContextAttachments?.filter((attachment) => attachment.kind === 'note').length ?? 0
   const canRunWorkspaceAgent =
     hasWorkspaceExecutionTasks &&
     workspaceAgentSession?.status !== 'running' &&
@@ -412,96 +362,6 @@ export default function AIComposer() {
       }
     )
   }, [updateSessionHistory, workspaceExecution, workspaceExecutionStates, workspaceHistoryBinding])
-
-  useEffect(() => {
-    setWorkspaceNoteQuery('')
-    setWorkspaceNoteResults([])
-    setWorkspaceNoteLoading(false)
-    workspaceNoteRequestIdRef.current += 1
-  }, [composer.context?.tabId, composer.sourceSnapshot?.docText])
-
-  useEffect(() => {
-    const requestId = mentionRequestIdRef.current + 1
-    mentionRequestIdRef.current = requestId
-
-    if (deferredPromptMentions.mentions.length === 0) {
-      setMentionResolutions([])
-      setMentionLoading(false)
-      return
-    }
-
-    setMentionLoading(true)
-
-    void resolveAIPromptMentions({
-      mentions: deferredPromptMentions.mentions,
-      baseContext: composer.context,
-      sourceSnapshot: composer.sourceSnapshot,
-      tabs: openTabs,
-      rootPath,
-    })
-      .then((resolutions) => {
-        if (mentionRequestIdRef.current !== requestId) return
-        setMentionResolutions(resolutions)
-      })
-      .catch((error) => {
-        console.error('AI prompt mention resolution error:', error)
-        if (mentionRequestIdRef.current !== requestId) return
-        setMentionResolutions([])
-      })
-      .finally(() => {
-        if (mentionRequestIdRef.current === requestId) {
-          setMentionLoading(false)
-        }
-      })
-  }, [composer.context, composer.sourceSnapshot, deferredPromptMentions, openTabs, rootPath])
-
-  useEffect(() => {
-    const requestId = workspaceNoteRequestIdRef.current + 1
-    workspaceNoteRequestIdRef.current = requestId
-
-    if (!deferredWorkspaceNoteQuery) {
-      setWorkspaceNoteResults([])
-      setWorkspaceNoteLoading(false)
-      return
-    }
-
-    setWorkspaceNoteLoading(true)
-
-    void findWorkspaceDocumentReferences({
-      query: deferredWorkspaceNoteQuery,
-      tabs: openTabs,
-      rootPath,
-      limit: 6,
-      excludePaths: composer.context?.tabPath ? [composer.context.tabPath] : [],
-    })
-      .then((results) => {
-        if (workspaceNoteRequestIdRef.current !== requestId) return
-        setWorkspaceNoteResults(
-          results.filter((result) => {
-            if (result.tabId && result.tabId === composer.context?.tabId) return false
-            if (!result.content.trim()) return false
-            return !attachedNoteQueries.has(normalizeWorkspaceContextQuery(result.path ?? result.name))
-          })
-        )
-      })
-      .catch((error) => {
-        console.error('AI workspace note search error:', error)
-        if (workspaceNoteRequestIdRef.current !== requestId) return
-        setWorkspaceNoteResults([])
-      })
-      .finally(() => {
-        if (workspaceNoteRequestIdRef.current === requestId) {
-          setWorkspaceNoteLoading(false)
-        }
-      })
-  }, [
-    attachedNoteQueries,
-    composer.context?.tabId,
-    composer.context?.tabPath,
-    deferredWorkspaceNoteQuery,
-    openTabs,
-    rootPath,
-  ])
 
   useEffect(() => {
     if (desktopOnlyMode) {
@@ -815,77 +675,8 @@ export default function AIComposer() {
 
     setIntent(template.intent)
     setOutputTarget(nextOutputTarget)
-    setPrompt(buildPromptWithRetainedMentions(parsedPromptMentions.mentions, template.prompt))
+    setPrompt(template.prompt)
     setResultView('draft')
-  }
-
-  function insertMentionToken(kind: 'note' | 'heading' | 'search') {
-    const textarea = textareaRef.current
-    const token = kind === 'search' ? '@search()' : kind === 'note' ? '@note' : '@heading'
-
-    if (!textarea) {
-      setPrompt((composer.prompt ? `${composer.prompt} ` : '') + token)
-      return
-    }
-
-    const selectionStart = textarea.selectionStart ?? composer.prompt.length
-    const selectionEnd = textarea.selectionEnd ?? selectionStart
-    const prefixNeedsSpace =
-      selectionStart > 0 && !/\s/u.test(composer.prompt[selectionStart - 1] ?? '')
-    const suffixNeedsSpace =
-      selectionEnd < composer.prompt.length && !/\s/u.test(composer.prompt[selectionEnd] ?? '')
-
-    const insertText = `${prefixNeedsSpace ? ' ' : ''}${token}${suffixNeedsSpace ? ' ' : ''}`
-    const nextPrompt =
-      `${composer.prompt.slice(0, selectionStart)}${insertText}${composer.prompt.slice(selectionEnd)}`
-
-    setPrompt(nextPrompt)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      const cursorOffset = kind === 'search' ? insertText.indexOf(')') : insertText.length
-      const nextCursor = selectionStart + cursorOffset
-      textarea.setSelectionRange(nextCursor, nextCursor)
-    })
-  }
-
-  function insertNoteMention(query: string | null) {
-    const textarea = textareaRef.current
-    const token = query ? `@note(${query})` : '@note'
-
-    if (!textarea) {
-      setPrompt(joinPromptToken(composer.prompt, token))
-      return
-    }
-
-    const selectionStart = textarea.selectionStart ?? composer.prompt.length
-    const selectionEnd = textarea.selectionEnd ?? selectionStart
-    const prefixNeedsSpace =
-      selectionStart > 0 && !/\s/u.test(composer.prompt[selectionStart - 1] ?? '')
-    const suffixNeedsSpace =
-      selectionEnd < composer.prompt.length && !/\s/u.test(composer.prompt[selectionEnd] ?? '')
-
-    const insertText = `${prefixNeedsSpace ? ' ' : ''}${token}${suffixNeedsSpace ? ' ' : ''}`
-    const nextPrompt =
-      `${composer.prompt.slice(0, selectionStart)}${insertText}${composer.prompt.slice(selectionEnd)}`
-
-    setPrompt(nextPrompt)
-
-    requestAnimationFrame(() => {
-      textarea.focus()
-      const nextCursor = selectionStart + insertText.length
-      textarea.setSelectionRange(nextCursor, nextCursor)
-    })
-  }
-
-  function removePromptMention(mentionId: string) {
-    const mention = parsedPromptMentions.mentions.find((entry) => entry.id === mentionId)
-    if (!mention) return
-
-    const nextPrompt = normalizePromptAfterMentionEdit(
-      `${composer.prompt.slice(0, mention.index)}${composer.prompt.slice(mention.index + mention.raw.length)}`
-    )
-    setPrompt(nextPrompt)
   }
 
   function setWorkspaceProducedDraft(taskId: string, draft: AIWorkspaceExecutionProducedDraft) {
@@ -903,6 +694,11 @@ export default function AIComposer() {
       content: task.content,
       savedContent: '',
       isDirty: true,
+    })
+    primeAIUndoHistorySnapshot({
+      tabId,
+      beforeContent: '',
+      afterContent: task.content,
     })
 
     setProvenanceMarks(tabId, [
@@ -1015,6 +811,11 @@ export default function AIComposer() {
       : null
 
     if (directProducedDraft && directDraftTab) {
+      primeAIUndoHistorySnapshot({
+        tabId: directDraftTab.id,
+        beforeContent: directDraftTab.content,
+        afterContent: task.content,
+      })
       useEditorStore.getState().updateTabContent(directDraftTab.id, task.content)
       setProvenanceMarks(directDraftTab.id, [
         createAIProvenanceMark({
@@ -1130,6 +931,11 @@ export default function AIComposer() {
       return { success: false, message }
     }
 
+    primeAIUndoHistorySnapshot({
+      tabId: targetTab.id,
+      beforeContent: targetTab.content,
+      afterContent: task.content,
+    })
     useEditorStore.getState().updateTabContent(targetTab.id, task.content)
     setProvenanceMarks(targetTab.id, [
       createAIProvenanceMark({
@@ -1541,9 +1347,7 @@ export default function AIComposer() {
     disabled:
       target === 'replace-selection'
         ? !canReplaceSelection
-        : target === 'insert-under-heading'
-          ? !hasHeadingContext
-          : false,
+        : false,
     label: t(`ai.outputTarget.${target}`),
   }))
 
@@ -1826,244 +1630,6 @@ export default function AIComposer() {
                 }}
                 placeholder={t('ai.promptPlaceholder')}
               />
-              <section
-                data-ai-workspace-context="true"
-                className="grid gap-3 rounded-2xl border px-4 py-4"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
-                  background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
-                }}
-              >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
-                    {t('ai.workspaceContext.title')}
-                  </div>
-                  <p className="mt-1 text-[11px] leading-5" style={{ color: 'var(--text-secondary)' }}>
-                    {t('ai.workspaceContext.detail')}
-                  </p>
-                </div>
-                <span
-                  className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--border) 76%, transparent)',
-                    background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  {t('ai.workspaceContext.attachedCount', { count: noteMentions.length })}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  data-ai-attach-current-note="true"
-                  onClick={() => insertNoteMention(null)}
-                  disabled={currentNoteAttached}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                  style={{
-                    borderColor: currentNoteAttached
-                      ? 'color-mix(in srgb, var(--accent) 22%, var(--border))'
-                      : 'color-mix(in srgb, var(--border) 76%, transparent)',
-                    background: currentNoteAttached
-                      ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))'
-                      : 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                    color: currentNoteAttached ? 'var(--accent)' : 'var(--text-secondary)',
-                  }}
-                  title={t('ai.workspaceContext.attachCurrentNote')}
-                >
-                  <AppIcon name="file" size={12} />
-                  <span>{t('ai.workspaceContext.currentNote')}</span>
-                </button>
-
-                {openTabContextSuggestions.map((tab) => {
-                  const query = tab.path ?? tab.name
-                  const attached = attachedNoteQueries.has(normalizeWorkspaceContextQuery(query))
-
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      data-ai-attach-open-tab={tab.id}
-                      onClick={() => insertNoteMention(query)}
-                      disabled={attached}
-                      className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                      style={{
-                        borderColor: attached
-                          ? 'color-mix(in srgb, var(--accent) 22%, var(--border))'
-                          : 'color-mix(in srgb, var(--border) 76%, transparent)',
-                        background: attached
-                          ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))'
-                          : 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                        color: attached ? 'var(--accent)' : 'var(--text-secondary)',
-                      }}
-                      title={tab.path ?? tab.name}
-                    >
-                      <AppIcon name="file" size={12} />
-                      <span className="max-w-[160px] truncate">{tab.name}</span>
-                    </button>
-                  )
-                })}
-
-                <button
-                  type="button"
-                  data-ai-workspace-run-template="true"
-                  onClick={() => {
-                    if (workspaceRunTemplate) applyTemplate(workspaceRunTemplate)
-                  }}
-                  disabled={!workspaceRunTemplate || attachedNoteAttachmentCount === 0}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                  style={{
-                    borderColor:
-                      workspaceRunTemplate && attachedNoteAttachmentCount > 0
-                        ? 'color-mix(in srgb, var(--accent) 22%, var(--border))'
-                        : 'color-mix(in srgb, var(--border) 76%, transparent)',
-                    background:
-                      workspaceRunTemplate && attachedNoteAttachmentCount > 0
-                        ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))'
-                        : 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                    color:
-                      workspaceRunTemplate && attachedNoteAttachmentCount > 0
-                        ? 'var(--accent)'
-                        : 'var(--text-secondary)',
-                  }}
-                  title={t('ai.workspaceContext.runTemplate')}
-                >
-                  <AppIcon name="folderOpen" size={12} />
-                  <span>{t('ai.workspaceContext.runTemplate')}</span>
-                </button>
-              </div>
-
-              <p className="text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                {attachedNoteAttachmentCount > 0
-                  ? t('ai.workspaceContext.runHint')
-                  : t('ai.workspaceContext.runRequiresNotes')}
-              </p>
-
-              <label className="grid gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>
-                  {t('ai.workspaceContext.searchLabel')}
-                </span>
-                <input
-                  value={workspaceNoteQuery}
-                  onChange={(event) => setWorkspaceNoteQuery(event.target.value)}
-                  data-ai-note-search-input="true"
-                  className="rounded-xl border px-3 py-2 text-sm outline-none"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--border) 80%, transparent)',
-                    background: 'color-mix(in srgb, var(--bg-primary) 94%, transparent)',
-                    color: 'var(--text-primary)',
-                  }}
-                  placeholder={t('ai.workspaceContext.searchPlaceholder')}
-                />
-              </label>
-
-              {(workspaceNoteLoading || deferredWorkspaceNoteQuery || workspaceNoteResults.length > 0) && (
-                <div className="grid gap-2">
-                  {workspaceNoteLoading && (
-                    <p className="text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.workspaceContext.searching')}
-                    </p>
-                  )}
-
-                  {!workspaceNoteLoading && deferredWorkspaceNoteQuery && workspaceNoteResults.length === 0 && (
-                    <p className="text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.workspaceContext.noResults')}
-                    </p>
-                  )}
-
-                  {!workspaceNoteLoading &&
-                    workspaceNoteResults.map((result) => (
-                      <button
-                        key={`${result.source}:${result.path ?? result.tabId ?? result.name}`}
-                        type="button"
-                        data-ai-note-search-result={result.path ?? result.name}
-                        onClick={() => {
-                          insertNoteMention(result.path ?? result.name)
-                          setWorkspaceNoteQuery('')
-                        }}
-                        className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition-colors"
-                        style={{
-                          borderColor: 'color-mix(in srgb, var(--border) 76%, transparent)',
-                          background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                        }}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-                            {result.name}
-                          </span>
-                          <span className="mt-1 block truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                            {result.path ?? t('palette.unsaved')}
-                          </span>
-                        </span>
-                        <span
-                          className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                          style={{
-                            borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
-                            background: 'color-mix(in srgb, var(--bg-secondary) 76%, transparent)',
-                            color: 'var(--text-muted)',
-                          }}
-                        >
-                          {result.source === 'workspace' ? t('ai.workspaceContext.workspace') : t('ai.workspaceContext.openTab')}
-                        </span>
-                      </button>
-                    ))}
-                </div>
-              )}
-              </section>
-              <div className="grid gap-2">
-                <div className="flex flex-wrap gap-2">
-                  <AIMentionInsertButton
-                    kind="note"
-                    icon="file"
-                    label="@note"
-                    onClick={() => insertMentionToken('note')}
-                    hint={t('ai.mentions.noteAction')}
-                  />
-                  <AIMentionInsertButton
-                    kind="heading"
-                    icon="outline"
-                    label="@heading"
-                    onClick={() => insertMentionToken('heading')}
-                    hint={t('ai.mentions.headingAction')}
-                  />
-                  <AIMentionInsertButton
-                    kind="search"
-                    icon="search"
-                    label="@search()"
-                    onClick={() => insertMentionToken('search')}
-                    hint={t('ai.mentions.searchAction')}
-                  />
-                </div>
-                <p className="text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                  {t('ai.mentions.hint')}
-                </p>
-                {mentionLoading && (
-                  <div
-                    className="inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-[11px]"
-                    style={{
-                      borderColor: 'color-mix(in srgb, var(--border) 80%, transparent)',
-                      background: 'color-mix(in srgb, var(--bg-secondary) 76%, transparent)',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    <AppIcon name="sparkles" size={12} />
-                    {t('ai.mentions.resolving')}
-                  </div>
-                )}
-                {mentionResolutions.length > 0 && (
-                  <div className="grid gap-2 md:grid-cols-2">
-                    {mentionResolutions.map((resolution) => (
-                      <AIMentionContextCard
-                        key={resolution.mention.id}
-                        resolution={resolution}
-                        onRemove={() => removePromptMention(resolution.mention.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
             </label>
 
             <div className="mb-4 flex flex-wrap gap-2">
@@ -2539,10 +2105,6 @@ function getAITemplateIcon(templateId: AITemplateId): Parameters<typeof AppIcon>
       return 'edit'
     case 'newNote':
       return 'filePlus'
-    case 'workspaceRun':
-      return 'folderOpen'
-    case 'insertUnderHeading':
-      return 'outline'
     case 'translate':
       return 'globe'
     case 'rewrite':
@@ -2553,141 +2115,9 @@ function getAITemplateIcon(templateId: AITemplateId): Parameters<typeof AppIcon>
       return 'infoCircle'
     case 'generateBelow':
       return 'filePlus'
+    default:
+      return 'sparkles'
   }
-}
-
-function AIMentionInsertButton({
-  kind,
-  icon,
-  label,
-  hint,
-  onClick,
-}: {
-  kind: 'note' | 'heading' | 'search'
-  icon: Parameters<typeof AppIcon>[0]['name']
-  label: string
-  hint: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-ai-mention-insert={kind}
-      className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors"
-      style={{
-        borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
-        background: 'color-mix(in srgb, var(--bg-secondary) 76%, transparent)',
-        color: 'var(--text-secondary)',
-      }}
-      title={hint}
-    >
-      <AppIcon name={icon} size={12} />
-      <span className="font-medium">{label}</span>
-    </button>
-  )
-}
-
-function AIMentionContextCard({
-  resolution,
-  onRemove,
-}: {
-  resolution: AIPromptMentionResolution
-  onRemove?: () => void
-}) {
-  const { t } = useTranslation()
-  const isResolved = resolution.status === 'resolved' && !!resolution.attachment
-  const attachment = resolution.attachment
-  const icon =
-    resolution.mention.kind === 'note'
-      ? 'file'
-      : resolution.mention.kind === 'heading'
-        ? 'outline'
-        : 'search'
-
-  return (
-    <div
-      data-ai-mention-card={resolution.mention.id}
-      data-ai-mention-kind={resolution.mention.kind}
-      data-ai-mention-status={resolution.status}
-      className="rounded-2xl border px-3 py-3"
-      style={{
-        borderColor: isResolved
-          ? 'color-mix(in srgb, var(--accent) 20%, var(--border))'
-          : 'color-mix(in srgb, #dc2626 24%, var(--border))',
-        background: isResolved
-          ? 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)'
-          : 'color-mix(in srgb, #dc2626 6%, var(--bg-primary))',
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex items-start gap-2">
-          <span
-            className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-            style={{
-              background: isResolved
-                ? 'color-mix(in srgb, var(--accent) 12%, transparent)'
-                : 'color-mix(in srgb, #dc2626 12%, transparent)',
-              color: isResolved ? 'var(--accent)' : '#dc2626',
-            }}
-          >
-            <AppIcon name={icon} size={13} />
-          </span>
-          <div className="min-w-0">
-            <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {t(`ai.mentions.kind.${resolution.mention.kind}`)}
-            </div>
-            <div className="mt-0.5 break-words text-xs" style={{ color: 'var(--text-secondary)' }}>
-              {isResolved ? attachment?.label : formatMentionError(resolution, t)}
-            </div>
-          </div>
-        </div>
-
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
-          style={{
-            background: isResolved
-              ? 'color-mix(in srgb, #16a34a 12%, transparent)'
-              : 'color-mix(in srgb, #dc2626 12%, transparent)',
-            color: isResolved ? '#15803d' : '#b91c1c',
-          }}
-        >
-          <AppIcon name={isResolved ? 'checkCircle' : 'alertCircle'} size={11} />
-          {isResolved ? t('ai.mentions.attached') : t('ai.mentions.needsAttention')}
-        </span>
-      </div>
-
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          data-ai-mention-remove={resolution.mention.id}
-          className="mt-3 inline-flex w-fit cursor-pointer items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
-            background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-            color: 'var(--text-muted)',
-          }}
-        >
-          <AppIcon name="trash" size={11} />
-          {t('ai.workspaceContext.remove')}
-        </button>
-      )}
-
-      {isResolved && attachment && (
-        <>
-          <div className="mt-2 break-words text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-            {attachment.detail}
-          </div>
-          {attachment.truncated && (
-            <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: '#b45309' }}>
-              {t('ai.mentions.truncated')}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
 }
 
 function AIWorkspaceExecutionView({
@@ -4179,60 +3609,3 @@ function AIExplainView({
   )
 }
 
-function formatMentionError(
-  resolution: AIPromptMentionResolution,
-  t: (key: string, options?: Record<string, unknown>) => string
-): string {
-  switch (resolution.errorCode) {
-    case 'current-heading-unavailable':
-      return t('ai.mentions.error.currentHeadingUnavailable')
-    case 'note-not-found':
-      return t('ai.mentions.error.noteNotFound', {
-        query: resolution.mention.query ?? t('ai.mentions.currentNoteLabel'),
-      })
-    case 'heading-not-found':
-      return t('ai.mentions.error.headingNotFound', {
-        query: resolution.mention.query ?? t('ai.mentions.currentHeadingLabel'),
-      })
-    case 'search-empty-query':
-      return t('ai.mentions.error.searchEmptyQuery')
-    case 'search-no-results':
-      return t('ai.mentions.error.searchNoResults', {
-        query: resolution.mention.query ?? '',
-      })
-    default:
-      return t('ai.mentions.needsAttention')
-  }
-}
-
-function normalizeWorkspaceContextQuery(value: string | null): string {
-  return (value ?? '').trim().replace(/\s+/gu, ' ').toLowerCase()
-}
-
-function buildPromptWithRetainedMentions(
-  mentions: Array<{ raw: string }>,
-  prompt: string
-): string {
-  const retained = mentions.map((mention) => mention.raw.trim()).filter(Boolean).join(' ')
-  const normalizedPrompt = prompt.trim()
-
-  if (!retained) return normalizedPrompt
-  if (!normalizedPrompt) return retained
-  return `${retained}\n\n${normalizedPrompt}`
-}
-
-function joinPromptToken(prompt: string, token: string): string {
-  if (!prompt.trim()) return token
-  if (/\s$/u.test(prompt)) return `${prompt}${token}`
-  return `${prompt} ${token}`
-}
-
-function normalizePromptAfterMentionEdit(value: string): string {
-  return value
-    .replace(/[ \t]+\n/gu, '\n')
-    .replace(/\n[ \t]+/gu, '\n')
-    .replace(/[ \t]{2,}/gu, ' ')
-    .replace(/\s+([,.;!?])/gu, '$1')
-    .replace(/\n{3,}/gu, '\n\n')
-    .trim()
-}

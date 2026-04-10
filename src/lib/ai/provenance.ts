@@ -3,11 +3,14 @@ import {
   EditorView,
   type DecorationSet,
 } from '@codemirror/view'
+import { invertedEffects } from '@codemirror/commands'
 import {
+  EditorState,
   StateEffect,
   StateField,
   type ChangeDesc,
   type Extension,
+  type Transaction,
 } from '@codemirror/state'
 import type { AIProvenanceMark } from './types.ts'
 import { buildSortedRangeSet } from '../../components/Editor/sortedRangeSet.ts'
@@ -67,11 +70,18 @@ const aiProvenanceField = StateField.define<AIProvenanceMark[]>({
 })
 
 export function createAIProvenanceExtensions(): Extension[] {
-  return [aiProvenanceField]
+  return [
+    aiProvenanceField,
+    invertedEffects.of((transaction) => invertAIProvenanceEffects(transaction)),
+  ]
+}
+
+export function readAIProvenanceMarksFromState(state: EditorState): AIProvenanceMark[] {
+  return state.field(aiProvenanceField, false) ?? []
 }
 
 export function readAIProvenanceMarks(view: EditorView): AIProvenanceMark[] {
-  return view.state.field(aiProvenanceField, false) ?? []
+  return readAIProvenanceMarksFromState(view.state)
 }
 
 export function setAIProvenanceMarks(view: EditorView, marks: AIProvenanceMark[]): void {
@@ -156,4 +166,23 @@ function mapAIProvenanceMarks(
   }
 
   return nextMarks
+}
+
+function invertAIProvenanceEffects(transaction: Transaction): readonly StateEffect<AIProvenanceMark[]>[] {
+  let shouldRestore = false
+
+  for (const effect of transaction.effects) {
+    if (
+      effect.is(setAIProvenanceMarksEffect) ||
+      effect.is(addAIProvenanceMarkEffect) ||
+      effect.is(clearAIProvenanceMarksEffect)
+    ) {
+      shouldRestore = true
+      break
+    }
+  }
+
+  return shouldRestore
+    ? [setAIProvenanceMarksEffect.of(readAIProvenanceMarksFromState(transaction.startState))]
+    : []
 }

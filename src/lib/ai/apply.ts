@@ -1,3 +1,4 @@
+import { resolveCurrentBlockRange } from './context.ts'
 import type { AIApplySnapshot, AIOutputTarget } from './types.ts'
 
 export interface AIResolvedApplyChange {
@@ -27,17 +28,10 @@ export function resolveAIApplyChange(
   }
 
   if (outputTarget === 'insert-below') {
+    const insertBelowOffset = resolveInsertBelowOffset(snapshot, currentDoc)
     return {
-      range: { from: snapshot.blockTo, to: snapshot.blockTo },
-      text: formatInsertBelowText(currentDoc, snapshot.blockTo, text),
-    }
-  }
-
-  if (outputTarget === 'insert-under-heading') {
-    const insertionPoint = snapshot.headingTo ?? snapshot.blockTo
-    return {
-      range: { from: insertionPoint, to: insertionPoint },
-      text: formatInsertBelowText(currentDoc, insertionPoint, text),
+      range: { from: insertBelowOffset, to: insertBelowOffset },
+      text: formatInsertBelowText(currentDoc, insertBelowOffset, text),
     }
   }
 
@@ -62,4 +56,13 @@ export function formatInsertBelowText(currentDoc: string, blockTo: number, text:
   const suffix = afterHasBlankGap ? '' : afterStartsWithNewline ? '\n' : '\n\n'
 
   return `${prefix}${normalized}${suffix}`
+}
+
+function resolveInsertBelowOffset(snapshot: AIApplySnapshot, currentDoc: string): number {
+  if (snapshot.selectionFrom === snapshot.selectionTo) return snapshot.blockTo
+
+  const lastSelectedOffset = Math.max(snapshot.selectionFrom, snapshot.selectionTo - 1)
+  const selectionTailBlock = resolveCurrentBlockRange(currentDoc, lastSelectedOffset)
+
+  return selectionTailBlock?.to ?? snapshot.selectionTo
 }
