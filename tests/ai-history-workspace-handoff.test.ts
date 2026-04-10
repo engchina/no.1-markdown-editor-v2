@@ -144,3 +144,85 @@ test('buildAIHistoryWorkspaceRunPrompt prepends note mentions and preserves the 
   assert.match(prompt, /Source retrieval query: "release owners"\./)
   assert.match(prompt, /Return a coordinated workspace execution plan\./)
 })
+
+test('collectAIHistoryWorkspaceHandoffTargets prefers the duplicate history entry with stronger workspace execution provenance', () => {
+  const targets = collectAIHistoryWorkspaceHandoffTargets(
+    [
+      {
+        candidate: {
+          id: 'release-plan-plain',
+          documentKey: 'path:notes/release-plan.md',
+          threadId: 'thread-plain',
+          pinned: false,
+          source: 'shortcut',
+          intent: 'ask',
+          scope: 'document',
+          outputTarget: 'chat-only',
+          prompt: 'Ask about release plan',
+          resultPreview: null,
+          errorMessage: null,
+          status: 'done',
+          documentName: 'release-plan.md',
+          attachmentCount: 0,
+          createdAt: NOW - 2_000,
+          updatedAt: NOW - 1_500,
+        },
+        score: 80,
+        matchKind: 'lexical',
+        matchedTerms: [],
+      },
+      {
+        candidate: {
+          id: 'release-plan-executed',
+          documentKey: 'path:notes/release-plan.md',
+          threadId: 'thread-executed',
+          pinned: false,
+          source: 'command-palette',
+          intent: 'generate',
+          scope: 'document',
+          outputTarget: 'chat-only',
+          prompt: 'Coordinate release plan',
+          resultPreview: 'Executed workspace run',
+          errorMessage: null,
+          status: 'done',
+          documentName: 'Release Plan Executed',
+          attachmentCount: 2,
+          workspaceExecution: {
+            summary: '- Release planning executed',
+            taskCount: 2,
+            completedCount: 2,
+            failedCount: 0,
+            waitingCount: 0,
+            updatedAt: NOW - 1_000,
+            tasks: [
+              {
+                taskId: 'task-release',
+                action: 'update-note',
+                title: 'Release Plan',
+                target: 'release-plan.md',
+                phase: 'Planning',
+                status: 'done',
+                message: 'Applied release plan.',
+                completionSource: 'agent',
+                completionAt: NOW - 1_000,
+                originRunId: 2,
+              },
+            ],
+          },
+          createdAt: NOW - 1_200,
+          updatedAt: NOW - 900,
+        },
+        score: 80,
+        matchKind: 'lexical',
+        matchedTerms: [],
+      },
+    ],
+    {
+      currentDocumentKey: null,
+      limit: 4,
+    }
+  )
+
+  assert.equal(targets[0]?.label, 'Release Plan Executed')
+  assert.equal(targets[0]?.detail, 'notes/release-plan.md')
+})

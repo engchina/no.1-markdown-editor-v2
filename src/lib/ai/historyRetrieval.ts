@@ -94,6 +94,10 @@ const SEMANTIC_GROUPS = [
     id: 'note',
     terms: ['note', 'notes', 'doc', 'docs', 'document', 'documents', '笔记', 'ノート', '文書'],
   },
+  {
+    id: 'workspace',
+    terms: ['workspace', 'workflow', 'phase', 'execution', 'orchestration', 'handoff', '工作区', '工作流', '阶段', '执行', 'ワークスペース', 'ワークフロー', 'フェーズ', '実行'],
+  },
 ] as const
 
 const TERM_TO_CONCEPT = new Map<string, string>(
@@ -109,11 +113,13 @@ interface HistorySemanticIndex {
   documentText: string
   documentKeyText: string
   metaText: string
+  workspaceText: string
   promptTerms: Set<string>
   resultTerms: Set<string>
   errorTerms: Set<string>
   documentTerms: Set<string>
   metaTerms: Set<string>
+  workspaceTerms: Set<string>
   concepts: Set<string>
   ngrams: Set<string>
   corpusTerms: Set<string>
@@ -146,6 +152,10 @@ export function retrieveAIHistoryCandidates<T extends AIHistoryRetrievalCandidat
     .sort((left, right) => {
       if (left.score !== right.score) return right.score - left.score
       if (left.candidate.pinned !== right.candidate.pinned) return left.candidate.pinned ? -1 : 1
+      const workspaceDelta =
+        getAIHistoryWorkspaceExecutionStrength(right.candidate) -
+        getAIHistoryWorkspaceExecutionStrength(left.candidate)
+      if (workspaceDelta !== 0) return workspaceDelta
       return right.candidate.updatedAt - left.candidate.updatedAt
     })
 }
@@ -164,8 +174,26 @@ export function tokenizeHistoryQuery(query: string): string[] {
 export function sortHistoryCandidates<T extends AIHistoryRetrievalCandidate>(candidates: readonly T[]): T[] {
   return [...candidates].sort((left, right) => {
     if (left.pinned !== right.pinned) return left.pinned ? -1 : 1
+    const workspaceDelta = getAIHistoryWorkspaceExecutionStrength(right) - getAIHistoryWorkspaceExecutionStrength(left)
+    if (workspaceDelta !== 0) return workspaceDelta
     return right.updatedAt - left.updatedAt
   })
+}
+
+export function getAIHistoryWorkspaceExecutionStrength(
+  candidate: Pick<AIHistoryRetrievalCandidate, 'workspaceExecution'>
+) {
+  const record = candidate.workspaceExecution
+  if (!record || record.taskCount <= 0) return 0
+
+  const completedScore = Math.min(record.completedCount, 6) * 1.4
+  const failedScore = Math.min(record.failedCount, 3) * 0.7
+  const waitingScore = Math.min(record.waitingCount, 3) * 0.35
+  const activeTaskCount = record.tasks.filter((task) => task.status !== 'idle').length
+  const activityScore = Math.min(activeTaskCount, 5) * 0.4
+  const summaryScore = record.summary?.trim() ? 0.8 : 0
+
+  return completedScore + failedScore + waitingScore + activityScore + summaryScore
 }
 
 function scoreHistoryCandidate<T extends AIHistoryRetrievalCandidate>(
@@ -203,6 +231,8 @@ function scoreHistoryCandidate<T extends AIHistoryRetrievalCandidate>(
 
     matched ||= addWeightedTermMatch(term, index.metaTerms, 4, idf, (delta) => { semanticScore += delta })
     matched ||= addWeightedSubstringMatch(term, index.documentKeyText, 1.8, idf, (delta) => { semanticScore += delta })
+    matched ||= addWeightedTermMatch(term, index.workspaceTerms, 5, idf, (delta) => { semanticScore += delta })
+    matched ||= addWeightedSubstringMatch(term, index.workspaceText, 2.4, idf, (delta) => { semanticScore += delta })
 
     if (matched) matchedTerms.add(term)
   }
@@ -224,6 +254,11 @@ function scoreHistoryCandidate<T extends AIHistoryRetrievalCandidate>(
       ? (matchedTerms.size + matchedConcepts.size) / coverageDenominator
       : 0
   semanticScore += coverageRatio * 8
+
+  const workspaceExecutionStrength = getAIHistoryWorkspaceExecutionStrength(candidate)
+  if ((lexicalScore > 0 || semanticScore > 0 || fuzzyScore > 0) && workspaceExecutionStrength > 0) {
+    semanticScore += workspaceExecutionStrength
+  }
 
   const recencyHours = Math.max(0, (Date.now() - candidate.updatedAt) / (1000 * 60 * 60))
   const recencyScore = Math.max(0, 4 - recencyHours / 24)
@@ -273,6 +308,7 @@ function buildHistorySemanticIndex(candidate: AIHistoryRetrievalCandidate): Hist
   const errorText = normalizeText(candidate.errorMessage ?? '')
   const documentText = normalizeText(candidate.documentName)
   const documentKeyText = normalizeText(candidate.documentKey)
+  const workspaceText = normalizeText(buildHistoryWorkspaceExecutionText(candidate))
   const metaText = normalizeText([
     candidate.intent,
     candidate.outputTarget.replace(/-/g, ' '),
@@ -285,15 +321,17 @@ function buildHistorySemanticIndex(candidate: AIHistoryRetrievalCandidate): Hist
   const errorTerms = collectNormalizedTerms(errorText)
   const documentTerms = collectNormalizedTerms(documentText)
   const metaTerms = collectNormalizedTerms(metaText)
+  const workspaceTerms = collectNormalizedTerms(workspaceText)
   const corpusTerms = new Set([
     ...promptTerms,
     ...resultTerms,
     ...errorTerms,
     ...documentTerms,
     ...metaTerms,
+    ...workspaceTerms,
   ])
   const concepts = collectSemanticConcepts(corpusTerms)
-  const ngrams = createTextNgrams([promptText, resultText, errorText, documentText, metaText].join(' '))
+  const ngrams = createTextNgrams([promptText, resultText, errorText, documentText, metaText, workspaceText].join(' '))
 
   return {
     promptText,
@@ -302,15 +340,42 @@ function buildHistorySemanticIndex(candidate: AIHistoryRetrievalCandidate): Hist
     documentText,
     documentKeyText,
     metaText,
+    workspaceText,
     promptTerms,
     resultTerms,
     errorTerms,
     documentTerms,
     metaTerms,
+    workspaceTerms,
     concepts,
     ngrams,
     corpusTerms,
   }
+}
+
+function buildHistoryWorkspaceExecutionText(candidate: Pick<AIHistoryRetrievalCandidate, 'workspaceExecution'>) {
+  const record = candidate.workspaceExecution
+  if (!record) return ''
+
+  const taskParts = record.tasks.flatMap((task) => [
+    task.title,
+    task.target,
+    task.phase ?? '',
+    task.action.replace(/-/gu, ' '),
+    task.status,
+    task.message ?? '',
+    task.completionSource ?? '',
+    typeof task.originRunId === 'number' ? `run ${task.originRunId}` : '',
+  ])
+
+  return [
+    record.summary ?? '',
+    `${record.taskCount} tasks`,
+    `${record.completedCount} completed`,
+    `${record.failedCount} failed`,
+    `${record.waitingCount} waiting`,
+    ...taskParts,
+  ].join(' ')
 }
 
 function buildDocumentFrequencies(indexes: readonly HistorySemanticIndex[]) {

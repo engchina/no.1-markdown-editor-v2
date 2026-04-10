@@ -18,6 +18,7 @@ import { buildExternalPreviewImageKey, rewritePreviewHtmlExternalImages } from '
 import { getPreviewExternalLink } from '../../lib/previewLinks'
 import { loadExternalPreviewImage } from '../../lib/previewRemoteImage'
 import { wasDynamicImportRecoveryTriggered } from '../../lib/vitePreloadRecovery'
+import { resolveActiveHeadingId, updateVisibleHeadingIds } from '../../lib/previewScrollSpy'
 import { useMarkdown } from '../../hooks/useMarkdown'
 import { useActiveTab, useEditorStore } from '../../store/editor'
 
@@ -48,13 +49,14 @@ export default function MarkdownPreview() {
         },
         previewOrigin,
         {
-          bridgeAllExternalImages: isTauri,
+          enableDirectExternalImageFallback: isTauri,
           resolvedImages: resolvedExternalImages,
         }
       ),
     [documentPath, html, i18n.language, isTauri, previewOrigin, resolvedExternalImages, resolvedLocalImages, t]
   )
   const previewRef = useRef<HTMLDivElement>(null)
+  const pendingExternalFallbacksRef = useRef(new Set<string>())
   const [pendingMermaidCount, setPendingMermaidCount] = useState(0)
   const [renderingAll, setRenderingAll] = useState(false)
 
@@ -195,6 +197,40 @@ export default function MarkdownPreview() {
       })
   }
 
+  const activateExternalImageFallback = useCallback((image: HTMLImageElement) => {
+    const externalSource = image.dataset.externalFallbackSrc
+    if (!externalSource) return
+
+    const key = buildExternalPreviewImageKey(externalSource)
+    if (pendingExternalFallbacksRef.current.has(key)) return
+
+    pendingExternalFallbacksRef.current.add(key)
+    image.dataset.externalFallbackState = 'loading'
+
+    void loadExternalPreviewImage(externalSource)
+      .then((resolvedSource) => {
+        pendingExternalFallbacksRef.current.delete(key)
+
+        if (!image.isConnected) return
+
+        if (!resolvedSource) {
+          image.dataset.externalFallbackState = 'failed'
+          return
+        }
+
+        image.dataset.externalFallbackState = 'bridged'
+        setResolvedExternalImages((current) =>
+          current[key] === resolvedSource ? current : { ...current, [key]: resolvedSource }
+        )
+      })
+      .catch(() => {
+        pendingExternalFallbacksRef.current.delete(key)
+        if (image.isConnected) {
+          image.dataset.externalFallbackState = 'failed'
+        }
+      })
+  }, [])
+
   useEffect(() => {
     const preview = previewRef.current
     if (!preview) return
@@ -318,6 +354,26 @@ export default function MarkdownPreview() {
   }, [isTauri, previewHtml, resolvedExternalImages])
 
   useEffect(() => {
+    if (!isTauri) return
+
+    const preview = previewRef.current
+    if (!preview) return
+
+    const onImageError = (event: Event) => {
+      const image = event.target as HTMLImageElement | null
+      if (!image || image.tagName !== 'IMG') return
+      if (image.dataset.externalSrc) return
+      if (!image.dataset.externalFallbackSrc) return
+      if (image.dataset.externalFallbackState === 'loading') return
+
+      activateExternalImageFallback(image)
+    }
+
+    preview.addEventListener('error', onImageError, true)
+    return () => preview.removeEventListener('error', onImageError, true)
+  }, [activateExternalImageFallback, isTauri, previewHtml])
+
+  useEffect(() => {
     const preview = previewRef.current
     if (!preview) return
 
@@ -375,17 +431,25 @@ export default function MarkdownPreview() {
     const preview = previewRef.current
     if (!preview) return
 
-    const headings = Array.from(preview.querySelectorAll('h1,h2,h3,h4,h5,h6'))
+    const headings = Array.from(preview.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6'))
     if (headings.length === 0) return
 
+    const orderedHeadingIds = headings
+      .map((heading) => heading.id)
+      .filter((id) => id.length > 0)
+    const visibleHeadingIds = new Set<string>()
     const observer = new IntersectionObserver(
       (entries) => {
-        const visibleEntries = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        updateVisibleHeadingIds(
+          visibleHeadingIds,
+          entries.map((entry) => ({
+            id: (entry.target as HTMLElement).id,
+            isIntersecting: entry.isIntersecting,
+          }))
+        )
 
-        if (visibleEntries.length === 0) return
-        const id = (visibleEntries[0].target as HTMLElement).id
+        const id = resolveActiveHeadingId(orderedHeadingIds, visibleHeadingIds)
+        if (!id) return
         document.dispatchEvent(new CustomEvent('preview:activeHeading', { detail: id }))
       },
       { root: preview, rootMargin: '0px 0px -60% 0px', threshold: 0 }

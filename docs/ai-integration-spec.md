@@ -482,6 +482,10 @@ Phase order is also validated explicitly now: if a task depends on another task 
 
 When a user manually completes or fixes part of a plan before rerunning the agent, the current orchestration layer now resumes from already completed tasks instead of clearing the whole execution state. That keeps the editor-first recovery loop incremental: unblock the stalled task manually, then continue the remaining run.
 
+Completed-task provenance is now surfaced explicitly inside the current orchestration UI. Task cards and resumed agent logs distinguish between manual applies, draft-open completions, and work completed by the agent, while the compact summary metrics still aggregate into `By Agent / Manual`. That keeps resumed runs explainable without turning the feature into a separate workflow console.
+
+History retrieval and workspace handoff now also consider these workspace execution signals. When AI history contains similar prompt text, runs that actually executed coordinated workspace tasks can rank ahead of weaker passive runs, and duplicate handoff candidates from the same document now prefer the stronger executed record.
+
 ## Things Most Likely To Be Missed
 
 - Thread identity for unsaved tabs.

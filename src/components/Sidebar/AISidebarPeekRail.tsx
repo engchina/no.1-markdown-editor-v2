@@ -12,6 +12,10 @@ import {
   matchesAIHistorySavedViewStatusFilter,
   resolveAIHistorySavedViewProviderRerankBudget,
 } from '../../lib/ai/historySavedViewPreset.ts'
+import {
+  matchesAIHistoryWorkspaceFacet,
+  type AIHistoryWorkspaceFacet,
+} from '../../lib/ai/historyWorkspaceFacet.ts'
 import { dispatchEditorAIOpen } from '../../lib/ai/events.ts'
 import {
   buildAIHistoryArchiveFileName,
@@ -47,6 +51,8 @@ import type {
   AIHistorySavedViewAutomationMode,
   AIHistorySavedViewRetrievalPreset,
   AIHistorySavedViewStatusFilter,
+  AIWorkspaceExecutionHistoryRecord,
+  AIWorkspaceExecutionHistoryTaskRecord,
 } from '../../lib/ai/types.ts'
 import { pushErrorNotice, pushSuccessNotice } from '../../lib/notices'
 import { formatPrimaryShortcut } from '../../lib/platform.ts'
@@ -111,6 +117,8 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
     useState<AIHistorySavedViewAutomationMode>('manual')
   const [historyStatusFilter, setHistoryStatusFilter] =
     useState<AIHistorySavedViewStatusFilter>('all')
+  const [historyWorkspaceFacet, setHistoryWorkspaceFacet] =
+    useState<AIHistoryWorkspaceFacet>('all')
   const [historyPinnedOnly, setHistoryPinnedOnly] = useState(false)
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null)
   const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null)
@@ -183,9 +191,10 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
       historyExplorerBaseCandidates.filter(
         (entry) =>
           matchesAIHistorySavedViewStatusFilter(entry.status, historyStatusFilter) &&
+          matchesAIHistoryWorkspaceFacet(entry, historyWorkspaceFacet) &&
           (!historyPinnedOnly || entry.pinned)
       ),
-    [historyExplorerBaseCandidates, historyPinnedOnly, historyStatusFilter]
+    [historyExplorerBaseCandidates, historyPinnedOnly, historyStatusFilter, historyWorkspaceFacet]
   )
   const effectiveProviderRerankEnabled = resolveAIHistoryCollectionProviderRerankEnabled(
     aiHistoryProviderRerankEnabled,
@@ -420,7 +429,7 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
   }
 
   function handleCreateCollection() {
-    const entryRefs = historyExplorerMatches.map((match) => ({
+    const entryRefs = displayedHistoryMatches.map((match) => ({
       documentKey: match.candidate.documentKey,
       entryId: match.candidate.id,
     }))
@@ -744,6 +753,7 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
   function clearExplorerFilters() {
     setHistoryQuery('')
     setHistoryStatusFilter('all')
+    setHistoryWorkspaceFacet('all')
     setHistoryPinnedOnly(false)
     setSavedViewBudgetOverrideInput('inherit')
     setSavedViewAutomationModeInput('manual')
@@ -1085,7 +1095,7 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                     {t('ai.sidebar.collectionsDetail')}
                   </p>
                 </div>
-                {(activeCollectionId || activeSavedViewId || historyQuery.trim() || historyStatusFilter !== 'all' || historyPinnedOnly) && (
+                {(activeCollectionId || activeSavedViewId || historyQuery.trim() || historyStatusFilter !== 'all' || historyWorkspaceFacet !== 'all' || historyPinnedOnly) && (
                   <button
                     type="button"
                     data-ai-sidebar-history-reset-view="true"
@@ -1126,7 +1136,7 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                       background: 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))',
                       color: 'var(--text-primary)',
                     }}
-                    disabled={collectionNameInput.trim().length === 0 || historyExplorerMatches.length === 0}
+                    disabled={collectionNameInput.trim().length === 0 || displayedHistoryMatches.length === 0}
                   >
                     {t('ai.sidebar.collectionCreate')}
                   </button>
@@ -1869,7 +1879,7 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                 />
               </label>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <label className="grid gap-1">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
                     {t('ai.sidebar.historyFilterStatus')}
@@ -1893,6 +1903,30 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                     <option value="error">{t('ai.sidebar.historyFilterStatusOption.error')}</option>
                     <option value="canceled">{t('ai.sidebar.historyFilterStatusOption.canceled')}</option>
                     <option value="streaming">{t('ai.sidebar.historyFilterStatusOption.streaming')}</option>
+                  </select>
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.sidebar.historyFilterWorkspace')}
+                  </span>
+                  <select
+                    value={historyWorkspaceFacet}
+                    onChange={(event) => {
+                      setHistoryWorkspaceFacet(event.target.value as AIHistoryWorkspaceFacet)
+                      setActiveSavedViewId(null)
+                    }}
+                    data-ai-sidebar-history-workspace-filter="true"
+                    className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
+                    style={{
+                      borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
+                      background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <option value="all">{t('ai.sidebar.historyFilterWorkspaceOption.all')}</option>
+                    <option value="workspace">{t('ai.sidebar.historyFilterWorkspaceOption.workspace')}</option>
+                    <option value="workspace-completed">{t('ai.sidebar.historyFilterWorkspaceOption.workspaceCompleted')}</option>
+                    <option value="workspace-attention">{t('ai.sidebar.historyFilterWorkspaceOption.workspaceAttention')}</option>
                   </select>
                 </label>
                 <div className="flex items-end">
@@ -2805,6 +2839,12 @@ function SessionHistoryCard({
   const sourceLabel = getAISidebarSourceLabel(entry.source, t)
   const hasResult = !!entry.resultPreview?.trim()
   const hasError = !!entry.errorMessage?.trim()
+  const workspaceExecution = entry.workspaceExecution ?? null
+  const workspaceTasksWithActivity = workspaceExecution
+    ? workspaceExecution.tasks.filter((task) => task.status !== 'idle')
+    : []
+  const visibleWorkspaceTasks = workspaceTasksWithActivity.slice(0, 4)
+  const hiddenWorkspaceTaskCount = Math.max(0, workspaceTasksWithActivity.length - visibleWorkspaceTasks.length)
   const semanticLabel =
     retrievalMatch?.matchKind === 'provider'
       ? t('ai.sidebar.historyMatchProvider')
@@ -2916,6 +2956,89 @@ function SessionHistoryCard({
         </div>
       )}
 
+      {workspaceExecution && (
+        <div
+          data-ai-sidebar-session-workspace={entry.id}
+          className="mt-3 rounded-[20px] border px-4 py-4"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
+            background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
+          }}
+        >
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+            {t('ai.sidebar.historyWorkspaceExecutionTitle')}
+          </div>
+          <div className="mt-1 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
+            {formatHistoryWorkspaceExecutionSummary(workspaceExecution, t)}
+          </div>
+
+          {visibleWorkspaceTasks.length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              {visibleWorkspaceTasks.map((task) => {
+                const status = getHistoryWorkspaceExecutionStatusMeta(task.status, t)
+                return (
+                  <div
+                    key={`${entry.id}:${task.taskId}`}
+                    data-ai-sidebar-session-workspace-task={task.taskId}
+                    className="rounded-[18px] border px-3 py-3"
+                    style={{
+                      borderColor: 'color-mix(in srgb, var(--border) 74%, transparent)',
+                      background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          {task.title}
+                        </div>
+                        <div className="mt-1 break-words text-[11px] leading-4" style={{ color: 'var(--text-muted)' }}>
+                          {formatHistoryWorkspaceTaskDescriptor(task, t)}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        {task.completionSource && (
+                          <PeekPill label={t(`ai.workspaceExecution.completionSource.${task.completionSource}`)} />
+                        )}
+                        <span
+                          className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                          style={{
+                            borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
+                            background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
+                            color: status.accent,
+                          }}
+                        >
+                          {status.label}
+                        </span>
+                      </div>
+                    </div>
+                    {task.message && (
+                      <div className="mt-2 text-[11px] leading-5" style={{ color: 'var(--text-secondary)' }}>
+                        {truncateSidebarCopy(task.message, 180)}
+                      </div>
+                    )}
+                    {(task.completionAt || typeof task.originRunId === 'number') && (
+                      <div className="mt-2 text-[10px] leading-5" style={{ color: 'var(--text-muted)' }}>
+                        {formatHistoryWorkspaceTaskMeta(task, locale, t)}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
+              {t('ai.sidebar.historyWorkspaceExecutionNoActivity')}
+            </div>
+          )}
+
+          {hiddenWorkspaceTaskCount > 0 && (
+            <div className="mt-2 text-[10px] leading-5" style={{ color: 'var(--text-muted)' }}>
+              {t('ai.sidebar.historyWorkspaceExecutionMore', { count: hiddenWorkspaceTaskCount })}
+            </div>
+          )}
+        </div>
+      )}
+
       {entry.status === 'canceled' && !hasResult && !hasError && (
         <p className="mt-3 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>
           {t('ai.sidebar.historyCanceledDetail')}
@@ -3004,6 +3127,76 @@ function formatSessionTimestamp(value: number, locale: string) {
     }).format(value)
   } catch {
     return new Date(value).toLocaleString()
+  }
+}
+
+function formatHistoryWorkspaceExecutionSummary(
+  record: AIWorkspaceExecutionHistoryRecord,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
+  return t('ai.sidebar.historyWorkspaceExecutionSummary', {
+    total: record.taskCount,
+    completed: record.completedCount,
+    failed: record.failedCount,
+    waiting: record.waitingCount,
+  })
+}
+
+function formatHistoryWorkspaceTaskDescriptor(
+  task: AIWorkspaceExecutionHistoryTaskRecord,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
+  const parts = [
+    task.phase,
+    task.action === 'create-note'
+      ? t('ai.workspaceExecution.actionCreate')
+      : t('ai.workspaceExecution.actionUpdate'),
+    task.target,
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0)
+
+  return parts.join(' · ')
+}
+
+function formatHistoryWorkspaceTaskMeta(
+  task: AIWorkspaceExecutionHistoryTaskRecord,
+  locale: string,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
+  const parts: string[] = []
+
+  if (typeof task.completionAt === 'number') {
+    parts.push(
+      t('ai.workspaceExecution.completionAt', {
+        time: formatSessionTimestamp(task.completionAt, locale),
+      })
+    )
+  }
+
+  if (typeof task.originRunId === 'number') {
+    parts.push(t('ai.workspaceExecution.originRun', { runId: task.originRunId }))
+  }
+
+  return parts.join(' · ')
+}
+
+function getHistoryWorkspaceExecutionStatusMeta(
+  status: AIWorkspaceExecutionHistoryTaskRecord['status'],
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
+  switch (status) {
+    case 'waiting':
+      return { label: t('ai.workspaceExecution.statusWaiting'), accent: '#2563eb' }
+    case 'running':
+      return { label: t('ai.workspaceExecution.statusRunning'), accent: 'var(--accent)' }
+    case 'done':
+      return { label: t('ai.workspaceExecution.statusDone'), accent: '#15803d' }
+    case 'canceled':
+      return { label: t('ai.workspaceExecution.statusCanceled'), accent: '#b45309' }
+    case 'error':
+      return { label: t('ai.workspaceExecution.statusError'), accent: '#b91c1c' }
+    case 'idle':
+    default:
+      return { label: t('ai.workspaceExecution.statusReady'), accent: 'var(--text-muted)' }
   }
 }
 

@@ -147,7 +147,7 @@ function OutlinePanel({ headings }: { headings: Heading[] }) {
       {headings.map((h, i) => {
         const isActive = activeId === h.id
         return (
-          <li key={i}>
+          <li key={h.id || i}>
             <button
               type="button"
               className="flex w-full items-center rounded-lg px-2 py-1 text-left text-xs transition-colors"
@@ -160,6 +160,8 @@ function OutlinePanel({ headings }: { headings: Heading[] }) {
               }}
               aria-current={isActive ? 'location' : undefined}
               onClick={() => {
+                setActiveId(h.id)
+
                 if (activeTab && viewMode !== 'preview') {
                   setPendingNavigation({
                     tabId: activeTab.id,

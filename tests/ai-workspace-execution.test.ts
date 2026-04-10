@@ -158,7 +158,13 @@ test('buildAIWorkspaceExecutionAgentResumeState preserves done tasks and resets 
       },
     ],
     taskStates: {
-      'done-task': { status: 'done', message: 'Applied earlier' },
+      'done-task': {
+        status: 'done',
+        message: 'Applied earlier',
+        completionSource: 'manual-apply',
+        completionAt: 1700000000000,
+        originRunId: null,
+      },
       'waiting-task': { status: 'waiting', message: 'Waiting on prerequisites' },
       'error-task': { status: 'error', message: 'Need retry' },
     },
@@ -166,7 +172,13 @@ test('buildAIWorkspaceExecutionAgentResumeState preserves done tasks and resets 
 
   assert.deepEqual(resumeState.completedTaskIds, ['done-task'])
   assert.deepEqual(resumeState.taskStates, {
-    'done-task': { status: 'done', message: 'Applied earlier' },
+    'done-task': {
+      status: 'done',
+      message: 'Applied earlier',
+      completionSource: 'manual-apply',
+      completionAt: 1700000000000,
+      originRunId: null,
+    },
     'waiting-task': { status: 'idle' },
     'error-task': { status: 'idle' },
   })

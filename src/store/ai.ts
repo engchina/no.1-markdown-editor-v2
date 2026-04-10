@@ -28,6 +28,9 @@ import type {
   AIProvenanceMark,
   AIRequestState,
   AIScope,
+  AIWorkspaceExecutionHistoryRecord,
+  AIWorkspaceExecutionHistoryTaskCompletionSource,
+  AIWorkspaceExecutionHistoryTaskStatus,
 } from '../lib/ai/types.ts'
 
 interface AIStoreState {
@@ -81,7 +84,12 @@ interface AIStoreState {
     tabId: string,
     tabPath: string | null,
     entryId: string,
-    patch: Partial<Pick<AIDocumentSessionHistoryEntry, 'status' | 'resultPreview' | 'errorMessage' | 'updatedAt' | 'pinned'>>
+    patch: Partial<
+      Pick<
+        AIDocumentSessionHistoryEntry,
+        'status' | 'resultPreview' | 'errorMessage' | 'updatedAt' | 'pinned' | 'workspaceExecution'
+      >
+    >
   ) => void
   getSessionHistory: (tabId: string, tabPath: string | null) => AIDocumentSessionHistoryEntry[]
   toggleSessionHistoryPin: (tabId: string, tabPath: string | null, entryId: string) => void
@@ -273,6 +281,91 @@ function sanitizeHistorySavedViewRetrievalPreset(value: unknown): AIHistorySaved
   }
 }
 
+function sanitizeWorkspaceExecutionHistoryTaskStatus(
+  value: unknown
+): AIWorkspaceExecutionHistoryTaskStatus {
+  switch (value) {
+    case 'waiting':
+    case 'running':
+    case 'done':
+    case 'error':
+    case 'canceled':
+      return value
+    case 'idle':
+    default:
+      return 'idle'
+  }
+}
+
+function sanitizeWorkspaceExecutionHistoryTaskCompletionSource(
+  value: unknown
+): AIWorkspaceExecutionHistoryTaskCompletionSource | null {
+  switch (value) {
+    case 'manual-apply':
+    case 'manual-open-draft':
+    case 'agent':
+      return value
+    default:
+      return null
+  }
+}
+
+function sanitizeWorkspaceExecutionHistoryRecord(
+  value: unknown
+): AIWorkspaceExecutionHistoryRecord | null {
+  if (!value || typeof value !== 'object') return null
+
+  const candidate = value as Partial<AIWorkspaceExecutionHistoryRecord>
+  if (
+    typeof candidate.taskCount !== 'number' ||
+    typeof candidate.completedCount !== 'number' ||
+    typeof candidate.failedCount !== 'number' ||
+    typeof candidate.waitingCount !== 'number' ||
+    typeof candidate.updatedAt !== 'number' ||
+    !Array.isArray(candidate.tasks)
+  ) {
+    return null
+  }
+
+  const tasks = candidate.tasks
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const task = item as Partial<AIWorkspaceExecutionHistoryRecord['tasks'][number]>
+      if (
+        typeof task.taskId !== 'string' ||
+        typeof task.action !== 'string' ||
+        typeof task.title !== 'string' ||
+        typeof task.target !== 'string'
+      ) {
+        return null
+      }
+
+      return {
+        taskId: task.taskId,
+        action: task.action === 'create-note' ? 'create-note' : 'update-note',
+        title: task.title,
+        target: task.target,
+        phase: typeof task.phase === 'string' ? task.phase : null,
+        status: sanitizeWorkspaceExecutionHistoryTaskStatus(task.status),
+        message: typeof task.message === 'string' ? task.message : null,
+        completionSource: sanitizeWorkspaceExecutionHistoryTaskCompletionSource(task.completionSource),
+        completionAt: typeof task.completionAt === 'number' ? task.completionAt : null,
+        originRunId: typeof task.originRunId === 'number' ? task.originRunId : null,
+      } satisfies AIWorkspaceExecutionHistoryRecord['tasks'][number]
+    })
+    .filter((task): task is AIWorkspaceExecutionHistoryRecord['tasks'][number] => task !== null)
+
+  return {
+    summary: typeof candidate.summary === 'string' ? candidate.summary : null,
+    taskCount: Math.max(0, Math.round(candidate.taskCount)),
+    completedCount: Math.max(0, Math.round(candidate.completedCount)),
+    failedCount: Math.max(0, Math.round(candidate.failedCount)),
+    waitingCount: Math.max(0, Math.round(candidate.waitingCount)),
+    updatedAt: candidate.updatedAt,
+    tasks,
+  }
+}
+
 function sanitizeSessionHistoryEntry(entry: unknown): AIDocumentSessionHistoryEntry | null {
   if (!entry || typeof entry !== 'object') return null
 
@@ -307,6 +400,7 @@ function sanitizeSessionHistoryEntry(entry: unknown): AIDocumentSessionHistoryEn
     status: candidate.status as AIDocumentSessionHistoryEntry['status'],
     documentName: candidate.documentName,
     attachmentCount: typeof candidate.attachmentCount === 'number' ? candidate.attachmentCount : 0,
+    workspaceExecution: sanitizeWorkspaceExecutionHistoryRecord(candidate.workspaceExecution),
     createdAt: candidate.createdAt,
     updatedAt: candidate.updatedAt,
   }

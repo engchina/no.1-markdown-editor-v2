@@ -3,10 +3,15 @@ import {
   type WorkspaceDocumentReference,
   type WorkspaceSearchableTab,
 } from '../workspaceSearch.ts'
+import type {
+  AIWorkspaceExecutionHistoryRecord,
+  AIWorkspaceExecutionHistoryTaskRecord,
+} from './types.ts'
 
 export type AIWorkspaceTaskAction = 'update-note' | 'create-note'
 export type AIWorkspaceTaskPreflightStatus = 'ready' | 'waiting' | 'review' | 'blocked'
 export type AIWorkspaceExecutionTaskRuntimeStatus = 'idle' | 'waiting' | 'running' | 'done' | 'error' | 'canceled'
+export type AIWorkspaceExecutionTaskCompletionSource = 'manual-apply' | 'manual-open-draft' | 'agent'
 export type AIWorkspaceTaskPreflightReason =
   | 'update-ready'
   | 'update-will-open'
@@ -51,6 +56,9 @@ export interface AIWorkspaceExecutionProducedDraft {
 export interface AIWorkspaceExecutionTaskRuntimeState {
   status: AIWorkspaceExecutionTaskRuntimeStatus
   message?: string
+  completionSource?: AIWorkspaceExecutionTaskCompletionSource
+  completionAt?: number
+  originRunId?: number | null
 }
 
 export type AIWorkspaceExecutionTaskReference = Pick<
@@ -165,9 +173,12 @@ export function buildAIWorkspaceDraftTabName(task: AIWorkspaceExecutionTask): st
 export function buildAIWorkspaceExecutionAgentResumeState(args: {
   tasks: readonly AIWorkspaceExecutionTask[]
   taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState | undefined>
-}) {
+}): {
+  completedTaskIds: string[]
+  taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState>
+} {
   const completedTaskIds: string[] = []
-  const taskStates = Object.fromEntries(
+  const taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState> = Object.fromEntries(
     args.tasks.map((task) => {
       const existing = args.taskStates[task.id]
       if (existing?.status === 'done') {
@@ -182,6 +193,47 @@ export function buildAIWorkspaceExecutionAgentResumeState(args: {
   return {
     completedTaskIds,
     taskStates,
+  }
+}
+
+export function buildAIWorkspaceExecutionHistoryRecord(args: {
+  execution: AIWorkspaceExecutionPlan
+  taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState | undefined>
+  updatedAt?: number
+}): AIWorkspaceExecutionHistoryRecord {
+  let completedCount = 0
+  let failedCount = 0
+  let waitingCount = 0
+
+  const tasks: AIWorkspaceExecutionHistoryTaskRecord[] = args.execution.tasks.map((task) => {
+    const state = args.taskStates[task.id]
+    const status = state?.status ?? 'idle'
+    if (status === 'done') completedCount += 1
+    else if (status === 'waiting') waitingCount += 1
+    else if (status === 'error' || status === 'canceled') failedCount += 1
+
+    return {
+      taskId: task.id,
+      action: task.action,
+      title: task.title,
+      target: task.target,
+      phase: task.phase,
+      status,
+      message: state?.message ?? null,
+      completionSource: state?.completionSource ?? null,
+      completionAt: state?.completionAt ?? null,
+      originRunId: state?.originRunId ?? null,
+    }
+  })
+
+  return {
+    summary: args.execution.summary,
+    taskCount: args.execution.tasks.length,
+    completedCount,
+    failedCount,
+    waitingCount,
+    updatedAt: args.updatedAt ?? Date.now(),
+    tasks,
   }
 }
 

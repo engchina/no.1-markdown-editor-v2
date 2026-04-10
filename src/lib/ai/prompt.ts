@@ -21,21 +21,23 @@ export function normalizeAIDraftText(text: string, outputTarget: AIOutputTarget)
   if (outputTarget === 'chat-only') return trimmed
 
   const fencedMatch = trimmed.match(/^```(?:markdown|md)\s*\r?\n([\s\S]*?)\r?\n```$/iu)
-  if (fencedMatch) return fencedMatch[1].trim()
-  return trimmed
+  const normalized = fencedMatch ? fencedMatch[1].trim() : trimmed
+  return normalizeMarkdownDraftText(normalized)
 }
 
 function buildAISystemPrompt(context: AIContextPacket): string {
   const lines = [
     'You are an AI writing assistant inside a Markdown editor.',
     'Preserve Markdown structure and formatting unless the user explicitly asks to change it.',
+    'Return standards-compliant Markdown whenever your response is meant to be inserted into or read as Markdown content.',
+    'Use valid Markdown block syntax, including required spacing for ATX headings.',
     'Do not wrap your response in ```markdown fences.',
     'Keep links, tables, headings, fenced code blocks, Mermaid blocks, math, and front matter safe.',
     context.explicitContextAttachments?.length
       ? 'Use only the explicit attached note, heading, and search context shown below. Do not assume any hidden workspace state.'
       : 'Do not assume access to any hidden workspace state beyond the visible attached context.',
     context.outputTarget === 'chat-only'
-      ? 'When answering in chat-only mode, be concise and directly useful.'
+      ? 'When answering in chat-only mode, be concise, directly useful, and use Markdown formatting when it improves readability.'
       : context.outputTarget === 'new-note'
         ? 'Return only the Markdown content for a self-contained new note.'
       : 'Return only the content that should be inserted into the document.',
@@ -104,4 +106,59 @@ function buildAIUserPrompt(prompt: string, context: AIContextPacket): string {
   }
 
   return sections.join('\n\n')
+}
+
+function normalizeMarkdownDraftText(text: string): string {
+  const newline = text.includes('\r\n') ? '\r\n' : '\n'
+  const lines = text.split(/\r?\n/u)
+  const normalizedLines: string[] = []
+  let activeFence: { marker: '`' | '~'; length: number } | null = null
+
+  for (const line of lines) {
+    const fence = parseMarkdownFence(line)
+
+    if (activeFence) {
+      normalizedLines.push(line)
+      if (
+        fence &&
+        fence.marker === activeFence.marker &&
+        fence.length >= activeFence.length &&
+        fence.rest.trim().length === 0
+      ) {
+        activeFence = null
+      }
+      continue
+    }
+
+    if (fence) {
+      activeFence = { marker: fence.marker, length: fence.length }
+      normalizedLines.push(line)
+      continue
+    }
+
+    normalizedLines.push(normalizeMarkdownHeadingSpacing(line))
+  }
+
+  return normalizedLines.join(newline)
+}
+
+function parseMarkdownFence(line: string): { marker: '`' | '~'; length: number; rest: string } | null {
+  const match = line.match(/^\s{0,3}([`~]{3,})(.*)$/u)
+  if (!match) return null
+
+  const fence = match[1] ?? ''
+  const marker = fence[0]
+  if ((marker !== '`' && marker !== '~') || !fence.split('').every((char) => char === marker)) {
+    return null
+  }
+
+  return {
+    marker,
+    length: fence.length,
+    rest: match[2] ?? '',
+  }
+}
+
+function normalizeMarkdownHeadingSpacing(line: string): string {
+  return line.replace(/^(\s{0,3})(#{1,6})(?!#)(\S.*)$/u, '$1$2 $3')
 }

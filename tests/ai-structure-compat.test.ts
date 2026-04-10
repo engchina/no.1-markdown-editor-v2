@@ -104,3 +104,40 @@ test('normalizeAIDraftText never strips mermaid or code fences from intended mar
   assert.equal(normalizeAIDraftText(mermaid, 'replace-selection'), mermaid)
   assert.equal(normalizeAIDraftText(code, 'replace-selection'), code)
 })
+
+test('normalizeAIDraftText repairs invalid ATX heading spacing without mutating fenced markdown structures', () => {
+  const draft = [
+    '##Overview',
+    '',
+    '| Column | Value |',
+    '| --- | --- |',
+    '| Foo | Bar |',
+    '',
+    '```mermaid',
+    '##InsideMermaid',
+    'flowchart TD',
+    'A-->B',
+    '```',
+    '',
+    '###FollowUp',
+  ].join('\n')
+
+  assert.equal(
+    normalizeAIDraftText(draft, 'replace-selection'),
+    [
+      '## Overview',
+      '',
+      '| Column | Value |',
+      '| --- | --- |',
+      '| Foo | Bar |',
+      '',
+      '```mermaid',
+      '##InsideMermaid',
+      'flowchart TD',
+      'A-->B',
+      '```',
+      '',
+      '### FollowUp',
+    ].join('\n')
+  )
+})

@@ -44,13 +44,16 @@ import type { AIIntent, AIProviderState, AIPromptMentionResolution } from '../..
 import { findWorkspaceDocumentReferences, type WorkspaceDocumentReference } from '../../lib/workspaceSearch.ts'
 import {
   buildAIWorkspaceExecutionAgentResumeState,
+  buildAIWorkspaceExecutionHistoryRecord,
   buildAIWorkspaceExecutionPreflight,
   buildAIWorkspaceDraftTabName,
   groupAIWorkspaceExecutionTasksByPhase,
   parseAIWorkspaceExecutionPlan,
   type AIWorkspaceExecutionPreflight,
   type AIWorkspaceExecutionPhaseGroup,
+  type AIWorkspaceExecutionTaskCompletionSource,
   type AIWorkspaceExecutionProducedDraft,
+  type AIWorkspaceExecutionTaskRuntimeState,
   type AIWorkspaceExecutionTask,
   type AIWorkspaceExecutionTaskRuntimeStatus,
   type AIWorkspaceExecutionTaskPreflight,
@@ -93,6 +96,9 @@ interface WorkspaceAgentSessionLogEntry {
   title: string
   status: 'done' | 'error' | 'canceled'
   message: string
+  completionSource?: AIWorkspaceExecutionTaskCompletionSource
+  completionAt?: number
+  originRunId?: number | null
 }
 
 interface WorkspaceAgentSessionState {
@@ -170,9 +176,17 @@ export default function AIComposer() {
   const [workspaceExecutionStates, setWorkspaceExecutionStates] = useState<Record<string, {
     status: WorkspaceExecutionTaskStatus
     message?: string
+    completionSource?: AIWorkspaceExecutionTaskCompletionSource
+    completionAt?: number
+    originRunId?: number | null
   }>>({})
   const [workspaceProducedDrafts, setWorkspaceProducedDrafts] = useState<Record<string, AIWorkspaceExecutionProducedDraft>>({})
   const [workspaceTaskTargetOverrides, setWorkspaceTaskTargetOverrides] = useState<Record<string, string | null>>({})
+  const [workspaceHistoryBinding, setWorkspaceHistoryBinding] = useState<{
+    tabId: string
+    tabPath: string | null
+    entryId: string
+  } | null>(null)
   const [workspacePreflight, setWorkspacePreflight] = useState<WorkspaceExecutionPreflightState>({
     status: 'idle',
     data: null,
@@ -331,8 +345,11 @@ export default function AIComposer() {
     setWorkspaceProducedDrafts({})
     setWorkspaceTaskTargetOverrides({})
     setWorkspaceAgentSession(null)
+    if (!workspaceExecution) {
+      setWorkspaceHistoryBinding(null)
+    }
     workspaceAgentRunIdRef.current += 1
-  }, [normalizedDraft])
+  }, [normalizedDraft, workspaceExecution])
 
   useEffect(() => {
     const requestId = workspacePreflightRequestIdRef.current + 1
@@ -378,6 +395,23 @@ export default function AIComposer() {
         }))
       })
   }, [completedWorkspaceTaskIds, openTabs, rootPath, workspaceExecution, workspaceProducedDrafts, workspaceTaskTargetOverrides])
+
+  useEffect(() => {
+    if (!workspaceExecution || !workspaceHistoryBinding) return
+
+    updateSessionHistory(
+      workspaceHistoryBinding.tabId,
+      workspaceHistoryBinding.tabPath,
+      workspaceHistoryBinding.entryId,
+      {
+        workspaceExecution: buildAIWorkspaceExecutionHistoryRecord({
+          execution: workspaceExecution,
+          taskStates: workspaceExecutionStates,
+        }),
+        updatedAt: Date.now(),
+      }
+    )
+  }, [updateSessionHistory, workspaceExecution, workspaceExecutionStates, workspaceHistoryBinding])
 
   useEffect(() => {
     setWorkspaceNoteQuery('')
@@ -652,6 +686,7 @@ export default function AIComposer() {
     requestRunIdRef.current = runId
     const requestId = `${activeTab?.id ?? 'ai'}-${runId}-${Date.now()}`
     activeRequestIdRef.current = requestId
+    setWorkspaceHistoryBinding(null)
     const { entryId, threadId } = startSessionHistory({
       tabId: effectiveContext.tabId,
       tabPath: effectiveContext.tabPath,
@@ -701,11 +736,19 @@ export default function AIComposer() {
         setDiffBaseText(null)
       }
       finishRequest()
+      const nextWorkspaceExecution = parseAIWorkspaceExecutionPlan(draft)
       updateActiveSessionHistory({
         status: 'done',
         resultPreview: draft,
         errorMessage: null,
       })
+      if (nextWorkspaceExecution) {
+        setWorkspaceHistoryBinding({
+          tabId: effectiveContext.tabId,
+          tabPath: effectiveContext.tabPath,
+          entryId,
+        })
+      }
     } catch (error) {
       if (disposedRef.current || runId !== requestRunIdRef.current) return
       activeRequestIdRef.current = null
@@ -890,6 +933,9 @@ export default function AIComposer() {
         [task.id]: {
           status: 'done',
           message: t('ai.workspaceExecution.taskDraftOpened', { target: openedDraft.name }),
+          completionSource: 'manual-open-draft',
+          completionAt: Date.now(),
+          originRunId: null,
         },
       }))
     }
@@ -1133,6 +1179,9 @@ export default function AIComposer() {
       [task.id]: {
         status: result.success ? 'done' : 'error',
         message: result.message,
+        completionSource: result.success ? 'manual-apply' : undefined,
+        completionAt: result.success ? Date.now() : undefined,
+        originRunId: result.success ? null : undefined,
       },
     }))
     return result.success
@@ -1200,6 +1249,24 @@ export default function AIComposer() {
       tasks: workspaceExecution.tasks,
       taskStates: workspaceExecutionStates,
     })
+    const resumedLogs: WorkspaceAgentSessionLogEntry[] = resumeState.completedTaskIds.flatMap((taskId, index) => {
+      const task = workspaceExecution.tasks.find((item) => item.id === taskId)
+      if (!task) return []
+
+      const completionSource = resumeState.taskStates[taskId]?.completionSource
+      const completionAt = resumeState.taskStates[taskId]?.completionAt
+      const originRunId = resumeState.taskStates[taskId]?.originRunId
+      return [{
+        id: `${task.id}:resumed:${index}`,
+        taskId: task.id,
+        title: task.title,
+        status: 'done',
+        message: buildWorkspaceExecutionResumedLogMessage(completionSource, originRunId, t),
+        completionSource,
+        completionAt,
+        originRunId,
+      }]
+    })
     setWorkspaceExecutionStates(resumeState.taskStates)
     setWorkspaceAgentSession({
       status: 'running',
@@ -1207,12 +1274,12 @@ export default function AIComposer() {
       completed: resumeState.completedTaskIds.length,
       failed: 0,
       currentTaskId: null,
-      logs: [],
+      logs: resumedLogs,
     })
 
     let appliedCount = resumeState.completedTaskIds.length
     let failedCount = 0
-    const logs: WorkspaceAgentSessionLogEntry[] = []
+    const logs: WorkspaceAgentSessionLogEntry[] = [...resumedLogs]
     const completedTaskIds = new Set<string>(resumeState.completedTaskIds)
     const queuedPhaseGroups = phaseGroups.map((phaseGroup) => ({
       ...phaseGroup,
@@ -1252,7 +1319,7 @@ export default function AIComposer() {
 
               return [task.id, { status: 'idle' as WorkspaceExecutionTaskStatus }] as const
             })
-            .filter((entry): entry is [string, { status: WorkspaceExecutionTaskStatus; message?: string }] => entry !== null)
+            .filter((entry): entry is [string, AIWorkspaceExecutionTaskRuntimeState] => entry !== null)
         )
         setWorkspaceExecutionStates((state) => {
           let changed = false
@@ -1375,12 +1442,18 @@ export default function AIComposer() {
           failedCount += 1
         }
 
+        const completionAt = result.success ? Date.now() : undefined
+        const originRunId = result.success ? runId : undefined
+
         logs.push({
           id: `${task.id}:${logs.length}`,
           taskId: task.id,
           title: task.title,
           status: result.success ? 'done' : 'error',
           message: result.message,
+          completionSource: result.success ? 'agent' : undefined,
+          completionAt,
+          originRunId,
         })
 
         setWorkspaceExecutionStates((state) => ({
@@ -1388,6 +1461,9 @@ export default function AIComposer() {
           [task.id]: {
             status: result.success ? 'done' : 'error',
             message: result.message,
+            completionSource: result.success ? 'agent' : undefined,
+            completionAt,
+            originRunId,
           },
         }))
         setWorkspaceAgentSession((session) =>
@@ -2631,7 +2707,7 @@ function AIWorkspaceExecutionView({
   onExecuteTask: (task: AIWorkspaceExecutionTask) => Promise<boolean>
   onSetTargetOverride: (taskId: string, target: string | null) => void
   targetOverrides: Record<string, string | null>
-  taskStates: Record<string, { status: WorkspaceExecutionTaskStatus; message?: string }>
+  taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState>
   agentSession: WorkspaceAgentSessionState | null
   preflightState: WorkspaceExecutionPreflightState
 }) {
@@ -2652,6 +2728,12 @@ function AIWorkspaceExecutionView({
   const waitingTaskCount = preflightState.data?.summary.waiting ?? 0
   const reviewTaskCount = preflightState.data?.summary.review ?? 0
   const readyTaskCount = preflightState.data?.summary.ready ?? 0
+  const completedByAgentCount = Object.values(taskStates).filter(
+    (taskState) => taskState.status === 'done' && taskState.completionSource === 'agent'
+  ).length
+  const completedManuallyCount = Object.values(taskStates).filter(
+    (taskState) => taskState.status === 'done' && isManualWorkspaceExecutionCompletionSource(taskState.completionSource)
+  ).length
 
   return (
     <div className="grid gap-4">
@@ -2689,8 +2771,10 @@ function AIWorkspaceExecutionView({
             </span>
           </div>
 
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
             <WorkspaceExecutionMetric label={t('ai.workspaceExecution.metricCompleted')} value={String(agentSession.completed)} />
+            <WorkspaceExecutionMetric label={t('ai.workspaceExecution.metricCompletedByAgent')} value={String(completedByAgentCount)} />
+            <WorkspaceExecutionMetric label={t('ai.workspaceExecution.metricCompletedManual')} value={String(completedManuallyCount)} />
             <WorkspaceExecutionMetric label={t('ai.workspaceExecution.metricFailed')} value={String(agentSession.failed)} />
             <WorkspaceExecutionMetric label={t('ai.workspaceExecution.metricTotal')} value={String(agentSession.total)} />
           </div>
@@ -2722,29 +2806,46 @@ function AIWorkspaceExecutionView({
                     <div className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
                       {entry.title}
                     </div>
-                    <span
-                      className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                      style={{
-                        borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
-                        background: 'color-mix(in srgb, var(--bg-secondary) 76%, transparent)',
-                        color:
-                          entry.status === 'done'
-                            ? '#15803d'
-                            : entry.status === 'error'
-                              ? '#b91c1c'
-                              : '#b45309',
-                      }}
-                    >
-                      {entry.status === 'done'
-                        ? t('ai.workspaceExecution.statusDone')
-                        : entry.status === 'error'
-                          ? t('ai.workspaceExecution.statusError')
-                          : t('ai.workspaceExecution.statusCanceled')}
-                    </span>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                      {entry.status === 'done' && entry.completionSource && (
+                        <PeekInlinePill
+                          label={t(`ai.workspaceExecution.completionSource.${entry.completionSource}`)}
+                          tone={getWorkspaceExecutionCompletionSourceTone(entry.completionSource)}
+                        />
+                      )}
+                      <span
+                        className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                        style={{
+                          borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
+                          background: 'color-mix(in srgb, var(--bg-secondary) 76%, transparent)',
+                          color:
+                            entry.status === 'done'
+                              ? '#15803d'
+                              : entry.status === 'error'
+                                ? '#b91c1c'
+                                : '#b45309',
+                        }}
+                      >
+                        {entry.status === 'done'
+                          ? t('ai.workspaceExecution.statusDone')
+                          : entry.status === 'error'
+                            ? t('ai.workspaceExecution.statusError')
+                            : t('ai.workspaceExecution.statusCanceled')}
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-1 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
                     {entry.message}
                   </div>
+                  {entry.status === 'done' && (entry.completionAt || typeof entry.originRunId === 'number') && (
+                    <div className="mt-1 text-[10px] leading-5" style={{ color: 'var(--text-muted)' }}>
+                      {formatWorkspaceExecutionCompletionMeta({
+                        completionAt: entry.completionAt,
+                        originRunId: entry.originRunId,
+                        t,
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2881,7 +2982,7 @@ function AIWorkspaceExecutionPhaseSection({
   phaseIndex: number
   showHeader: boolean
   isCurrentPhase: boolean
-  taskStates: Record<string, { status: WorkspaceExecutionTaskStatus; message?: string }>
+  taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState>
   preflightState: WorkspaceExecutionPreflightState
   agentRunning: boolean
   onExecuteTask: (task: AIWorkspaceExecutionTask) => Promise<boolean>
@@ -2973,7 +3074,7 @@ function AIWorkspaceExecutionTaskCard({
   targetOverride,
 }: {
   task: AIWorkspaceExecutionTask
-  taskState: { status: WorkspaceExecutionTaskStatus; message?: string } | undefined
+  taskState: AIWorkspaceExecutionTaskRuntimeState | undefined
   preflight: AIWorkspaceExecutionTaskPreflight | null
   preflightLoading: boolean
   agentRunning: boolean
@@ -3024,6 +3125,12 @@ function AIWorkspaceExecutionTaskCard({
           >
             {preflightMeta.label}
           </span>
+          {effectiveTaskStatus === 'done' && taskState?.completionSource && (
+            <PeekInlinePill
+              label={t(`ai.workspaceExecution.completionSource.${taskState.completionSource}`)}
+              tone={getWorkspaceExecutionCompletionSourceTone(taskState.completionSource)}
+            />
+          )}
         </div>
         {taskState?.message && (
           <span className="max-w-[50%] truncate text-[11px]" style={{ color: 'var(--text-muted)' }}>
@@ -3043,6 +3150,15 @@ function AIWorkspaceExecutionTaskCard({
           <div className="mt-2 text-[11px] leading-5" style={{ color: preflightMeta.colorMuted }}>
             {preflightMeta.detail}
           </div>
+          {effectiveTaskStatus === 'done' && (taskState?.completionAt || typeof taskState?.originRunId === 'number') && (
+            <div className="mt-1 text-[10px] leading-5" style={{ color: 'var(--text-muted)' }}>
+              {formatWorkspaceExecutionCompletionMeta({
+                completionAt: taskState?.completionAt,
+                originRunId: taskState?.originRunId,
+                t,
+              })}
+            </div>
+          )}
           {preflight && preflight.dependencyTaskTitles.length > 0 && (
             <div
               data-ai-workspace-task-dependencies={task.id}
@@ -3216,7 +3332,7 @@ function AIWorkspaceExecutionTaskCard({
 function canStartWorkspaceAgent(args: {
   phaseGroups: AIWorkspaceExecutionPhaseGroup[]
   preflight: AIWorkspaceExecutionPreflight | null
-  taskStates: Record<string, { status: WorkspaceExecutionTaskStatus; message?: string }>
+  taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState>
 }) {
   const nextPhaseGroup = args.phaseGroups.find((phaseGroup) =>
     phaseGroup.tasks.some((task) => args.taskStates[task.id]?.status !== 'done')
@@ -3238,7 +3354,7 @@ function canStartWorkspaceAgent(args: {
 
 function buildWorkspaceExecutionPhaseSummary(args: {
   phaseGroup: AIWorkspaceExecutionPhaseGroup
-  taskStates: Record<string, { status: WorkspaceExecutionTaskStatus; message?: string }>
+  taskStates: Record<string, AIWorkspaceExecutionTaskRuntimeState>
   preflight: AIWorkspaceExecutionPreflight | null
 }) {
   let done = 0
@@ -3383,6 +3499,57 @@ function getPeekInlinePillPalette(tone: 'default' | 'accent' | 'success' | 'warn
         color: 'var(--text-muted)',
       }
   }
+}
+
+function getWorkspaceExecutionCompletionSourceTone(
+  source: AIWorkspaceExecutionTaskCompletionSource
+): 'success' | 'info' | 'accent' {
+  switch (source) {
+    case 'agent':
+      return 'success'
+    case 'manual-apply':
+      return 'accent'
+    case 'manual-open-draft':
+    default:
+      return 'info'
+  }
+}
+
+function isManualWorkspaceExecutionCompletionSource(
+  source: AIWorkspaceExecutionTaskCompletionSource | undefined
+) {
+  return source === 'manual-apply' || source === 'manual-open-draft'
+}
+
+function formatWorkspaceExecutionCompletionMeta(args: {
+  completionAt?: number
+  originRunId?: number | null
+  t: (key: string, values?: Record<string, string | number>) => string
+}) {
+  const parts: string[] = []
+
+  if (typeof args.completionAt === 'number') {
+    parts.push(
+      args.t('ai.workspaceExecution.completionAt', {
+        time: formatWorkspaceExecutionTimestamp(args.completionAt),
+      })
+    )
+  }
+
+  if (typeof args.originRunId === 'number') {
+    parts.push(args.t('ai.workspaceExecution.originRun', { runId: args.originRunId }))
+  }
+
+  return parts.join(' · ')
+}
+
+function formatWorkspaceExecutionTimestamp(value: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(value)
 }
 
 function getWorkspaceExecutionPhaseName(
@@ -3644,6 +3811,25 @@ function buildWorkspaceExecutionPhaseStalledMessage(args: {
   }
 
   return args.t('ai.workspaceExecution.phaseStalled', { phase })
+}
+
+function buildWorkspaceExecutionResumedLogMessage(
+  completionSource: AIWorkspaceExecutionTaskCompletionSource | undefined,
+  originRunId: number | null | undefined,
+  t: (key: string, values?: Record<string, string | number>) => string
+) {
+  switch (completionSource) {
+    case 'manual-apply':
+      return t('ai.workspaceExecution.agentLogResumedManualApply')
+    case 'manual-open-draft':
+      return t('ai.workspaceExecution.agentLogResumedManualOpenDraft')
+    case 'agent':
+      return typeof originRunId === 'number'
+        ? t('ai.workspaceExecution.agentLogResumedAgentRun', { runId: originRunId })
+        : t('ai.workspaceExecution.agentLogResumedAgent')
+    default:
+      return t('ai.workspaceExecution.agentLogResumed')
+  }
 }
 
 function AIDiffPreview({

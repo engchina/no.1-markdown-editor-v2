@@ -246,6 +246,72 @@ test('rewritePreviewHtmlExternalImages keeps https remote images intact on secur
   assert.match(previewHtml, /decoding="async"/)
 })
 
+test('rewritePreviewHtmlExternalImages keeps Qiita imgix https images intact on secure origins by default', () => {
+  const html =
+    '<p><img src="https://qiita-user-profile-images.imgix.net/https%3A%2F%2Fs3-ap-northeast-1.amazonaws.com%2Fqiita-image-store%2F0%2F3019263%2Fcf8b4a590c8d2b5d6f5fb822a7c4fe2fc99f7a0a%2Flarge.png%3F1679539184?ixlib=rb-4.0.0&auto=compress%2Cformat&lossless=0&w=128&s=f41c61e068526a590437568722a23e48" alt="Kazmorita"></p>'
+
+  const previewHtml = rewritePreviewHtmlExternalImages(
+    html,
+    {
+      blockedLabel: 'External image blocked',
+      clickLabel: 'Click to load from the original host',
+    },
+    'https://tauri.localhost'
+  )
+
+  assert.match(previewHtml, /src="https:\/\/qiita-user-profile-images\.imgix\.net\//)
+  assert.doesNotMatch(previewHtml, /data-external-src=/)
+  assert.doesNotMatch(previewHtml, /data-external-image=/)
+  assert.match(previewHtml, /loading="lazy"/)
+  assert.match(previewHtml, /decoding="async"/)
+})
+
+test('rewritePreviewHtmlExternalImages adds direct-load fallback metadata for secure external images when requested', () => {
+  const html = '<p><img src="https://img-home.csdnimg.cn/images/20220524100510.png" alt="Alt"></p>'
+
+  const previewHtml = rewritePreviewHtmlExternalImages(
+    html,
+    {
+      blockedLabel: 'External image blocked',
+      clickLabel: 'Click to load from the original host',
+    },
+    'https://tauri.localhost',
+    { enableDirectExternalImageFallback: true }
+  )
+
+  assert.match(previewHtml, /src="https:\/\/img-home\.csdnimg\.cn\/images\/20220524100510\.png"/)
+  assert.match(previewHtml, /data-external-fallback-src="https:\/\/img-home\.csdnimg\.cn\/images\/20220524100510\.png"/)
+  assert.match(previewHtml, /data-external-fallback-host="img-home\.csdnimg\.cn"/)
+  assert.doesNotMatch(previewHtml, /data-external-src=/)
+  assert.doesNotMatch(previewHtml, /data-external-image="blocked"/)
+  assert.match(previewHtml, /loading="lazy"/)
+  assert.match(previewHtml, /decoding="async"/)
+})
+
+test('rewritePreviewHtmlExternalImages removes direct-load fallback metadata after bridge resolution', () => {
+  const html = '<p><img src="https://img-home.csdnimg.cn/images/20220524100510.png" alt="Alt"></p>'
+
+  const previewHtml = rewritePreviewHtmlExternalImages(
+    html,
+    {
+      blockedLabel: 'External image blocked',
+      clickLabel: 'Click to load from the original host',
+    },
+    'https://tauri.localhost',
+    {
+      enableDirectExternalImageFallback: true,
+      resolvedImages: {
+        'https://img-home.csdnimg.cn/images/20220524100510.png': 'data:image/png;base64,abc',
+      },
+    }
+  )
+
+  assert.match(previewHtml, /src="data:image\/png;base64,abc"/)
+  assert.doesNotMatch(previewHtml, /data-external-fallback-src=/)
+  assert.doesNotMatch(previewHtml, /data-external-fallback-host=/)
+  assert.doesNotMatch(previewHtml, /data-external-fallback-state=/)
+})
+
 test('rewritePreviewHtmlExternalImages bridges secure remote images when requested', () => {
   const html = '<p><img src="https://example.com/assets/hero.png" alt="Hero"></p>'
 

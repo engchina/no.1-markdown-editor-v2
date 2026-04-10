@@ -3,6 +3,7 @@ import type {
   AIHistoryRetrievalCandidate,
   AIHistoryRetrievalMatch,
 } from './historyRetrieval.ts'
+import { getAIHistoryWorkspaceExecutionStrength } from './historyRetrieval.ts'
 
 export interface AIHistoryWorkspaceHandoffTarget {
   documentKey: string
@@ -22,8 +23,15 @@ export function collectAIHistoryWorkspaceHandoffTargets<T extends AIHistoryRetri
   const limit = options.limit ?? 4
   if (limit <= 0) return []
 
-  const seen = new Set<string>()
-  const targets: AIHistoryWorkspaceHandoffTarget[] = []
+  const targetsByQuery = new Map<
+    string,
+    {
+      target: AIHistoryWorkspaceHandoffTarget
+      match: AIHistoryRetrievalMatch<T>
+      order: number
+    }
+  >()
+  let order = 0
 
   for (const match of matches) {
     const entry = match.candidate
@@ -33,14 +41,28 @@ export function collectAIHistoryWorkspaceHandoffTargets<T extends AIHistoryRetri
     if (!target) continue
 
     const key = target.query.trim().toLowerCase()
-    if (!key || seen.has(key)) continue
+    if (!key) continue
 
-    seen.add(key)
-    targets.push(target)
-    if (targets.length >= limit) break
+    const existing = targetsByQuery.get(key)
+    if (!existing) {
+      targetsByQuery.set(key, { target, match, order })
+      order += 1
+      continue
+    }
+
+    if (shouldPreferWorkspaceHandoffMatch(match, existing.match)) {
+      targetsByQuery.set(key, {
+        target,
+        match,
+        order: existing.order,
+      })
+    }
   }
 
-  return targets
+  return [...targetsByQuery.values()]
+    .sort((left, right) => left.order - right.order)
+    .slice(0, limit)
+    .map((entry) => entry.target)
 }
 
 export function buildAIHistoryWorkspaceRunPrompt(args: {
@@ -93,4 +115,19 @@ function resolveAIHistoryWorkspaceHandoffTarget(
     label: entry.documentName,
     detail: 'Unsaved draft session',
   }
+}
+
+function shouldPreferWorkspaceHandoffMatch<T extends AIHistoryRetrievalCandidate>(
+  next: AIHistoryRetrievalMatch<T>,
+  current: AIHistoryRetrievalMatch<T>
+) {
+  if (next.score !== current.score) return next.score > current.score
+
+  const workspaceDelta =
+    getAIHistoryWorkspaceExecutionStrength(next.candidate) -
+    getAIHistoryWorkspaceExecutionStrength(current.candidate)
+  if (workspaceDelta !== 0) return workspaceDelta > 0
+
+  if (next.candidate.pinned !== current.candidate.pinned) return next.candidate.pinned
+  return next.candidate.updatedAt > current.candidate.updatedAt
 }

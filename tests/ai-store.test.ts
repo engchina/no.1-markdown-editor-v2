@@ -135,6 +135,98 @@ test('AI store creates per-document session history entries and binds a thread o
   assert.equal(history[0]?.attachmentCount, 2)
 })
 
+test('AI store persists workspace execution provenance on session history entries and archives', () => {
+  useAIStore.setState({
+    composer: createInitialAIComposerState(),
+    historyRetentionPreset: 'standard',
+    threadIdsByDocument: {},
+    sessionHistoryByDocument: {},
+    historyCollections: [],
+    historySavedViews: [],
+    historyProviderRerankAudit: [],
+    provenanceMarksByTab: {},
+  })
+
+  const started = useAIStore.getState().startSessionHistory({
+    tabId: 'tab-workspace-history',
+    tabPath: 'notes/workspace.md',
+    documentName: 'workspace.md',
+    source: 'command-palette',
+    intent: 'generate',
+    scope: 'document',
+    outputTarget: 'chat-only',
+    prompt: 'Draft a coordinated workspace plan',
+    attachmentCount: 2,
+  })
+
+  useAIStore.getState().updateSessionHistory('tab-workspace-history', 'notes/workspace.md', started.entryId, {
+    status: 'done',
+    resultPreview: '<!-- ai-workspace-task -->',
+    errorMessage: null,
+    workspaceExecution: {
+      summary: '- Draft launch docs',
+      taskCount: 2,
+      completedCount: 1,
+      failedCount: 0,
+      waitingCount: 1,
+      updatedAt: 1700000001000,
+      tasks: [
+        {
+          taskId: 'task-1',
+          action: 'update-note',
+          title: 'Launch Plan',
+          target: 'launch-plan.md',
+          phase: 'Planning',
+          status: 'done',
+          message: 'Updated launch plan',
+          completionSource: 'manual-apply',
+          completionAt: 1700000000000,
+          originRunId: null,
+        },
+        {
+          taskId: 'task-2',
+          action: 'create-note',
+          title: 'Launch Checklist',
+          target: 'launch-checklist.md',
+          phase: 'Delivery',
+          status: 'waiting',
+          message: 'Waiting for Launch Plan',
+          completionSource: null,
+          completionAt: null,
+          originRunId: null,
+        },
+      ],
+    },
+  })
+
+  const history = useAIStore.getState().getSessionHistory('tab-workspace-history', 'notes/workspace.md')
+  assert.equal(history[0]?.workspaceExecution?.taskCount, 2)
+  assert.equal(history[0]?.workspaceExecution?.tasks[0]?.completionSource, 'manual-apply')
+
+  const archive = useAIStore.getState().exportHistoryArchive()
+  assert.equal(
+    archive.sessionHistoryByDocument['path:notes/workspace.md']?.[0]?.workspaceExecution?.tasks[1]?.status,
+    'waiting'
+  )
+
+  useAIStore.setState({
+    composer: createInitialAIComposerState(),
+    historyRetentionPreset: 'standard',
+    threadIdsByDocument: {},
+    sessionHistoryByDocument: {},
+    historyCollections: [],
+    historySavedViews: [],
+    historyProviderRerankAudit: [],
+    provenanceMarksByTab: {},
+  })
+
+  useAIStore.getState().importHistoryArchive(archive)
+  const imported = useAIStore.getState().getSessionHistory('tab-workspace-history', 'notes/workspace.md')
+  assert.equal(imported[0]?.workspaceExecution?.completedCount, 1)
+  assert.equal(imported[0]?.workspaceExecution?.tasks[0]?.completionAt, 1700000000000)
+  assert.equal(imported[0]?.workspaceExecution?.tasks[1]?.message, 'Waiting for Launch Plan')
+})
+
 test('AI store can rekey, remap, and remove persisted document history safely', () => {
   useAIStore.setState({
     composer: createInitialAIComposerState(),

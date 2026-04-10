@@ -11,6 +11,17 @@ export type AISelectedTextRole = 'transform-target' | 'reference-only'
 export type AIDocumentLanguage = 'zh' | 'en' | 'ja' | 'mixed'
 export type AIRequestState = 'idle' | 'streaming' | 'done' | 'error'
 export type AISessionHistoryStatus = 'streaming' | 'done' | 'error' | 'canceled'
+export type AIWorkspaceExecutionHistoryTaskStatus =
+  | 'idle'
+  | 'waiting'
+  | 'running'
+  | 'done'
+  | 'error'
+  | 'canceled'
+export type AIWorkspaceExecutionHistoryTaskCompletionSource =
+  | 'manual-apply'
+  | 'manual-open-draft'
+  | 'agent'
 export type AIHistoryRetentionPreset = 'compact' | 'standard' | 'extended'
 export type AIHistoryProviderRerankBudget = 'conservative' | 'balanced' | 'deep'
 export type AIHistoryCollectionProviderMode = 'inherit' | 'local-only' | 'allow-provider'
@@ -160,6 +171,29 @@ export interface AIComposerState {
   sourceSnapshot: AIApplySnapshot | null
 }
 
+export interface AIWorkspaceExecutionHistoryTaskRecord {
+  taskId: string
+  action: 'update-note' | 'create-note'
+  title: string
+  target: string
+  phase: string | null
+  status: AIWorkspaceExecutionHistoryTaskStatus
+  message: string | null
+  completionSource: AIWorkspaceExecutionHistoryTaskCompletionSource | null
+  completionAt: number | null
+  originRunId: number | null
+}
+
+export interface AIWorkspaceExecutionHistoryRecord {
+  summary: string | null
+  taskCount: number
+  completedCount: number
+  failedCount: number
+  waitingCount: number
+  updatedAt: number
+  tasks: AIWorkspaceExecutionHistoryTaskRecord[]
+}
+
 export interface AIDocumentSessionHistoryEntry {
   id: string
   threadId: string
@@ -174,6 +208,7 @@ export interface AIDocumentSessionHistoryEntry {
   status: AISessionHistoryStatus
   documentName: string
   attachmentCount: number
+  workspaceExecution?: AIWorkspaceExecutionHistoryRecord | null
   createdAt: number
   updatedAt: number
 }

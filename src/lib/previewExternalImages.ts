@@ -9,6 +9,7 @@ export interface PreviewExternalImageCopy {
 
 interface RewritePreviewHtmlExternalImagesOptions {
   bridgeAllExternalImages?: boolean
+  enableDirectExternalImageFallback?: boolean
   resolvedImages?: Record<string, string>
 }
 
@@ -79,6 +80,9 @@ export function rewritePreviewHtmlExternalImages(
       nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-host')
       nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-image')
       nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-placeholder')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-src')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-host')
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-state')
       nextAttributes = removeHtmlAttribute(nextAttributes, 'tabindex')
       nextAttributes = removeHtmlAttribute(nextAttributes, 'role')
       nextAttributes = removeHtmlAttribute(nextAttributes, 'aria-label')
@@ -88,6 +92,16 @@ export function rewritePreviewHtmlExternalImages(
     }
 
     if (!requiresExternalImageBridge(source, baseOrigin, options)) {
+      if (options.enableDirectExternalImageFallback === true && isExternalImageSource(source, baseOrigin)) {
+        const host = getExternalImageHost(source)
+        nextAttributes = upsertHtmlAttribute(nextAttributes, 'data-external-fallback-src', source)
+        nextAttributes = upsertHtmlAttribute(nextAttributes, 'data-external-fallback-host', host)
+      } else {
+        nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-src')
+        nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-host')
+      }
+
+      nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-state')
       return buildImageTag(nextAttributes, selfClosingSlash)
     }
 
@@ -105,6 +119,9 @@ export function rewritePreviewHtmlExternalImages(
     nextAttributes = upsertHtmlAttribute(nextAttributes, 'role', 'button')
     nextAttributes = upsertHtmlAttribute(nextAttributes, 'aria-label', `${copy.clickLabel}: ${host}`)
     nextAttributes = upsertHtmlAttribute(nextAttributes, 'referrerpolicy', 'no-referrer')
+    nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-src')
+    nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-host')
+    nextAttributes = removeHtmlAttribute(nextAttributes, 'data-external-fallback-state')
 
     return buildImageTag(nextAttributes, selfClosingSlash)
   })
