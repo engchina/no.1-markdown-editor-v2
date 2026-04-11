@@ -13,7 +13,6 @@ import {
 import { dispatchEditorAIApply } from '../../lib/ai/events.ts'
 import { diffTextByLine } from '../../lib/lineDiff.ts'
 import { pushErrorNotice, pushInfoNotice, pushSuccessNotice } from '../../lib/notices'
-import { buildAIExplainDetails } from '../../lib/ai/explain.ts'
 import { buildAIContextChipModels } from '../../lib/ai/contextChips.ts'
 import { getAIDocumentLanguageLabelKey } from '../../lib/ai/documentLanguageLabels.ts'
 import {
@@ -23,13 +22,17 @@ import {
 } from '../../lib/ai/diffPresentation.ts'
 import { buildAIRequestMessages, normalizeAIDraftText } from '../../lib/ai/prompt.ts'
 import {
-  getAIInsertTargets,
   hasAIDiffPreview,
   hasAIInsertPreview,
   type AIInsertTarget,
   type AIResultView,
 } from '../../lib/ai/resultViews.ts'
-import { getAITemplateModels, type AITemplateModel } from '../../lib/ai/templateLibrary.ts'
+import {
+  AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER,
+  buildAIComposerPromptPlaceholder,
+  getAITemplateModels,
+  type AITemplateModel,
+} from '../../lib/ai/templateLibrary.ts'
 import { resolveAIOpenOutputTarget } from '../../lib/ai/opening.ts'
 import { formatPrimaryShortcut, matchesPrimaryShortcut } from '../../lib/platform.ts'
 import type { AIIntent, AIProviderState } from '../../lib/ai/types.ts'
@@ -55,7 +58,6 @@ import { openDesktopDocumentPath } from '../../lib/desktopFileOpen.ts'
 import { primeAIUndoHistorySnapshot } from '../../lib/editorStateCache.ts'
 import { focusElementWithoutScroll } from '../../hooks/useDialogFocusRestore'
 
-const MIN_FOCUSED_TEMPLATE_COUNT = 3
 
 function formatAIDocumentLanguage(
   language: string | undefined,
@@ -210,37 +212,14 @@ export default function AIComposer() {
     composer.requestState !== 'idle' || normalizedDraft.trim().length > 0 || composer.errorMessage !== null
   const hasDiffPreview = hasAIDiffPreview(composer.outputTarget, composer.diffBaseText, normalizedDraft)
   const hasInsertPreview = hasAIInsertPreview(composer.outputTarget, normalizedDraft)
-  const insertTargets = getAIInsertTargets(hasSelection)
   const runShortcutLabel = formatPrimaryShortcut('Enter')
   const applyShortcutLabel = formatPrimaryShortcut('Enter', { shift: true })
   const diffBlocks =
     hasDiffPreview
       ? diffTextByLine(composer.diffBaseText ?? '', normalizedDraft)
       : []
-  const explainDetails = useMemo(
-    () =>
-      buildAIExplainDetails({
-        context: effectiveContext,
-        intent: composer.intent,
-        outputTarget: composer.outputTarget,
-        requestState: composer.requestState,
-        source: composer.source,
-        provider: providerState?.config?.provider,
-        model: providerState?.config?.model,
-        threadId: composer.threadId,
-      }),
-    [
-      composer.intent,
-      composer.outputTarget,
-      composer.requestState,
-      composer.source,
-      composer.threadId,
-      effectiveContext,
-      providerState?.config?.model,
-      providerState?.config?.provider,
-    ]
-  )
   const templateModels = useMemo(() => getAITemplateModels(t), [t])
+  const promptPlaceholder = useMemo(() => buildAIComposerPromptPlaceholder(t), [t])
   const completedWorkspaceTaskIds = useMemo(
     () =>
       Object.entries(workspaceExecutionStates)
@@ -1299,7 +1278,7 @@ export default function AIComposer() {
 
   return (
     <div
-      className="fixed inset-0 z-[110] flex items-start justify-center px-4 pt-16 pb-6"
+      className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6"
       style={{ background: 'rgba(0, 0, 0, 0.24)', backdropFilter: 'blur(6px)' }}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) void handleCloseComposer()
@@ -1416,13 +1395,12 @@ export default function AIComposer() {
               borderColor: 'color-mix(in srgb, var(--border) 86%, transparent)',
               color: 'var(--text-primary)',
             }}
-            placeholder={t('ai.promptPlaceholder')}
+            placeholder={promptPlaceholder}
           />
 
           {/* Quick action chips */}
           <AIQuickChips
             templates={templateModels}
-            currentMode={currentMode}
             composerIntent={composer.intent}
             composerOutputTarget={composer.outputTarget}
             composerPrompt={effectivePrompt}
@@ -1472,29 +1450,30 @@ export default function AIComposer() {
               ))}
             </div>
 
-            {/* Run / Cancel */}
+            {/* Run ↔ Stop / Cancel */}
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => void handleSubmit()}
-                data-ai-action="run"
-                aria-keyshortcuts="Control+Enter Meta+Enter"
-                className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                style={{ background: 'var(--accent)', color: 'white' }}
-                disabled={!canSubmit}
-                title={`${t('ai.run')} (${runShortcutLabel})`}
-              >
-                {composer.requestState === 'streaming' ? t('ai.loadingShort') : t('ai.run')}
-              </button>
-              {composer.requestState === 'streaming' && (
+              {composer.requestState === 'streaming' ? (
                 <button
                   type="button"
                   onClick={() => void handleCancelRequest()}
-                  data-ai-action="cancel-request"
-                  className="rounded-full border px-4 py-1.5 text-sm transition-colors"
-                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
+                  data-ai-action="stop"
+                  className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors"
+                  style={{ background: 'var(--accent)', color: 'white' }}
                 >
-                  {t('ai.cancelRequest')}
+                  {t('ai.stop')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit()}
+                  data-ai-action="run"
+                  aria-keyshortcuts="Control+Enter Meta+Enter"
+                  className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                  style={{ background: 'var(--accent)', color: 'white' }}
+                  disabled={!canSubmit}
+                  title={`${t('ai.run')} (${runShortcutLabel})`}
+                >
+                  {t('ai.run')}
                 </button>
               )}
               <button
@@ -1532,7 +1511,6 @@ export default function AIComposer() {
                     [
                       { view: 'draft', label: t('ai.result.draft') },
                       { view: 'diff', label: t('ai.result.diff'), disabled: !hasDiffPreview && !hasInsertPreview },
-                      { view: 'explain', label: t('ai.result.explain') },
                     ] as Array<{ view: typeof resultView; label: string; disabled?: boolean }>
                   ).map(({ view, label, disabled }) => (
                     <button
@@ -1556,17 +1534,19 @@ export default function AIComposer() {
                 </div>
                 <div className="flex-1" />
                 {normalizedDraft && (
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    {/* Secondary: Retry (text-style, low weight) */}
                     <button
                       type="button"
                       onClick={() => void handleSubmit()}
                       data-ai-action="retry"
-                      className="rounded-lg border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                      style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                      className="px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                      style={{ color: 'var(--text-muted)' }}
                       disabled={composer.requestState === 'streaming' || !canSubmit}
                     >
                       {t('ai.retry')}
                     </button>
+                    {/* Secondary: Discard (border ghost) */}
                     <button
                       type="button"
                       onClick={() => {
@@ -1579,15 +1559,7 @@ export default function AIComposer() {
                     >
                       {t('ai.discard')}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopy()}
-                      data-ai-action="copy"
-                      className="rounded-lg border px-2.5 py-1 text-xs transition-colors"
-                      style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-                    >
-                      {t('ai.copy')}
-                    </button>
+                    {/* Workspace agent actions */}
                     {hasWorkspaceExecutionTasks && (
                       <>
                         <button
@@ -1627,38 +1599,45 @@ export default function AIComposer() {
                         </button>
                       </>
                     )}
-                    {composer.outputTarget === 'chat-only' && canApplyToEditor && !hasWorkspaceExecutionTasks && (
+                    {/* Primary action: single Insert (chat mode) or Apply (edit/insert/new-note mode) */}
+                    {!hasWorkspaceExecutionTasks && canApplyToEditor && (
                       <>
-                        {insertTargets.map((target) => (
+                        {/* Copy — small icon-style, always secondary */}
+                        <button
+                          type="button"
+                          onClick={() => void handleCopy()}
+                          data-ai-action="copy"
+                          className="rounded-lg border px-2.5 py-1 text-xs transition-colors"
+                          style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+                        >
+                          {t('ai.copy')}
+                        </button>
+                        {composer.outputTarget === 'chat-only' ? (
+                          // Chat mode: single "Insert at cursor" primary button
                           <button
-                            key={target}
                             type="button"
-                            onClick={() => handleApplyToTarget(target)}
-                            data-ai-action={`insert-${target}`}
+                            onClick={() => handleApplyToTarget(aiDefaultWriteTarget !== 'replace-selection' ? aiDefaultWriteTarget : 'insert-below')}
+                            data-ai-action="insert"
                             className="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
-                            style={{
-                              background: 'color-mix(in srgb, var(--accent) 12%, var(--bg-primary))',
-                              color: 'var(--text-primary)',
-                              border: '1px solid color-mix(in srgb, var(--accent) 26%, var(--border))',
-                            }}
+                            style={{ background: 'var(--accent)', color: 'white' }}
                           >
-                            {t(`ai.outputTarget.${target}`)}
+                            {t('ai.insert')}
                           </button>
-                        ))}
+                        ) : (
+                          // Edit / Insert / New Note mode: Apply
+                          <button
+                            type="button"
+                            onClick={handleApply}
+                            data-ai-action="apply"
+                            aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter"
+                            className="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
+                            style={{ background: 'var(--accent)', color: 'white' }}
+                            title={`${t('ai.apply')} (${applyShortcutLabel})`}
+                          >
+                            {t('ai.apply')}
+                          </button>
+                        )}
                       </>
-                    )}
-                    {composer.outputTarget !== 'chat-only' && canApplyToEditor && (
-                      <button
-                        type="button"
-                        onClick={handleApply}
-                        data-ai-action="apply"
-                        aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter"
-                        className="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
-                        style={{ background: 'var(--accent)', color: 'white' }}
-                        title={`${t('ai.apply')} (${applyShortcutLabel})`}
-                      >
-                        {t('ai.apply')}
-                      </button>
                     )}
                   </div>
                 )}
@@ -1718,9 +1697,6 @@ export default function AIComposer() {
                     )}
                   </>
                 )}
-                {!composer.errorMessage && resultView === 'explain' && (
-                  <AIExplainView details={explainDetails} />
-                )}
               </div>
             </div>
           )}
@@ -1732,7 +1708,6 @@ export default function AIComposer() {
 
 function AIQuickChips({
   templates,
-  currentMode,
   composerIntent,
   composerOutputTarget,
   composerPrompt,
@@ -1741,7 +1716,6 @@ function AIQuickChips({
   onSelectTemplate,
 }: {
   templates: AITemplateModel[]
-  currentMode: 'chat' | 'edit' | 'insert' | 'new-note'
   composerIntent: AIIntent
   composerOutputTarget: string
   composerPrompt: string
@@ -1750,33 +1724,21 @@ function AIQuickChips({
   onSelectTemplate: (template: AITemplateModel) => void
 }) {
   const { t } = useTranslation()
-  const [showAll, setShowAll] = useState(false)
 
-  // Map each mode to the intents whose templates are most relevant
-  const modeIntentMap: Record<typeof currentMode, readonly AIIntent[]> = {
-    chat: ['ask', 'review'],
-    edit: ['edit', 'ask'],
-    insert: ['generate', 'ask'],
-    'new-note': ['generate'],
-  }
-
-  const visibleTemplates = useMemo(() => {
-    if (showAll) return templates
-    const intents = modeIntentMap[currentMode]
-    const focused = templates.filter((tmpl) => intents.includes(tmpl.intent))
-    return focused.length > 0 ? focused : templates.slice(0, MIN_FOCUSED_TEMPLATE_COUNT)
-  }, [templates, currentMode, showAll])
-
-  useEffect(() => {
-    setShowAll(false)
-  }, [currentMode])
+  const chipTemplates = useMemo(
+    () =>
+      AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER
+        .map((id) => templates.find((tmpl) => tmpl.id === id))
+        .filter((tmpl): tmpl is AITemplateModel => tmpl !== undefined),
+    [templates]
+  )
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
         {t('ai.mode.suggestions')}
       </span>
-      {visibleTemplates.map((template) => {
+      {chipTemplates.map((template) => {
         const resolvedTarget = resolveAIOpenOutputTarget(
           template.intent,
           template.outputTarget,
@@ -1809,16 +1771,6 @@ function AIQuickChips({
           </button>
         )
       })}
-      {!showAll && (
-        <button
-          type="button"
-          onClick={() => setShowAll(true)}
-          className="rounded-full px-2 py-1 text-xs transition-colors"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          {t('ai.templateLibrary.allFilter')} ›
-        </button>
-      )}
     </div>
   )
 }
@@ -3256,58 +3208,6 @@ function AIInsertionPreview({
       >
         {text}
       </pre>
-    </div>
-  )
-}
-
-function AIExplainView({
-  details,
-}: {
-  details: ReturnType<typeof buildAIExplainDetails>
-}) {
-  const { t } = useTranslation()
-  const rows = [
-    { label: t('ai.explain.intent'), value: t(`ai.intent.${details.intent}`) },
-    { label: t('ai.explain.outputTarget'), value: t(`ai.outputTarget.${details.outputTarget}`) },
-    { label: t('ai.explain.requestState'), value: t(`ai.requestState.${details.requestState}`) },
-    { label: t('ai.explain.source'), value: t(`ai.source.${details.source}`) },
-    { label: t('ai.explain.fileName'), value: details.fileName },
-    { label: t('ai.explain.documentLanguage'), value: formatAIDocumentLanguage(details.documentLanguage, t) },
-    {
-      label: t('ai.explain.selectedTextRole'),
-      value:
-        details.selectedTextRole === 'transform-target'
-          ? t('ai.preferences.roleTransformTarget')
-          : details.selectedTextRole === 'reference-only'
-            ? t('ai.preferences.roleReferenceOnly')
-            : undefined,
-    },
-    { label: t('ai.explain.headingPath'), value: details.headingPath },
-    { label: t('ai.explain.explicitContext'), value: details.explicitContext },
-    { label: t('ai.explain.provider'), value: details.provider },
-    { label: t('ai.explain.model'), value: details.model },
-    { label: t('ai.explain.threadId'), value: details.threadId },
-  ].filter((row) => typeof row.value === 'string' && row.value.length > 0)
-
-  return (
-    <div className="grid gap-3">
-      {rows.map((row) => (
-        <div
-          key={row.label}
-          className="grid gap-1 rounded-xl border px-3 py-3 md:grid-cols-[160px_1fr]"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--border) 84%, transparent)',
-            background: 'color-mix(in srgb, var(--bg-secondary) 68%, transparent)',
-          }}
-        >
-          <div className="text-xs uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>
-            {row.label}
-          </div>
-          <div className="text-sm break-words" style={{ color: 'var(--text-primary)' }}>
-            {row.value}
-          </div>
-        </div>
-      ))}
     </div>
   )
 }

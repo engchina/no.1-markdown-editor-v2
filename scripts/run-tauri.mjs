@@ -100,12 +100,15 @@ function cleanupStaleDevProcess() {
   if (process.platform !== 'win32') return
   if (args[0] !== 'dev') return
 
-  try {
-    execFileSync('taskkill', ['/F', '/IM', 'no1-markdown-editor.exe', '/T'], {
-      stdio: 'ignore',
-    })
-  } catch {
-    // No stale process is fine.
+  const executables = ['no1-markdown-editor.exe', 'No.1 Markdown Editor.exe']
+  for (const exe of executables) {
+    try {
+      execFileSync('taskkill', ['/F', '/IM', exe, '/T'], {
+        stdio: 'ignore',
+      })
+    } catch {
+      // No stale process for this name is fine.
+    }
   }
 }
 
@@ -119,7 +122,7 @@ function cleanupDevPort() {
         [
           '-NoProfile',
           '-Command',
-          `$ids = Get-NetTCPConnection -LocalPort ${DEV_PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($id in $ids) { $proc = Get-Process -Id $id -ErrorAction SilentlyContinue; if ($proc -and @('node', 'no1-markdown-editor') -contains $proc.ProcessName) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } }`,
+          `$ids = Get-NetTCPConnection -LocalPort ${DEV_PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($id in $ids) { $proc = Get-Process -Id $id -ErrorAction SilentlyContinue; if ($proc -and @('node', 'no1-markdown-editor', 'No.1 Markdown Editor') -contains $proc.ProcessName) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } }`,
         ],
         { stdio: 'ignore' }
       )

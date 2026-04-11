@@ -252,9 +252,11 @@
   "ai": {
     "title": "AI Composer",
     "promptLabel": "提示词",
-    "promptPlaceholder": "输入提问、改写、续写、翻译或总结...",
+    "promptPlaceholder": "{{first}}、{{second}}、{{third}}或{{fourth}}...",
     "run": "运行",
+    "stop": "停止",
     "apply": "应用",
+    "insert": "插入",
     "copy": "复制",
     "retry": "重试",
     "discard": "丢弃",
@@ -277,7 +279,6 @@
     "result": {
       "draft": "草稿",
       "diff": "差异",
-      "explain": "说明",
       "context": "上下文",
       "current": "当前内容",
       "aiDraft": "AI 草稿",
@@ -297,20 +298,6 @@
       "slash-command": "Slash 命令",
       "sidebar-tab": "AI 侧边栏"
     },
-    "explain": {
-      "intent": "意图",
-      "outputTarget": "输出目标",
-      "requestState": "请求状态",
-      "source": "入口来源",
-      "fileName": "文件",
-      "documentLanguage": "文档语言",
-      "selectedTextRole": "选中文本角色",
-      "headingPath": "标题路径",
-      "explicitContext": "显式上下文",
-      "provider": "Provider",
-      "model": "模型",
-      "threadId": "线程"
-    },
     "context": {
       "selection": "选区",
       "block": "块",
@@ -329,8 +316,9 @@
     "quickActions": {
       "ask": "提问",
       "translate": "翻译",
-      "rewrite": "改写",
-      "summarize": "总结"
+      "summarize": "总结",
+      "explain": "解释",
+      "rewrite": "改写"
     },
     "mode": {
       "chat": "对话",
@@ -390,6 +378,7 @@
       "newNotePrompt": "基于当前上下文起草一篇可独立阅读的 Markdown 笔记，并给出清晰标题和实用的小节结构。",
       "workspaceRunPrompt": "请审阅已附加的笔记，并返回一份协同的工作区执行计划。必须只返回下面这种结构。\n\n<!-- ai-workspace-summary -->\n- 简洁的摘要要点\n<!-- /ai-workspace-summary -->\n\n每个任务使用：\n<!-- ai-workspace-task action=\"update-note\" target=\"note name or path\" title=\"Draft title\" phase=\"可选阶段名\" depends-on=\"可选的前置 task target 或 title，可再跟第 2 个依赖\" -->\n# Draft content\n...\n<!-- /ai-workspace-task -->\n\n如果任务属于默认阶段，就省略 phase。若任务没有前置依赖，就省略 depends-on。若使用 phase，依赖只能指向同阶段或更早阶段，不能让任务依赖更后面的阶段。若应生成新笔记，请使用 action=\"create-note\"。为兼容旧输出，解析器也接受 stage=\"...\"，但默认优先使用 phase=\"...\"。除了 summary 和 task blocks 之外不要返回其他内容。",
       "reviewPrompt": "审阅当前块内容，简洁地指出具体改进建议。",
+      "explainPrompt": "请用平易近人的语言解释选中的内容，拆解其中的复杂术语、结构或概念，使其易于理解。",
       "rewritePrompt": "请改写选中的内容，在保留原意和 Markdown 结构的前提下提升清晰度与流畅度。",
       "summarizePrompt": "请总结选中的内容，并保留关键含义与 Markdown 结构。",
       "translatePrompt": "请翻译选中的内容，并保留 Markdown 结构、链接、表格、代码围栏、Mermaid、数学公式和 front matter。",
@@ -566,6 +555,8 @@
       "rewriteDetail": "在不改变原意的前提下优化选中文本的流畅度。",
       "summarizeLabel": "总结提炼",
       "summarizeDetail": "保留重点的同时总结选中文本。",
+      "explainLabel": "解释",
+      "explainDetail": "用平易近人的语言解释选中文本。",
       "reviewLabel": "审阅当前块",
       "reviewDetail": "审阅当前块并指出具体可改进之处。",
       "generateBelowLabel": "向下生成",
@@ -813,14 +804,14 @@
       "reviewDetail": "先审阅当前块，不直接修改文档。",
       "generateBelowAction": "向下生成",
       "generateBelowDetail": "在当前块下方起草一个新的块。",
-      "statusReady": "已就绪",
-      "statusReadyDetail": "这个文档当前没有活动中的 AI 会话。可以打开 Composer 或直接触发快捷动作开始。",
-      "statusOpen": "Composer 已打开",
-      "statusOpenDetail": "这个文档的 AI Composer 已经处于打开状态。",
+      "statusReady": "空闲中",
+      "statusReadyDetail": "这个文档当前没有正在进行的 AI 请求，也没有待处理草稿。可以打开 Composer 或直接触发快捷动作开始。",
+      "statusOpen": "等待运行",
+      "statusOpenDetail": "这个文档的 AI Composer 已打开。检查提示词后即可开始生成。",
       "statusStreaming": "生成中",
       "statusDraft": "草稿已生成",
-      "statusError": "需要处理",
-      "activeStatus": "AI 状态",
+      "statusError": "请求失败",
+      "activeStatus": "文档会话",
       "source": {
         "shortcut": "快捷键",
         "selectionBubble": "选区气泡",

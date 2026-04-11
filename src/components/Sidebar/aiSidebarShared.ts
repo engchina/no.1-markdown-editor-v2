@@ -40,20 +40,6 @@ export function getAISidebarActions(t: Translate): SidebarAIAction[] {
       detail: t('ai.sidebar.continueDetail'),
       openDetail: createAITemplateOpenDetail('continueWriting', t, SIDEBAR_TAB_SOURCE),
     },
-    {
-      id: 'review',
-      icon: 'infoCircle',
-      label: t('ai.sidebar.reviewAction'),
-      detail: t('ai.sidebar.reviewDetail'),
-      openDetail: createAITemplateOpenDetail('review', t, SIDEBAR_TAB_SOURCE),
-    },
-    {
-      id: 'insert-below',
-      icon: 'filePlus',
-      label: t('ai.sidebar.generateBelowAction'),
-      detail: t('ai.sidebar.generateBelowDetail'),
-      openDetail: createAITemplateOpenDetail('generateBelow', t, SIDEBAR_TAB_SOURCE),
-    },
   ]
 }
 
@@ -118,25 +104,19 @@ export function getAISidebarStatus({
 
 export function getAITemplateIcon(templateId: AITemplateId): IconName {
   switch (templateId) {
-    case 'newNote':
-      return 'filePlus'
     case 'translate':
       return 'globe'
     case 'rewrite':
       return 'edit'
     case 'summarize':
       return 'outline'
+    case 'explain':
+      return 'infoCircle'
     case 'ask':
       return 'sparkles'
     case 'continueWriting':
       return 'edit'
-    case 'review':
-      return 'infoCircle'
-    case 'generateBelow':
-      return 'filePlus'
   }
-
-  return 'sparkles'
 }
 
 export function truncateSidebarCopy(value: string, maxLength: number): string {

@@ -5,7 +5,7 @@ import { normalizeAIDraftText } from '../../lib/ai/prompt.ts'
 import { getAITemplateModels } from '../../lib/ai/templateLibrary.ts'
 import { formatPrimaryShortcut } from '../../lib/platform.ts'
 import { useAIStore } from '../../store/ai'
-import { useActiveTab, useEditorStore } from '../../store/editor'
+import { useEditorStore } from '../../store/editor'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 import {
   getAISidebarActions,
@@ -21,13 +21,16 @@ interface Props {
 
 export default function AISidebarPanel({ activePeekView, onPeekChange }: Props) {
   const { t } = useTranslation()
-  const activeTab = useActiveTab()
   const composer = useAIStore((state) => state.composer)
   const sidebarWidth = useEditorStore((state) => state.sidebarWidth)
   const compactLayout = sidebarWidth < 320
   const normalizedDraft = normalizeAIDraftText(composer.draftText, composer.outputTarget)
   const actions = useMemo(() => getAISidebarActions(t), [t])
-  const templates = useMemo(() => getAITemplateModels(t), [t])
+  // 'ask' is only used for the Quick Action entry point, not shown in the Prompt Library
+  const libraryTemplates = useMemo(
+    () => getAITemplateModels(t).filter((tmpl) => tmpl.id !== 'ask'),
+    [t]
+  )
   const status = getAISidebarStatus({
     composerOpen: composer.open,
     draftText: normalizedDraft,
@@ -79,19 +82,6 @@ export default function AISidebarPanel({ activePeekView, onPeekChange }: Props) 
                 </p>
               </div>
             </div>
-
-            <div
-              className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-[11px]"
-              style={{
-                borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
-                background: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
-                color: 'var(--text-secondary)',
-              }}
-              title={activeTab?.name ?? t('app.untitled')}
-            >
-              <AppIcon name="file" size={12} />
-              <span className="truncate">{activeTab?.name ?? t('app.untitled')}</span>
-            </div>
           </div>
 
           <button
@@ -116,7 +106,14 @@ export default function AISidebarPanel({ activePeekView, onPeekChange }: Props) 
           className="mt-4 rounded-[18px] border px-3 py-3"
           style={{ borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)' }}
         >
-          <div className="flex items-center justify-between gap-2">
+          <div
+            className="text-[11px] font-semibold uppercase tracking-[0.16em]"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            {t('ai.sidebar.activeStatus')}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-2">
             <span
               className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
               style={{
@@ -218,7 +215,7 @@ export default function AISidebarPanel({ activePeekView, onPeekChange }: Props) 
             icon="copy"
             title={t('ai.sidebar.peekLibrary')}
             detail={t('ai.sidebar.peekLibraryDetail')}
-            badge={String(templates.length)}
+            badge={String(libraryTemplates.length)}
             active={activePeekView === 'library'}
             onToggle={onPeekChange}
           />

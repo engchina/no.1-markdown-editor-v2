@@ -22,7 +22,7 @@ test('AI command palette entries route through shared quick-action presets where
 test('selection bubble dispatches AI open events from quick actions without collapsing the current selection first', async () => {
   const bubble = await readFile(new URL('../src/components/AI/AISelectionBubble.tsx', import.meta.url), 'utf8')
 
-  assert.match(bubble, /const ACTIONS: AIQuickAction\[] = \['ask', 'translate', 'rewrite', 'summarize'\]/)
+  assert.match(bubble, /const ACTIONS: AIQuickAction\[] = \['ask', 'translate', 'summarize', 'explain', 'rewrite'\]/)
   assert.match(bubble, /onMouseDown=\{\(event\) => \{\s*event\.preventDefault\(\)/)
   assert.match(bubble, /dispatchEditorAIOpen\(createAIQuickActionOpenDetail\(action, t\)\)/)
   assert.match(bubble, /new ResizeObserver\(reportSize\)/)

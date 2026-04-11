@@ -4,14 +4,12 @@ import type { AIComposerSource, AIIntent, AIOutputTarget, AIScope } from './type
 export type AITemplateId =
   | 'ask'
   | 'continueWriting'
-  | 'newNote'
   | 'translate'
-  | 'rewrite'
   | 'summarize'
-  | 'review'
-  | 'generateBelow'
+  | 'explain'
+  | 'rewrite'
 
-type Translate = (key: string) => string
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
 export interface AITemplateDefinition {
   id: AITemplateId
@@ -46,28 +44,12 @@ const TEMPLATE_DEFINITIONS: AITemplateDefinition[] = [
     detailKey: 'ai.templateLibrary.continueDetail',
   },
   {
-    id: 'newNote',
-    intent: 'generate',
-    outputTarget: 'new-note',
-    promptKey: 'ai.templates.newNotePrompt',
-    labelKey: 'ai.templateLibrary.newNoteLabel',
-    detailKey: 'ai.templateLibrary.newNoteDetail',
-  },
-  {
     id: 'translate',
     intent: 'edit',
     outputTarget: 'replace-selection',
     promptKey: 'ai.templates.translatePrompt',
     labelKey: 'ai.templateLibrary.translateLabel',
     detailKey: 'ai.templateLibrary.translateDetail',
-  },
-  {
-    id: 'rewrite',
-    intent: 'edit',
-    outputTarget: 'replace-selection',
-    promptKey: 'ai.templates.rewritePrompt',
-    labelKey: 'ai.templateLibrary.rewriteLabel',
-    detailKey: 'ai.templateLibrary.rewriteDetail',
   },
   {
     id: 'summarize',
@@ -78,22 +60,24 @@ const TEMPLATE_DEFINITIONS: AITemplateDefinition[] = [
     detailKey: 'ai.templateLibrary.summarizeDetail',
   },
   {
-    id: 'review',
-    intent: 'review',
+    id: 'explain',
+    intent: 'ask',
     outputTarget: 'chat-only',
-    promptKey: 'ai.templates.reviewPrompt',
-    labelKey: 'ai.templateLibrary.reviewLabel',
-    detailKey: 'ai.templateLibrary.reviewDetail',
+    promptKey: 'ai.templates.explainPrompt',
+    labelKey: 'ai.templateLibrary.explainLabel',
+    detailKey: 'ai.templateLibrary.explainDetail',
   },
   {
-    id: 'generateBelow',
-    intent: 'generate',
-    outputTarget: 'insert-below',
-    promptKey: 'ai.templates.generateBelowPrompt',
-    labelKey: 'ai.templateLibrary.generateBelowLabel',
-    detailKey: 'ai.templateLibrary.generateBelowDetail',
+    id: 'rewrite',
+    intent: 'edit',
+    outputTarget: 'replace-selection',
+    promptKey: 'ai.templates.rewritePrompt',
+    labelKey: 'ai.templateLibrary.rewriteLabel',
+    detailKey: 'ai.templateLibrary.rewriteDetail',
   },
 ]
+
+export const AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER = ['translate', 'summarize', 'explain', 'rewrite'] as const
 
 export function getAITemplateDefinitions(): readonly AITemplateDefinition[] {
   return TEMPLATE_DEFINITIONS
@@ -106,6 +90,19 @@ export function getAITemplateModels(t: Translate): AITemplateModel[] {
     detail: t(definition.detailKey),
     prompt: definition.promptKey ? t(definition.promptKey) : '',
   }))
+}
+
+export function buildAIComposerPromptPlaceholder(
+  t: Translate
+): string {
+  const labelById = new Map(getAITemplateModels(t).map((model) => [model.id, model.label]))
+
+  return t('ai.promptPlaceholder', {
+    first: labelById.get('translate') ?? '',
+    second: labelById.get('summarize') ?? '',
+    third: labelById.get('explain') ?? '',
+    fourth: labelById.get('rewrite') ?? '',
+  })
 }
 
 export function createAITemplateOpenDetail(

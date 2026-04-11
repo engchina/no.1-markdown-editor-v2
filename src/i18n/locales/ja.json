@@ -252,9 +252,11 @@
   "ai": {
     "title": "AI Composer",
     "promptLabel": "プロンプト",
-    "promptPlaceholder": "質問、改稿、続きの生成、翻訳、要約などを入力...",
+    "promptPlaceholder": "{{first}}、{{second}}、{{third}}、または{{fourth}}...",
     "run": "実行",
+    "stop": "停止",
     "apply": "反映",
+    "insert": "挿入",
     "copy": "コピー",
     "retry": "再実行",
     "discard": "破棄",
@@ -277,7 +279,6 @@
     "result": {
       "draft": "下書き",
       "diff": "差分",
-      "explain": "説明",
       "context": "コンテキスト",
       "current": "現在の内容",
       "aiDraft": "AI 下書き",
@@ -297,20 +298,6 @@
       "slash-command": "スラッシュコマンド",
       "sidebar-tab": "AI サイドバー"
     },
-    "explain": {
-      "intent": "意図",
-      "outputTarget": "出力先",
-      "requestState": "リクエスト状態",
-      "source": "起点",
-      "fileName": "ファイル",
-      "documentLanguage": "文書言語",
-      "selectedTextRole": "選択テキストの役割",
-      "headingPath": "見出しパス",
-      "explicitContext": "明示コンテキスト",
-      "provider": "プロバイダー",
-      "model": "モデル",
-      "threadId": "スレッド"
-    },
     "context": {
       "selection": "選択範囲",
       "block": "ブロック",
@@ -329,8 +316,9 @@
     "quickActions": {
       "ask": "質問",
       "translate": "翻訳",
-      "rewrite": "改稿",
-      "summarize": "要約"
+      "summarize": "要約",
+      "explain": "説明",
+      "rewrite": "改稿"
     },
     "mode": {
       "chat": "チャット",
@@ -390,6 +378,7 @@
       "newNotePrompt": "現在のコンテキストをもとに、明確なタイトルと使いやすいセクション構成を持つ独立した Markdown ノートを下書きしてください。",
       "workspaceRunPrompt": "添付されたノートを確認し、連携したワークスペース実行プランを返してください。必ず次の構造だけを返します。\n\n<!-- ai-workspace-summary -->\n- 簡潔な要約箇条書き\n<!-- /ai-workspace-summary -->\n\n各タスクは次の形式にします:\n<!-- ai-workspace-task action=\"update-note\" target=\"note name or path\" title=\"Draft title\" phase=\"任意のフェーズ名\" depends-on=\"前提となる task の target または title, 任意の第2依存\" -->\n# Draft content\n...\n<!-- /ai-workspace-task -->\n\n既定フェーズに属するタスクでは phase を省略してください。前提がないタスクでは depends-on を省略してください。phase を使う場合、依存先は同じフェーズかそれ以前のフェーズだけにしてください。後続フェーズへの依存は作らないでください。新規ノート化する場合は action=\"create-note\" を使ってください。互換性のため stage=\"...\" も受け付けますが、基本は phase=\"...\" を使ってください。summary ブロックと task ブロック以外は返さないでください。",
       "reviewPrompt": "現在のブロックをレビューし、具体的な改善点を簡潔に指摘してください。",
+      "explainPrompt": "選択した内容をわかりやすい言葉で説明してください。複雑な用語・構造・概念があれば噛み砕いて解説してください。",
       "rewritePrompt": "選択した内容の意味と Markdown 構造を保ったまま、読みやすさと流れを改善するように書き直してください。",
       "summarizePrompt": "選択した内容を、重要な意味と Markdown 構造を保ったまま要約してください。",
       "translatePrompt": "選択した内容を、Markdown 構造、リンク、表、コードフェンス、Mermaid、数式、front matter を保ったまま翻訳してください。",
@@ -566,6 +555,8 @@
       "rewriteDetail": "意味を保ったまま選択範囲の流れを改善します。",
       "summarizeLabel": "要約",
       "summarizeDetail": "重要な点を保ったまま選択範囲を要約します。",
+      "explainLabel": "説明",
+      "explainDetail": "選択した文章をわかりやすい言葉で説明します。",
       "reviewLabel": "現在のブロックをレビュー",
       "reviewDetail": "現在のブロックをレビューし、改善点を示します。",
       "generateBelowLabel": "下に生成",
@@ -813,14 +804,14 @@
       "reviewDetail": "まだ文書は変更せず、現在のブロックをレビューします。",
       "generateBelowAction": "下に生成",
       "generateBelowDetail": "現在のブロックの下に新しいブロックを下書きします。",
-      "statusReady": "準備完了",
-      "statusReadyDetail": "このドキュメントでは現在 AI セッションは動いていません。Composer かクイックアクションから開始できます。",
-      "statusOpen": "Composer を開いています",
-      "statusOpenDetail": "このドキュメントの AI Composer はすでに開いています。",
+      "statusReady": "待機中",
+      "statusReadyDetail": "このドキュメントでは現在 AI リクエストも下書きもありません。Composer を開くかクイックアクションから開始できます。",
+      "statusOpen": "実行待ち",
+      "statusOpenDetail": "このドキュメントでは AI Composer が開いています。プロンプトを確認してから実行できます。",
       "statusStreaming": "生成中",
       "statusDraft": "下書きあり",
-      "statusError": "確認が必要",
-      "activeStatus": "AI 状態",
+      "statusError": "リクエスト失敗",
+      "activeStatus": "ドキュメント セッション",
       "source": {
         "shortcut": "ショートカット",
         "selectionBubble": "選択バブル",

@@ -21,7 +21,8 @@ test('resolveAIApplyChange replaces the original selection when requested', () =
   const change = resolveAIApplyChange('replace-selection', snapshot, snapshot.docText, 'universe')
   assert.deepEqual(change, {
     range: { from: 6, to: 11 },
-    text: 'universe',
+    text: 'universe\n',
+    selectionAnchor: 15,
   })
 })
 
@@ -42,6 +43,7 @@ test('resolveAIApplyChange inserts below the captured block with readable spacin
   assert.equal(change.range.from, 'First paragraph\ncontinues here'.length)
   assert.equal(change.range.to, 'First paragraph\ncontinues here'.length)
   assert.equal(change.text, '\n\nInserted block')
+  assert.equal(change.selectionAnchor, change.range.from + change.text.length + 1)
 })
 
 test('resolveAIApplyChange inserts below the final selected block instead of the first one', () => {
@@ -64,13 +66,15 @@ test('resolveAIApplyChange inserts below the final selected block instead of the
   assert.equal(change.range.from, selectedText.length)
   assert.equal(change.range.to, selectedText.length)
   assert.equal(change.text, '\n\nInserted block')
+  assert.equal(change.selectionAnchor, change.range.from + change.text.length + 1)
 })
 
 test('resolveAIApplyChange inserts at cursor without extra formatting', () => {
   const change = resolveAIApplyChange('at-cursor', snapshot, snapshot.docText, '!')
   assert.deepEqual(change, {
     range: { from: 11, to: 11 },
-    text: '!',
+    text: '!\n',
+    selectionAnchor: 13,
   })
 })
 

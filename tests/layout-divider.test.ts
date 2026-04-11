@@ -22,6 +22,14 @@ test('layout uses the shared divider for both sidebar and split panes', async ()
   assert.match(divider, /panel-divider__hint/)
 })
 
+test('AI peek rail is anchored inside the shared content shell so it aligns with the sidebar height', async () => {
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+
+  assert.match(app, /<div className="flex flex-1 min-h-0 px-3 pb-3">\s*<div className="relative flex flex-1 min-h-0 min-w-0">/)
+  assert.match(app, /className="sidebar-peek-backdrop absolute inset-y-0 right-0 z-20"/)
+  assert.match(app, /className="pointer-events-none absolute inset-y-0 z-30"/)
+})
+
 test('divider copy is localized for all supported editor languages', async () => {
   const [en, ja, zh] = await Promise.all([
     readFile(new URL('../src/i18n/locales/en.json', import.meta.url), 'utf8'),

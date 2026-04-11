@@ -257,9 +257,11 @@
   "ai": {
     "title": "AI Composer",
     "promptLabel": "Prompt",
-    "promptPlaceholder": "Ask, rewrite, continue writing, translate, or summarize...",
+    "promptPlaceholder": "{{first}}, {{second}}, {{third}}, or {{fourth}}...",
     "run": "Run",
+    "stop": "Stop",
     "apply": "Apply",
+    "insert": "Insert",
     "copy": "Copy",
     "retry": "Retry",
     "discard": "Discard",
@@ -282,7 +284,6 @@
     "result": {
       "draft": "Draft",
       "diff": "Diff",
-      "explain": "Explain",
       "context": "Context",
       "current": "Current",
       "aiDraft": "AI Draft",
@@ -302,20 +303,6 @@
       "slash-command": "Slash Command",
       "sidebar-tab": "Sidebar AI Tab"
     },
-    "explain": {
-      "intent": "Intent",
-      "outputTarget": "Output Target",
-      "requestState": "Request State",
-      "source": "Entry Source",
-      "fileName": "File",
-      "documentLanguage": "Document Language",
-      "selectedTextRole": "Selected Text Role",
-      "headingPath": "Heading Path",
-      "explicitContext": "Explicit Context",
-      "provider": "Provider",
-      "model": "Model",
-      "threadId": "Thread"
-    },
     "context": {
       "selection": "Selection",
       "block": "Block",
@@ -334,8 +321,9 @@
     "quickActions": {
       "ask": "Ask",
       "translate": "Translate",
-      "rewrite": "Rewrite",
-      "summarize": "Summarize"
+      "summarize": "Summarize",
+      "explain": "Explain",
+      "rewrite": "Rewrite"
     },
     "mode": {
       "chat": "Chat",
@@ -395,6 +383,7 @@
       "newNotePrompt": "Draft a self-contained Markdown note from the current context. Give it a clear title and useful section structure.",
       "workspaceRunPrompt": "Review the attached notes and return a coordinated workspace execution plan. Use exactly this structure:\n\n<!-- ai-workspace-summary -->\n- concise summary bullets\n<!-- /ai-workspace-summary -->\n\nFor each task, output:\n<!-- ai-workspace-task action=\"update-note\" target=\"note name or path\" title=\"Draft title\" phase=\"optional phase name\" depends-on=\"optional prior task target or title, optional second dependency\" -->\n# Draft content\n...\n<!-- /ai-workspace-task -->\n\nOmit phase when a task belongs in the default phase. Omit depends-on when a task has no prerequisite. If you use phases, keep every task dependency within the same phase or an earlier phase; never make a task depend on a later phase. Use action=\"create-note\" when the result should become a new note. The parser also accepts stage=\"...\" for compatibility, but prefer phase=\"...\". Return only the summary block and task blocks.",
       "reviewPrompt": "Review the current block, point out concrete improvements, and keep the response concise.",
+      "explainPrompt": "Explain the selected content in plain language. Break down any complex terms, structures, or concepts so they are easy to understand.",
       "rewritePrompt": "Rewrite the selected content to improve clarity and flow while preserving meaning and Markdown structure.",
       "summarizePrompt": "Summarize the selected content while preserving the key meaning and Markdown structure.",
       "translatePrompt": "Translate the selected content while preserving Markdown structure, links, tables, code fences, Mermaid, math, and front matter.",
@@ -571,6 +560,8 @@
       "rewriteDetail": "Rewrite selected text to improve flow without changing meaning.",
       "summarizeLabel": "Summarize",
       "summarizeDetail": "Summarize selected text while preserving the important points.",
+      "explainLabel": "Explain",
+      "explainDetail": "Explain the selected text in plain language.",
       "reviewLabel": "Review Current Block",
       "reviewDetail": "Review the current block and point out concrete improvements.",
       "generateBelowLabel": "Generate Below",
@@ -818,14 +809,14 @@
       "reviewDetail": "Review the current block without changing the document yet.",
       "generateBelowAction": "Generate Below",
       "generateBelowDetail": "Draft a new block directly below the current one.",
-      "statusReady": "Ready",
-      "statusReadyDetail": "No AI session is active for this document right now. Open the composer or trigger a quick action to start.",
-      "statusOpen": "Composer Open",
-      "statusOpenDetail": "The AI Composer is already open for this document.",
-      "statusStreaming": "Streaming",
+      "statusReady": "Idle",
+      "statusReadyDetail": "No AI request or draft is active for this document. Open the composer or use a quick action to start.",
+      "statusOpen": "Awaiting Run",
+      "statusOpenDetail": "The AI Composer is open for this document. Review the prompt and run when you're ready.",
+      "statusStreaming": "Generating",
       "statusDraft": "Draft Ready",
-      "statusError": "Needs Attention",
-      "activeStatus": "AI Status",
+      "statusError": "Request Failed",
+      "activeStatus": "Document Session",
       "source": {
         "shortcut": "Shortcut",
         "selectionBubble": "Selection Bubble",

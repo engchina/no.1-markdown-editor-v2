@@ -214,6 +214,8 @@ export default defineConfig(async () => ({
     watch: {
       // 3. tell vite to ignore watching `src-tauri`
       ignored: ['**/src-tauri/**'],
+      // 4. use polling if the environment variable is set (useful for some Windows setups)
+      usePolling: process.env.VITE_USE_POLLING === 'true',
     },
   },
 }))

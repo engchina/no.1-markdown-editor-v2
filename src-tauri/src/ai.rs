@@ -546,13 +546,21 @@ fn apply_ai_stream_event<R: Runtime>(
             .map(str::to_string);
     }
 
-    if let Some(next_finish_reason) = extract_ai_stream_finish_reason(&response_json) {
-        *finish_reason = Some(next_finish_reason);
+    let chunk_finish_reason = extract_ai_stream_finish_reason(&response_json);
+    if let Some(ref reason) = chunk_finish_reason {
+        *finish_reason = Some(reason.clone());
     }
 
     if let Some(chunk) = extract_ai_stream_chunk(&response_json) {
         text.push_str(&chunk);
         emit_ai_stream_chunk(app, request_id, &chunk)?;
+    }
+
+    // finish_reason being set means the provider considers the stream complete.
+    // Some providers omit [DONE] or send it only after a network-level close,
+    // causing the invoke to hang. Treat any non-null finish_reason as done.
+    if chunk_finish_reason.is_some() {
+        return Ok(true);
     }
 
     Ok(false)
@@ -591,11 +599,28 @@ fn emit_ai_stream_chunk<R: Runtime>(
 }
 
 fn extract_ai_stream_finish_reason(response_json: &Value) -> Option<String> {
-    response_json
+    // OpenAI-compatible: choices[0].finish_reason (snake_case, string or null)
+    let from_choices = response_json
         .get("choices")
         .and_then(Value::as_array)
         .and_then(|choices| choices.first())
-        .and_then(|choice| choice.get("finish_reason"))
+        .and_then(|choice| {
+            // snake_case (OpenAI, most providers)
+            choice
+                .get("finish_reason")
+                .and_then(Value::as_str)
+                // camelCase (OCI Cohere: finishReason = "COMPLETE" | "MAX_TOKENS" | …)
+                .or_else(|| choice.get("finishReason").and_then(Value::as_str))
+        })
+        .map(str::to_string);
+
+    if from_choices.is_some() {
+        return from_choices;
+    }
+
+    // OCI Generic/Llama top-level finishReason (outside choices)
+    response_json
+        .get("finishReason")
         .and_then(Value::as_str)
         .map(str::to_string)
 }
@@ -781,6 +806,7 @@ mod tests {
 
     #[test]
     fn extract_ai_stream_finish_reason_reads_terminal_choice_metadata() {
+        // OpenAI snake_case
         assert_eq!(
             extract_ai_stream_finish_reason(&json!({
                 "choices": [{
@@ -790,6 +816,38 @@ mod tests {
             }))
             .as_deref(),
             Some("stop")
+        );
+
+        // OCI Cohere camelCase inside choices
+        assert_eq!(
+            extract_ai_stream_finish_reason(&json!({
+                "choices": [{
+                    "delta": {},
+                    "finishReason": "COMPLETE"
+                }]
+            }))
+            .as_deref(),
+            Some("COMPLETE")
+        );
+
+        // OCI Generic/Llama top-level finishReason
+        assert_eq!(
+            extract_ai_stream_finish_reason(&json!({
+                "finishReason": "stop"
+            }))
+            .as_deref(),
+            Some("stop")
+        );
+
+        // null finish_reason (intermediate chunk) should return None
+        assert_eq!(
+            extract_ai_stream_finish_reason(&json!({
+                "choices": [{
+                    "delta": { "content": "hello" },
+                    "finish_reason": null
+                }]
+            })),
+            None
         );
     }
 

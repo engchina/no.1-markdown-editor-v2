@@ -1,9 +1,11 @@
 import { resolveCurrentBlockRange } from './context.ts'
+import { prepareMarkdownInsertion } from '../markdownInsertion.ts'
 import type { AIApplySnapshot, AIOutputTarget } from './types.ts'
 
 export interface AIResolvedApplyChange {
   range: { from: number; to: number }
   text: string
+  selectionAnchor: number
 }
 
 export function isAIApplySnapshotStale(snapshot: AIApplySnapshot, currentDoc: string): boolean {
@@ -20,24 +22,25 @@ export function resolveAIApplyChange(
     throw new Error('New note output must be handled outside the current document apply flow.')
   }
 
+  let range: { from: number; to: number }
+  let nextText = text
+
   if (outputTarget === 'replace-selection') {
-    return {
-      range: { from: snapshot.selectionFrom, to: snapshot.selectionTo },
-      text,
-    }
+    range = { from: snapshot.selectionFrom, to: snapshot.selectionTo }
+  } else if (outputTarget === 'insert-below') {
+    const insertBelowOffset = resolveInsertBelowOffset(snapshot, currentDoc)
+    range = { from: insertBelowOffset, to: insertBelowOffset }
+    nextText = formatInsertBelowText(currentDoc, insertBelowOffset, text)
+  } else {
+    range = { from: snapshot.anchorOffset, to: snapshot.anchorOffset }
   }
 
-  if (outputTarget === 'insert-below') {
-    const insertBelowOffset = resolveInsertBelowOffset(snapshot, currentDoc)
-    return {
-      range: { from: insertBelowOffset, to: insertBelowOffset },
-      text: formatInsertBelowText(currentDoc, insertBelowOffset, text),
-    }
-  }
+  const insertion = prepareMarkdownInsertion(nextText, currentDoc.slice(range.to))
 
   return {
-    range: { from: snapshot.anchorOffset, to: snapshot.anchorOffset },
-    text,
+    range,
+    text: insertion.text,
+    selectionAnchor: range.from + insertion.selectionOffset,
   }
 }
 

@@ -470,110 +470,112 @@ export default function App() {
         )}
       </div>
 
-      <div className="relative flex flex-1 min-h-0 px-3 pb-3">
-        {showSidebar && (
-          <div className="relative z-10 flex min-h-0 flex-shrink-0 items-stretch">
-            <div
-              className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden"
-              style={{ width: resolvedSidebarWidth }}
-            >
-              <Sidebar
-                width={resolvedSidebarWidth}
-                aiPeekView={aiPeekView}
-                onAiPeekViewChange={setAiPeekView}
+      <div className="flex flex-1 min-h-0 px-3 pb-3">
+        <div className="relative flex flex-1 min-h-0 min-w-0">
+          {showSidebar && (
+            <div className="relative z-10 flex min-h-0 flex-shrink-0 items-stretch">
+              <div
+                className="flex min-h-0 flex-shrink-0 flex-col overflow-hidden"
+                style={{ width: resolvedSidebarWidth }}
+              >
+                <Sidebar
+                  width={resolvedSidebarWidth}
+                  aiPeekView={aiPeekView}
+                  onAiPeekViewChange={setAiPeekView}
+                />
+              </div>
+              <ResizableDivider
+                variant="sidebar"
+                ariaLabel={t('layout.sidebarResizeHandle')}
+                hint={t('layout.resizeHint')}
+                ariaValueMin={SIDEBAR_MIN_WIDTH}
+                ariaValueMax={SIDEBAR_MAX_WIDTH}
+                ariaValueNow={resolvedSidebarWidth}
+                ariaValueText={t('layout.sidebarResizeValue', { width: resolvedSidebarWidth })}
+                onResize={handleSidebarResize}
+                onReset={resetSidebarResize}
               />
             </div>
-            <ResizableDivider
-              variant="sidebar"
-              ariaLabel={t('layout.sidebarResizeHandle')}
-              hint={t('layout.resizeHint')}
-              ariaValueMin={SIDEBAR_MIN_WIDTH}
-              ariaValueMax={SIDEBAR_MAX_WIDTH}
-              ariaValueNow={resolvedSidebarWidth}
-              ariaValueText={t('layout.sidebarResizeValue', { width: resolvedSidebarWidth })}
-              onResize={handleSidebarResize}
-              onReset={resetSidebarResize}
-            />
-          </div>
-        )}
+          )}
 
-        {showAIPeekRail && (
-          <>
-            <div
-              aria-hidden="true"
-              className="sidebar-peek-backdrop absolute inset-y-0 right-0 z-20"
-              style={{
-                left: `${sidebarPeekOffset}px`,
-                background:
-                  'linear-gradient(90deg, color-mix(in srgb, var(--bg-canvas) 6%, transparent) 0%, color-mix(in srgb, var(--bg-canvas) 34%, transparent) 20%, color-mix(in srgb, var(--bg-canvas) 54%, transparent) 100%)',
-              }}
-              onMouseDown={() => setAiPeekView(null)}
-            />
-            <div
-              className="pointer-events-none absolute inset-y-0 z-30"
-              style={{
-                left: `${sidebarPeekOffset}px`,
-                width: `min(420px, calc(100% - ${sidebarPeekOffset + 8}px))`,
-              }}
-            >
-              <div className="pointer-events-auto h-full">
-                <AISidebarPeekRail view={aiPeekView} onClose={() => setAiPeekView(null)} />
+          {showAIPeekRail && (
+            <>
+              <div
+                aria-hidden="true"
+                className="sidebar-peek-backdrop absolute inset-y-0 right-0 z-20"
+                style={{
+                  left: `${sidebarPeekOffset}px`,
+                  background:
+                    'linear-gradient(90deg, color-mix(in srgb, var(--bg-canvas) 6%, transparent) 0%, color-mix(in srgb, var(--bg-canvas) 34%, transparent) 20%, color-mix(in srgb, var(--bg-canvas) 54%, transparent) 100%)',
+                }}
+                onMouseDown={() => setAiPeekView(null)}
+              />
+              <div
+                className="pointer-events-none absolute inset-y-0 z-30"
+                style={{
+                  left: `${sidebarPeekOffset}px`,
+                  width: `min(420px, calc(100% - ${sidebarPeekOffset + 8}px))`,
+                }}
+              >
+                <div className="pointer-events-auto h-full">
+                  <AISidebarPeekRail view={aiPeekView} onClose={() => setAiPeekView(null)} />
+                </div>
               </div>
-            </div>
-          </>
-        )}
+            </>
+          )}
 
-        <div
-          className="relative flex flex-1 min-w-0 flex-col overflow-hidden rounded-[28px] shadow-elegant"
-          style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
-        >
-          {!focusMode && <DocumentTabs />}
+          <div
+            className="relative flex flex-1 min-w-0 flex-col overflow-hidden rounded-[28px] shadow-elegant"
+            style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)' }}
+          >
+            {!focusMode && <DocumentTabs />}
 
-          {focusMode ? (
-            <div className="flex-1 min-w-0 overflow-hidden flex items-start justify-center focus-mode-container h-full">
-              <div className="focus-mode-column h-full w-full">
-                {renderEditorPane()}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-1 min-h-0 min-w-0">
-              {showEditor && (
-                <div
-                  className="min-h-0 flex-shrink-0 overflow-hidden"
-                  style={{ width: showPreview ? `${editorRatio * 100}%` : '100%' }}
-                >
+            {focusMode ? (
+              <div className="flex-1 min-w-0 overflow-hidden flex items-start justify-center focus-mode-container h-full">
+                <div className="focus-mode-column h-full w-full">
                   {renderEditorPane()}
                 </div>
-              )}
+              </div>
+            ) : (
+              <div className="flex flex-1 min-h-0 min-w-0">
+                {showEditor && (
+                  <div
+                    className="min-h-0 flex-shrink-0 overflow-hidden"
+                    style={{ width: showPreview ? `${editorRatio * 100}%` : '100%' }}
+                  >
+                    {renderEditorPane()}
+                  </div>
+                )}
 
-              {showEditor && showPreview && (
-                <ResizableDivider
-                  variant="pane"
-                  ariaLabel={t('layout.splitResizeHandle')}
-                  hint={t('layout.resizeHint')}
-                  ariaValueMin={20}
-                  ariaValueMax={80}
-                  ariaValueNow={splitEditorPercent}
-                  ariaValueText={t('layout.splitResizeValue', {
-                    editor: splitEditorPercent,
-                    preview: splitPreviewPercent,
-                  })}
-                  onResize={handleSplitResize}
-                  onReset={resetSplitResize}
-                />
-              )}
+                {showEditor && showPreview && (
+                  <ResizableDivider
+                    variant="pane"
+                    ariaLabel={t('layout.splitResizeHandle')}
+                    hint={t('layout.resizeHint')}
+                    ariaValueMin={20}
+                    ariaValueMax={80}
+                    ariaValueNow={splitEditorPercent}
+                    ariaValueText={t('layout.splitResizeValue', {
+                      editor: splitEditorPercent,
+                      preview: splitPreviewPercent,
+                    })}
+                    onResize={handleSplitResize}
+                    onReset={resetSplitResize}
+                  />
+                )}
 
-              {showPreview && (
-                <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
-                  {previewActivated ? (
-                    renderPreviewPane()
-                  ) : (
-                    <PreviewPlaceholder onActivate={() => setPreviewActivated(true)} />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                {showPreview && (
+                  <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
+                    {previewActivated ? (
+                      renderPreviewPane()
+                    ) : (
+                      <PreviewPlaceholder onActivate={() => setPreviewActivated(true)} />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

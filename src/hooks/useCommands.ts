@@ -7,7 +7,6 @@ import { useRecentFiles } from './useRecentFiles'
 import { applyTheme, getThemeById, THEMES } from '../themes'
 import { dispatchEditorAIGhostText, dispatchEditorAIOpen } from '../lib/ai/events'
 import { createAIQuickActionOpenDetail } from '../lib/ai/quickActions'
-import { createAITemplateOpenDetail } from '../lib/ai/templateLibrary'
 import { getFormatShortcutLabel } from '../components/Editor/formatShortcuts'
 import type { Language } from '../i18n'
 import { formatPrimaryShortcut } from '../lib/platform'
@@ -286,7 +285,12 @@ export function useCommands(): Command[] {
         icon: '✨',
         category: 'ai',
         action: () => {
-          dispatchEditorAIOpen({ ...createAITemplateOpenDetail('newNote', t, 'command-palette') })
+          dispatchEditorAIOpen({
+            source: 'command-palette',
+            intent: 'generate',
+            outputTarget: 'new-note',
+            prompt: t('ai.templates.newNotePrompt'),
+          })
         },
       },
       {

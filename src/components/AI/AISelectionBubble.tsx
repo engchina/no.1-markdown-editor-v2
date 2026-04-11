@@ -11,7 +11,7 @@ interface Props {
   onSizeChange?: (size: SelectionBubbleSize) => void
 }
 
-const ACTIONS: AIQuickAction[] = ['ask', 'translate', 'rewrite', 'summarize']
+const ACTIONS: AIQuickAction[] = ['ask', 'translate', 'summarize', 'explain', 'rewrite']
 
 export default function AISelectionBubble({ top, left, onSizeChange }: Props) {
   const { t } = useTranslation()

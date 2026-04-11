@@ -1,6 +1,6 @@
 import type { AIOutputTarget } from './types.ts'
 
-export type AIResultView = 'draft' | 'diff' | 'explain'
+export type AIResultView = 'draft' | 'diff'
 export type AIInsertTarget =
   | 'replace-selection'
   | 'at-cursor'

@@ -448,7 +448,7 @@ async function main() {
       async () => (await page.locator('[data-ai-provenance-mark]').count()) >= 1,
       'AI provenance marker to appear after explicit apply'
     )
-    await expectEditorContent(page, `Opening insertion.${AI_SMOKE_MARKDOWN}`)
+    await expectEditorContent(page, `Opening insertion.\n${AI_SMOKE_MARKDOWN}`)
     await undoEditor(page, modifier)
     await expectEditorContent(page, AI_SMOKE_MARKDOWN)
 

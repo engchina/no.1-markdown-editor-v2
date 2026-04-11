@@ -4,7 +4,6 @@ import { dispatchEditorAIOpen } from '../../lib/ai/events.ts'
 import { createAISlashCommandEntries } from '../../lib/ai/slashCommands.ts'
 import { createAITemplateOpenDetail, getAITemplateModels } from '../../lib/ai/templateLibrary.ts'
 import { formatPrimaryShortcut } from '../../lib/platform.ts'
-import { useActiveTab } from '../../store/editor'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 import {
   getAITemplateIcon,
@@ -19,8 +18,8 @@ interface Props {
 
 export default function AISidebarPeekRail({ view, onClose }: Props) {
   const { t } = useTranslation()
-  const activeTab = useActiveTab()
-  const templates = useMemo(() => getAITemplateModels(t), [t])
+  // 'ask' is only used as a Quick Action entry point, not listed in the Prompt Library
+  const templates = useMemo(() => getAITemplateModels(t).filter((tmpl) => tmpl.id !== 'ask'), [t])
   const slashCommands = useMemo(() => createAISlashCommandEntries(t), [t])
   const shortcut = formatPrimaryShortcut('J')
   const meta = getPeekMeta(view, t)
@@ -76,19 +75,6 @@ export default function AISidebarPeekRail({ view, onClose }: Props) {
                 {meta.detail}
               </p>
             </div>
-          </div>
-
-          <div
-            className="mt-3 inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-[11px]"
-            style={{
-              borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
-              background: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
-              color: 'var(--text-secondary)',
-            }}
-            title={activeTab?.name ?? t('app.untitled')}
-          >
-            <AppIcon name="file" size={12} />
-            <span className="truncate">{activeTab?.name ?? t('app.untitled')}</span>
           </div>
         </div>
 

@@ -73,7 +73,7 @@ export default function DocumentTabs() {
     <div
       role="tablist"
       aria-label={t('menu.file')}
-      className="flex min-w-0 flex-shrink-0 items-end overflow-x-auto px-3"
+      className="flex min-w-0 flex-shrink-0 items-end overflow-x-auto overflow-y-hidden px-3"
       style={{
         minHeight: '40px',
         background: 'color-mix(in srgb, var(--bg-secondary) 92%, transparent)',

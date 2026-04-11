@@ -61,6 +61,7 @@ import { buildPlainTextClipboardHtml, renderClipboardHtmlFromMarkdown } from '..
 import { getImageAltText } from '../../lib/fileTypes'
 import { getTauriFilePersistence, persistImageFilesAsMarkdown } from '../../lib/documentPersistence'
 import { prepareImageMarkdownInsertion } from '../../lib/imageMarkdownInsertion'
+import { prepareMarkdownInsertion } from '../../lib/markdownInsertion'
 import { convertClipboardHtmlToMarkdown } from '../../lib/pasteHtml'
 import { pushErrorNotice, pushInfoNotice } from '../../lib/notices'
 import {
@@ -738,9 +739,10 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       const clipboardData = event.clipboardData
       const items = clipboardData?.items
       const hasHtml = clipboardHasType(clipboardData, 'text/html')
+      const hasPlainText = clipboardHasType(clipboardData, 'text/plain')
       const hasImageFiles = Array.from(items ?? []).some((item) => item.type.startsWith('image/'))
 
-      if (!hasHtml && !hasImageFiles) return
+      if (!hasHtml && !hasImageFiles && !hasPlainText) return
 
       event.preventDefault()
 
@@ -761,17 +763,25 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
         }
       }
 
-      if (!items) return
+      if (items) {
+        const imageFiles = Array.from(items)
+          .filter((item) => item.type.startsWith('image/'))
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null)
 
-      const imageFiles = Array.from(items)
-        .filter((item) => item.type.startsWith('image/'))
-        .map((item) => item.getAsFile())
-        .filter((file): file is File => file !== null)
+        if (imageFiles.length > 0) {
+          const markdownText = await buildImageMarkdown(imageFiles, activeTab?.path ?? null)
+          replaceSelectionWithImageMarkdown(view, markdownText)
+          return
+        }
+      }
 
-      if (imageFiles.length === 0) return
+      if (!hasPlainText) return
 
-      const markdownText = await buildImageMarkdown(imageFiles, activeTab?.path ?? null)
-      replaceSelectionWithImageMarkdown(view, markdownText)
+      const plainText = await readClipboardString(clipboardData, 'text/plain')
+      if (plainText) {
+        replaceSelectionWithMarkdown(view, plainText)
+      }
     }
 
     const handleCopyOrCut = async (event: ClipboardEvent, mode: 'copy' | 'cut') => {
@@ -951,7 +961,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
         return
       }
 
-      const { range, text } = resolveAIApplyChange(
+      const { range, text, selectionAnchor } = resolveAIApplyChange(
         detail.outputTarget,
         detail.snapshot,
         currentDoc,
@@ -979,6 +989,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
         isolateHistoryBoundary: true,
         userEvent: 'input.ai',
         effects,
+        selectionAnchor,
       })
       syncProvenanceState(view, activeTab.id)
       aiComposerRestoreSnapshotRef.current = null
@@ -1254,9 +1265,14 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
 }
 
 function replaceSelectionWithMarkdown(view: EditorView, markdownText: string): void {
-  insertMarkdown(view, markdownText, {
-    from: view.state.selection.main.from,
-    to: view.state.selection.main.to,
+  const selection = view.state.selection.main
+  const insertion = prepareMarkdownInsertion(markdownText, view.state.sliceDoc(selection.to))
+
+  insertMarkdown(view, insertion.text, {
+    from: selection.from,
+    to: selection.to,
+  }, {
+    selectionAnchor: selection.from + insertion.selectionOffset,
   })
 }
 
