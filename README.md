@@ -28,6 +28,21 @@ Install latest package from [releases](https://github.com/engchina/no.1-markdown
 - Run `npm run test:ai:keyboard:smoke` to verify the keyboard-only `Ctrl/Cmd+J -> Run -> Apply` path, streamed draft preview isolation before apply, and editor focus return against a built local preview.
 - Run `npm run test:ai:manual:qa:capture` to regenerate the locale/mode QA artifact set under `output/playwright/ai-manual-qa/`.
 
+## Release
+
+GitHub release automation is defined in `.github/workflows/release.yml`.
+
+- Keep the version aligned in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
+- Create and push a version tag such as `v0.11.0`. The workflow fails early if the tag does not match the app version.
+- Pushing the tag builds Windows x64, macOS arm64, macOS x64, and Linux x64 release bundles on GitHub-hosted runners and uploads them to GitHub Releases automatically.
+
+For macOS builds:
+
+- If Apple signing secrets are not configured, the workflow falls back to ad-hoc signing so Apple Silicon builds remain installable with the usual macOS security prompts.
+- For Developer ID signing and notarization, add these repository secrets: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
+
+Windows installers are still built unsigned by default. If you want SmartScreen-friendly production releases, add a Windows code-signing configuration separately.
+
 ## AI Composer
 
 Current AI support is desktop-first and still in progress.

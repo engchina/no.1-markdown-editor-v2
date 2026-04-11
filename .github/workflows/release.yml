@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish-tauri:
+    name: Publish ${{ matrix.label }}
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64
+            platform: windows-latest
+            args: ""
+          - label: macOS arm64
+            platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+          - label: macOS x64
+            platform: macos-15-intel
+            args: "--target x86_64-apple-darwin"
+          - label: Linux x64
+            platform: ubuntu-22.04
+            args: ""
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify release version matches tag
+        shell: bash
+        run: |
+          node - <<'EOF'
+          const fs = require('fs');
+
+          const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+          const tauriVersion = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8')).version;
+          const cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
+          const cargoMatch = cargo.match(/^version\s*=\s*"([^"]+)"/m);
+          const tagVersion = (process.env.GITHUB_REF_NAME || '').replace(/^v/, '');
+
+          if (!cargoMatch) {
+            console.error('Unable to read version from src-tauri/Cargo.toml.');
+            process.exit(1);
+          }
+
+          const cargoVersion = cargoMatch[1];
+
+          if (!tagVersion || packageVersion !== tagVersion || tauriVersion !== tagVersion || cargoVersion !== tagVersion) {
+            console.error(
+              `Tag and app versions must match. tag=${tagVersion} package=${packageVersion} tauri=${tauriVersion} cargo=${cargoVersion}`
+            );
+            process.exit(1);
+          }
+          EOF
+
+      - name: Enable ad-hoc signing for unsigned macOS builds
+        if: runner.os == 'macOS' && (env.APPLE_CERTIFICATE == '' || env.APPLE_CERTIFICATE_PASSWORD == '' || env.KEYCHAIN_PASSWORD == '')
+        shell: bash
+        run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+
+      - name: Import Apple certificate
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != '' && env.APPLE_CERTIFICATE_PASSWORD != '' && env.KEYCHAIN_PASSWORD != ''
+        shell: bash
+        run: |
+          rm -f certificate.p12
+          if echo "$APPLE_CERTIFICATE" | base64 -d > certificate.p12 2>/dev/null; then
+            true
+          else
+            echo "$APPLE_CERTIFICATE" | base64 -D > certificate.p12
+          fi
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+          APPLE_SIGNING_IDENTITY="$(security find-identity -v -p codesigning build.keychain | awk -F '"' '/"/ { print $2; exit }')"
+          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "No Apple code signing identity found in imported certificate." >&2
+            exit 1
+          fi
+
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          rm -f certificate.p12
+
+      - name: Build app and upload release assets
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "No.1 Markdown Editor ${{ github.ref_name }}"
+          releaseBody: "See the assets to download this version and install."
+          generateReleaseNotes: true
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
