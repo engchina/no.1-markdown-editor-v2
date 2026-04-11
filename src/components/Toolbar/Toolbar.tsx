@@ -9,6 +9,7 @@ import { useExport } from '../../hooks/useExport'
 import { formatPrimaryShortcut } from '../../lib/platform'
 import type { FormatAction } from '../Editor/formatCommands'
 import ThemePanel from '../ThemePanel/ThemePanel'
+import AboutPanel from '../Updates/AboutPanel'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -229,10 +230,12 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
 
   const { newFile, openFile, saveFile, saveFileAs } = useFileOps()
   const [showExport, setShowExport] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
   const [showTheme, setShowTheme] = useState(false)
   const [showHeadings, setShowHeadings] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
   const exportButtonRef = useRef<HTMLButtonElement | null>(null)
+  const aboutButtonRef = useRef<HTMLButtonElement | null>(null)
   const themeButtonRef = useRef<HTMLButtonElement | null>(null)
   const headingButtonRef = useRef<HTMLButtonElement | null>(null)
   const moreActionsButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -408,26 +411,6 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
 
       <div className="flex-1" />
 
-      <ToolbarBtn title={`${t('toolbar.commandPalette')} (${commandPaletteShortcut})`} onClick={() => onOpenPalette?.()}>
-        <span data-toolbar-action="command-palette" className="contents">
-        <AppIcon name="keyboard" size={16} />
-        </span>
-      </ToolbarBtn>
-
-      <div className="relative">
-        <ToolbarBtn
-          title={t('toolbar.appearance')}
-          buttonRef={themeButtonRef}
-          onClick={() => setShowTheme((open) => !open)}
-          active={showTheme}
-        >
-          <span data-toolbar-action="settings" className="contents">
-          <AppIcon name="settings" size={16} />
-          </span>
-        </ToolbarBtn>
-        {showTheme && <ThemePanel onClose={() => setShowTheme(false)} triggerRef={themeButtonRef} />}
-      </div>
-
       <ToolbarBtn title={t('toolbar.focusMode')} onClick={() => setFocusMode(!focusMode)} active={focusMode}>
         <span data-toolbar-action="focus-mode" className="contents">
         <AppIcon name="focus" size={16} />
@@ -443,6 +426,12 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           </ToolbarBtn>
         ))}
       </ToolbarGroup>
+
+      <ToolbarBtn title={`${t('toolbar.commandPalette')} (${commandPaletteShortcut})`} onClick={() => onOpenPalette?.()}>
+        <span data-toolbar-action="command-palette" className="contents">
+        <AppIcon name="keyboard" size={16} />
+        </span>
+      </ToolbarBtn>
 
       <select
         data-language-select="true"
@@ -462,6 +451,40 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           </option>
         ))}
       </select>
+
+      <div className="relative">
+        <ToolbarBtn
+          title={t('toolbar.appearance')}
+          buttonRef={themeButtonRef}
+          onClick={() => {
+            setShowTheme((open) => !open)
+            setShowAbout(false)
+          }}
+          active={showTheme}
+        >
+          <span data-toolbar-action="settings" className="contents">
+          <AppIcon name="settings" size={16} />
+          </span>
+        </ToolbarBtn>
+        {showTheme && <ThemePanel onClose={() => setShowTheme(false)} triggerRef={themeButtonRef} />}
+      </div>
+
+      <div className="relative">
+        <ToolbarBtn
+          title={t('toolbar.about')}
+          buttonRef={aboutButtonRef}
+          onClick={() => {
+            setShowAbout((open) => !open)
+            setShowTheme(false)
+          }}
+          active={showAbout}
+        >
+          <span data-toolbar-action="about" className="contents">
+          <AppIcon name="infoCircle" size={16} />
+          </span>
+        </ToolbarBtn>
+        {showAbout && <AboutPanel onClose={() => setShowAbout(false)} triggerRef={aboutButtonRef} />}
+      </div>
     </div>
   )
 }

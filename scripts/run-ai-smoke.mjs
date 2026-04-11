@@ -275,7 +275,7 @@ async function main() {
     await expectLocatorText(composer, 'Replace Selection')
     await expectLocatorText(composer, 'At Cursor')
     await expectLocatorText(composer, 'Insert Below')
-    await expectLocatorText(composer, 'Insert Under Heading')
+    await expectNoText(page, 'body', 'Insert Under Heading')
     await expectLocatorText(composer, 'New Note')
     const promptValue = await composer.locator('textarea').inputValue()
     assert.match(promptValue, /Translate the selected content/u)
@@ -293,19 +293,20 @@ async function main() {
         }
       }
     })
-    await expectText(page, 'body', 'Default Write Target')
-    await expectText(page, 'body', 'Selected Text Role')
+    await expectNoText(page, 'body', 'Default Write Target')
+    await expectNoText(page, 'body', 'Selected Text Role')
+    await expectNoText(page, 'body', 'Provider History Ranking')
     await expectText(page, 'body', 'AI provider secrets can only be configured in the desktop app right now.')
 
-    await page.getByText('Insert Below', { exact: true }).click()
-    await page.getByText('Reference only', { exact: true }).click()
     await page.locator('label').filter({ hasText: 'WYSIWYG (Live Preview)' }).locator('button').click()
     const storedState = await page.evaluate((storageKey) => {
       const raw = localStorage.getItem(storageKey)
       return raw ? JSON.parse(raw).state : null
     }, LOCAL_STORAGE_KEY)
-    assert.equal(storedState?.aiDefaultWriteTarget, 'insert-below')
-    assert.equal(storedState?.aiDefaultSelectedTextRole, 'reference-only')
+    assert.equal(storedState?.aiDefaultWriteTarget, undefined)
+    assert.equal(storedState?.aiDefaultSelectedTextRole, undefined)
+    assert.equal(storedState?.aiHistoryProviderRerankEnabled, undefined)
+    assert.equal(storedState?.aiHistoryProviderRerankBudget, undefined)
     assert.equal(storedState?.wysiwygMode, true)
 
     await page.mouse.click(1200, 900)
@@ -393,25 +394,9 @@ async function main() {
     )
 
     await page.keyboard.press(`${modifier}+J`)
-    const mentionComposer = page.getByRole('dialog', { name: 'AI Composer' })
-    await mentionComposer.waitFor()
-    await expectLocatorText(mentionComposer, '@note')
-    await expectLocatorText(mentionComposer, '@heading')
-    await expectLocatorText(mentionComposer, '@search()')
-    await mentionComposer.locator('textarea').fill('Compare @note with @heading and @search(Follow-up).')
-    await waitForCondition(
-      async () => (await mentionComposer.locator('[data-ai-mention-status="resolved"]').count()) === 3,
-      'AI explicit mention cards to resolve'
-    )
-    await expectLocatorText(mentionComposer, 'Note')
-    await expectLocatorText(mentionComposer, 'Heading')
-    await expectLocatorText(mentionComposer, 'Search')
-    await page.keyboard.press('Escape')
-    await waitForCondition(async () => (await page.getByRole('dialog', { name: 'AI Composer' }).count()) === 0, 'AI composer to close after mention resolution check')
-
-    await page.keyboard.press(`${modifier}+J`)
     const cancelComposer = page.getByRole('dialog', { name: 'AI Composer' })
     await cancelComposer.waitFor()
+    await expectNoText(page, 'body', 'Workspace Context')
     await cancelComposer.locator('textarea').fill('Continue writing the next paragraph in a concise style.')
     await waitForCondition(
       async () => await cancelComposer.locator('[data-ai-action="run"]').isEnabled(),
@@ -539,42 +524,6 @@ async function main() {
     await undoEditor(page, modifier)
     await expectEditorContent(page, AI_SMOKE_MARKDOWN)
 
-    const headingTo = AI_SMOKE_MARKDOWN.indexOf(AI_SMOKE_NEXT_HEADING)
-    await dispatchAIApply(page, {
-      tabId: AI_SMOKE_TAB_ID,
-      outputTarget: 'insert-under-heading',
-      text: 'Inserted under heading section.',
-      snapshot: {
-        tabId: AI_SMOKE_TAB_ID,
-        selectionFrom: replaceTo,
-        selectionTo: replaceTo,
-        anchorOffset: replaceTo,
-        blockFrom: replaceFrom,
-        blockTo: replaceTo,
-        headingFrom: 0,
-        headingTo,
-        docText: AI_SMOKE_MARKDOWN,
-      },
-    })
-    await expectEditorContent(
-      page,
-      [
-        '# AI Smoke',
-        '',
-        'The quick brown fox jumps over the lazy dog.',
-        '',
-        'Second paragraph for insertion previews.',
-        '',
-        'Inserted under heading section.',
-        '',
-        '## Follow-up',
-        '',
-        'Trailing paragraph for section boundaries.',
-      ].join('\n')
-    )
-    await undoEditor(page, modifier)
-    await expectEditorContent(page, AI_SMOKE_MARKDOWN)
-
     const newNoteDraft = ['# AI Draft Note', '', 'Standalone summary from AI.'].join('\n')
     await dispatchAIApply(page, {
       tabId: AI_SMOKE_TAB_ID,
@@ -608,46 +557,6 @@ async function main() {
       'AI new-note apply to create a separate dirty draft tab'
     )
 
-    await resetEditor(page, {
-      mockProvider: true,
-    })
-
-    await page.keyboard.press(`${modifier}+J`)
-    const multiNoteComposer = page.getByRole('dialog', { name: 'AI Composer' })
-    await multiNoteComposer.waitFor()
-    await expectLocatorText(multiNoteComposer, 'Workspace Context')
-    await multiNoteComposer.locator('[data-ai-attach-current-note="true"]').click()
-    await waitForCondition(
-      async () => (await multiNoteComposer.locator('textarea').inputValue()).includes('@note'),
-      'current note attachment token to be inserted'
-    )
-    await waitForCondition(
-      async () => (await multiNoteComposer.locator('[data-ai-mention-status="resolved"]').count()) >= 1,
-      'current note attachment to resolve'
-    )
-    await expectLocatorText(multiNoteComposer, 'AISmoke.md')
-    await multiNoteComposer.locator('[data-ai-mention-remove]').first().click()
-    await waitForCondition(
-      async () => !(await multiNoteComposer.locator('textarea').inputValue()).includes('@note('),
-      'current note attachment token to be removable'
-    )
-    await multiNoteComposer.locator('[data-ai-attach-current-note="true"]').click()
-    await waitForCondition(
-      async () => (await multiNoteComposer.locator('textarea').inputValue()).includes('@note'),
-      'current note attachment token to be reinserted'
-    )
-    await waitForCondition(
-      async () => (await multiNoteComposer.locator('[data-ai-mention-status="resolved"]').count()) >= 1,
-      'current note attachment to resolve again'
-    )
-    await multiNoteComposer.locator('[data-ai-workspace-run-template="true"]').click()
-    await waitForCondition(
-      async () => (await multiNoteComposer.locator('textarea').inputValue()).includes('ai-workspace-task'),
-      'workspace run template prompt to be inserted'
-    )
-    await page.keyboard.press('Escape')
-    await waitForCondition(async () => (await page.getByRole('dialog', { name: 'AI Composer' }).count()) === 0, 'AI composer to close after workspace context check')
-
     console.log('AI smoke test passed.')
   } catch (error) {
     diagnostics.lastUrl = page?.url() ?? ''
@@ -677,6 +586,16 @@ async function expectLocatorText(locator, text) {
       return (content ?? '').includes(text)
     },
     `text "${text}" in locator`
+  )
+}
+
+async function expectNoText(page, selector, text) {
+  await waitForCondition(
+    async () => {
+      const content = await page.locator(selector).textContent()
+      return !(content ?? '').includes(text)
+    },
+    `text "${text}" to stay absent in ${selector}`
   )
 }
 

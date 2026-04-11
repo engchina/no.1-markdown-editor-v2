@@ -22,7 +22,7 @@ Install latest package from [releases](https://github.com/engchina/no.1-markdown
 - Run `npm run dev:web` if you only need the browser-based Vite preview.
 - Run `npm run package:win` on Windows.
 - Run `npm run package:mac` on macOS.
-- Run `npm run test:ai:smoke` to exercise command palette AI execution, sidebar AI entry, selection bubble flows, explicit `@note` / `@heading` / `@search` mention resolution, structured workspace note attachments, inline ghost text continuation, AI provenance markers, settings fallback, request cancellation, apply paths including `Insert Under Heading` and `New Note`, undo behavior, and source/split/preview/focus/WYSIWYG mode compatibility against a built local preview.
+- Run `npm run test:ai:smoke` to exercise command palette AI execution, sidebar AI entry, selection bubble flows, inline ghost text continuation, AI provenance markers, settings fallback, request cancellation, apply paths including `New Note`, undo behavior, and source/split/preview/focus/WYSIWYG mode compatibility against a built local preview.
 - Run `npm run test:ai:integration:smoke` to run the main AI integration smoke plus the keyboard-only AI smoke in one pass against a built local preview.
 - Run `npm run test:ai:i18n:smoke` to verify the AI-related UI labels and layout in English, Japanese, and Chinese against a built local preview.
 - Run `npm run test:ai:keyboard:smoke` to verify the keyboard-only `Ctrl/Cmd+J -> Run -> Apply` path, streamed draft preview isolation before apply, and editor focus return against a built local preview.
@@ -52,10 +52,7 @@ Current AI support is desktop-first and still in progress.
 - Use the selection bubble for quick actions when text is selected.
 - Type `/ai`, `/continue`, `/translate`, `/rewrite`, or `/summarize` in the editor to open AI actions from slash autocomplete.
 - Use the prompt library cards in the AI Composer or sidebar AI tab to reuse common AI prompt starters.
-- Use `Insert Under Heading` from the AI prompt library or command palette when you want AI output to land at the end of the current heading section.
 - Use `New Note` as an AI output target, or from the command palette/prompt library, when the result should become a separate draft note instead of mutating the current document.
-- Use explicit prompt mentions like `@note`, `@heading`, and `@search(query)` when you want to attach a visible extra note, heading section, or search result set to the AI request.
-- Use the `Workspace Context` section in the AI Composer to attach the current note or search for other notes without typing the `@note(...)` token manually.
 - Use the `Workspace Run` template or `AI: Workspace Run` command when you want AI to draft a coordinated multi-note execution plan with per-note draft tasks.
 - Use `Run Agent` when you want the reviewed workspace plan to execute sequentially with visible session metrics, per-task logs, phase summaries, and an explicit stop control.
 - When a `create-note` task produces a draft that a later task explicitly depends on, the later update task now continues on that same draft automatically as long as the draft has not been manually diverged.
@@ -95,10 +92,7 @@ Implemented now:
 - Command palette AI commands
 - Slash-triggered AI commands
 - Prompt/template library
-- Insert Under Heading flow
 - New Note flow
-- Explicit `@note` / `@heading` / `@search` context mentions
-- Structured multi-file context note picker
 - Reviewable workspace run draft tasks
 - Controlled workspace note execution actions
 - Autonomous workspace agent execution with session status and logs

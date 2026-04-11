@@ -44,9 +44,7 @@ Implemented from P1:
 - Sidebar `AI` tab.
 - Slash commands like `/ai`, `/translate`, `/continue`, `/rewrite`, and `/summarize`.
 - Prompt/template library.
-- `Insert Under Heading`.
 - `New Note`.
-- Explicit `@note`, `@heading`, `@search` context mentions.
 
 Still open in P1:
 
@@ -57,7 +55,6 @@ Still open in P1:
 - Implemented from P2:
   - Optional ghost text continuation.
   - Authorship/provenance markers for AI-inserted content.
-  - Structured multi-file context note picker.
   - Reviewable workspace run draft tasks.
   - Controlled workspace note execution actions.
   - Workspace agent / autonomous multi-file context execution.
@@ -140,7 +137,7 @@ The request payload should be built from a stable snapshot, not from live mutabl
 
 ```ts
 type AIIntent = 'ask' | 'edit' | 'generate' | 'review'
-type AIScope = 'selection' | 'current-block' | 'current-heading' | 'document'
+type AIScope = 'selection' | 'current-block' | 'document'
 type AIOutputTarget = 'chat-only' | 'replace-selection' | 'at-cursor' | 'insert-below'
 
 interface AIContextPacket {
@@ -159,7 +156,7 @@ interface AIContextPacket {
   headingPath?: string[]
   frontMatter?: string | null
   explicitContextAttachments?: Array<{
-    kind: 'note' | 'heading' | 'search'
+    kind: 'note' | 'search'
     label: string
     detail: string
     content: string
@@ -171,7 +168,6 @@ Default P0 rules:
 
 - If there is a selection, attach `selectedText`.
 - Always show attached context as visible chips.
-- Explicit mentions like `@note`, `@heading`, and `@search(query)` must resolve into visible attached context before request submission.
 - Do not send the whole document by default.
 - Add only a small window of `beforeText` and `afterText`.
 - Include `headingPath` when available.
@@ -400,7 +396,7 @@ Do not start polishing sidebar/thread UI before contracts, apply semantics, and 
   - request cancellation
   - command palette AI commands
 - [x] Desktop-path tests for secret storage and provider error normalization.
-- [x] Browser smoke script covers command palette AI execution, selection bubble visibility, explicit mention resolution, structured multi-file context note attachments, inline ghost text continuation, AI provenance markers, settings fallback, request cancellation, apply flows including `Insert Under Heading` and `New Note`, undo behavior, and source/split/preview/focus/WYSIWYG compatibility checks.
+- [x] Browser smoke script covers command palette AI execution, selection bubble visibility, inline ghost text continuation, AI provenance markers, settings fallback, request cancellation, apply flows including `New Note`, undo behavior, and source/split/preview/focus/WYSIWYG compatibility checks.
 - [x] Browser smoke covers sidebar AI entry and quick actions.
 - [x] Browser smoke covers composer and sidebar prompt library starters.
 - [x] Browser i18n smoke covers English, Japanese, and Chinese AI labels plus layout overflow checks.

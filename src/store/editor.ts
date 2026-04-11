@@ -144,13 +144,9 @@ interface EditorState {
   zoom: number
   setZoom: (zoom: number) => void
   aiDefaultWriteTarget: AIDefaultWriteTarget
-  setAiDefaultWriteTarget: (target: AIDefaultWriteTarget) => void
   aiDefaultSelectedTextRole: AISelectedTextRole
-  setAiDefaultSelectedTextRole: (role: AISelectedTextRole) => void
   aiHistoryProviderRerankEnabled: boolean
-  setAiHistoryProviderRerankEnabled: (enabled: boolean) => void
   aiHistoryProviderRerankBudget: AIHistoryProviderRerankBudget
-  setAiHistoryProviderRerankBudget: (budget: AIHistoryProviderRerankBudget) => void
 }
 
 function generateId() {
@@ -525,14 +521,10 @@ export const useEditorStore = create<EditorState>()(
       setActiveThemeId: (activeThemeId) => set({ activeThemeId }),
       zoom: 100,
       setZoom: (zoom) => set({ zoom }),
-      aiDefaultWriteTarget: 'at-cursor',
-      setAiDefaultWriteTarget: (aiDefaultWriteTarget) => set({ aiDefaultWriteTarget }),
+      aiDefaultWriteTarget: 'insert-below',
       aiDefaultSelectedTextRole: 'transform-target',
-      setAiDefaultSelectedTextRole: (aiDefaultSelectedTextRole) => set({ aiDefaultSelectedTextRole }),
       aiHistoryProviderRerankEnabled: true,
-      setAiHistoryProviderRerankEnabled: (aiHistoryProviderRerankEnabled) => set({ aiHistoryProviderRerankEnabled }),
       aiHistoryProviderRerankBudget: 'balanced',
-      setAiHistoryProviderRerankBudget: (aiHistoryProviderRerankBudget) => set({ aiHistoryProviderRerankBudget }),
     }),
     {
       name: 'editor-settings',
@@ -553,10 +545,6 @@ export const useEditorStore = create<EditorState>()(
         wysiwygMode: s.wysiwygMode,
         activeThemeId: s.activeThemeId,
         zoom: s.zoom,
-        aiDefaultWriteTarget: s.aiDefaultWriteTarget,
-        aiDefaultSelectedTextRole: s.aiDefaultSelectedTextRole,
-        aiHistoryProviderRerankEnabled: s.aiHistoryProviderRerankEnabled,
-        aiHistoryProviderRerankBudget: s.aiHistoryProviderRerankBudget,
         tabs: s.tabs.filter(isRestorableDraftTab),
         activeTabId: s.tabs.some((tab) => tab.id === s.activeTabId && isRestorableDraftTab(tab))
           ? s.activeTabId
@@ -581,6 +569,10 @@ export const useEditorStore = create<EditorState>()(
               ? persistedState.sidebarWidth
               : current.sidebarWidth
           ),
+          aiDefaultWriteTarget: 'insert-below',
+          aiDefaultSelectedTextRole: 'transform-target',
+          aiHistoryProviderRerankEnabled: true,
+          aiHistoryProviderRerankBudget: 'balanced',
         }
       },
       onRehydrateStorage: () => (state) => {

@@ -14,19 +14,23 @@ test('AIComposer wires request ids and backend cancellation through the desktop 
   assert.match(rust, /pub request_id: String/)
 })
 
-test('editor settings persist AI default preferences', async () => {
+test('editor settings pin fixed AI defaults and stop persisting hidden AI preference controls', async () => {
   const store = await readFile(new URL('../src/store/editor.ts', import.meta.url), 'utf8')
 
-  assert.match(store, /aiDefaultWriteTarget: 'at-cursor'/)
-  assert.match(store, /setAiDefaultWriteTarget: \(aiDefaultWriteTarget\) => set\(\{ aiDefaultWriteTarget \}\)/)
+  assert.match(store, /aiDefaultWriteTarget: 'insert-below'/)
   assert.match(store, /aiDefaultSelectedTextRole: 'transform-target'/)
-  assert.match(store, /setAiDefaultSelectedTextRole: \(aiDefaultSelectedTextRole\) => set\(\{ aiDefaultSelectedTextRole \}\)/)
   assert.match(store, /aiHistoryProviderRerankEnabled: true/)
-  assert.match(store, /setAiHistoryProviderRerankEnabled: \(aiHistoryProviderRerankEnabled\) => set\(\{ aiHistoryProviderRerankEnabled \}\)/)
   assert.match(store, /aiHistoryProviderRerankBudget: 'balanced'/)
-  assert.match(store, /setAiHistoryProviderRerankBudget: \(aiHistoryProviderRerankBudget\) => set\(\{ aiHistoryProviderRerankBudget \}\)/)
-  assert.match(store, /aiDefaultWriteTarget: s\.aiDefaultWriteTarget/)
-  assert.match(store, /aiDefaultSelectedTextRole: s\.aiDefaultSelectedTextRole/)
-  assert.match(store, /aiHistoryProviderRerankEnabled: s\.aiHistoryProviderRerankEnabled/)
-  assert.match(store, /aiHistoryProviderRerankBudget: s\.aiHistoryProviderRerankBudget/)
+  assert.doesNotMatch(store, /setAiDefaultWriteTarget: /)
+  assert.doesNotMatch(store, /setAiDefaultSelectedTextRole: /)
+  assert.doesNotMatch(store, /setAiHistoryProviderRerankEnabled: /)
+  assert.doesNotMatch(store, /setAiHistoryProviderRerankBudget: /)
+  assert.doesNotMatch(store, /aiDefaultWriteTarget: s\.aiDefaultWriteTarget/)
+  assert.doesNotMatch(store, /aiDefaultSelectedTextRole: s\.aiDefaultSelectedTextRole/)
+  assert.doesNotMatch(store, /aiHistoryProviderRerankEnabled: s\.aiHistoryProviderRerankEnabled/)
+  assert.doesNotMatch(store, /aiHistoryProviderRerankBudget: s\.aiHistoryProviderRerankBudget/)
+  assert.match(
+    store,
+    /return \{\s*\.\.\.mergedState,[\s\S]*aiDefaultWriteTarget: 'insert-below',[\s\S]*aiDefaultSelectedTextRole: 'transform-target',[\s\S]*aiHistoryProviderRerankEnabled: true,[\s\S]*aiHistoryProviderRerankBudget: 'balanced',[\s\S]*\}/
+  )
 })

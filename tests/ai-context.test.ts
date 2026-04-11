@@ -109,21 +109,20 @@ test('buildAIContextPacket captures selection, heading path, front matter, and n
 
 test('parseAIPromptMentions strips explicit context directives from the user instruction', () => {
   const parsed = parseAIPromptMentions(
-    'Compare this with @note(project plan) and inspect @heading(Deep Dive).\nAlso use @search(Milestone).'
+    'Compare this with @note(project plan) and @search(Milestone).'
   )
 
-  assert.equal(parsed.cleanPrompt, 'Compare this with and inspect.\nAlso use.')
+  assert.equal(parsed.cleanPrompt, 'Compare this with and.')
   assert.deepEqual(
     parsed.mentions.map((mention) => ({ kind: mention.kind, query: mention.query })),
     [
       { kind: 'note', query: 'project plan' },
-      { kind: 'heading', query: 'Deep Dive' },
       { kind: 'search', query: 'Milestone' },
     ]
   )
 })
 
-test('resolveAIPromptMentions attaches current note, matching heading, and search hits explicitly', async () => {
+test('resolveAIPromptMentions attaches current note and search hits explicitly', async () => {
   const currentDocument = [
     '# Intro',
     '',
@@ -160,7 +159,7 @@ test('resolveAIPromptMentions attaches current note, matching heading, and searc
     headingPath: ['Intro'],
   }
 
-  const parsed = parseAIPromptMentions('Compare @note with @heading(Deep Dive) and @search(Milestone).')
+  const parsed = parseAIPromptMentions('Compare @note with @search(Milestone).')
   const resolutions = await resolveAIPromptMentions({
     mentions: parsed.mentions,
     baseContext,
@@ -182,22 +181,21 @@ test('resolveAIPromptMentions attaches current note, matching heading, and searc
     rootPath: null,
   })
 
-  assert.equal(resolutions.length, 3)
+  assert.equal(resolutions.length, 2)
   assert.equal(resolutions.every((resolution) => resolution.status === 'resolved'), true)
 
   const attachedContext = attachAIPromptMentionContext(baseContext, resolutions)
-  assert.equal(attachedContext?.explicitContextAttachments?.length, 3)
+  assert.equal(attachedContext?.explicitContextAttachments?.length, 2)
   assert.deepEqual(
     attachedContext?.explicitContextAttachments?.map((attachment) => attachment.kind),
-    ['note', 'heading', 'search']
+    ['note', 'search']
   )
   assert.match(attachedContext?.explicitContextAttachments?.[0].content ?? '', /Opening paragraph/u)
-  assert.match(attachedContext?.explicitContextAttachments?.[1].label ?? '', /Intro > Deep Dive/u)
-  assert.match(attachedContext?.explicitContextAttachments?.[2].content ?? '', /Milestone: ship explicit AI mentions\./u)
+  assert.match(attachedContext?.explicitContextAttachments?.[1].content ?? '', /Milestone: ship explicit AI mentions\./u)
 })
 
-test('resolveAIPromptMentions surfaces unresolved mention problems explicitly', async () => {
-  const parsed = parseAIPromptMentions('Use @heading(Unknown) and @search().')
+test('resolveAIPromptMentions surfaces unresolved note and search problems explicitly', async () => {
+  const parsed = parseAIPromptMentions('Use @note(Unknown) and @search().')
   const resolutions = await resolveAIPromptMentions({
     mentions: parsed.mentions,
     baseContext: null,
@@ -208,6 +206,6 @@ test('resolveAIPromptMentions surfaces unresolved mention problems explicitly', 
 
   assert.deepEqual(
     resolutions.map((resolution) => resolution.errorCode),
-    ['heading-not-found', 'search-empty-query']
+    ['note-not-found', 'search-empty-query']
   )
 })

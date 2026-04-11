@@ -7,11 +7,8 @@ import { useFileTreeStore } from '../../store/fileTree'
 import {
   isAIRuntimeAvailable,
   cancelAICompletion,
-  clearAIProviderApiKey,
   loadAIProviderState,
   runAICompletion,
-  saveAIProviderConfig,
-  storeAIProviderApiKey,
 } from '../../lib/ai/client.ts'
 import { dispatchEditorAIApply } from '../../lib/ai/events.ts'
 import { diffTextByLine } from '../../lib/lineDiff.ts'
@@ -126,7 +123,6 @@ export default function AIComposer() {
   const addTab = useEditorStore((state) => state.addTab)
   const rootPath = useFileTreeStore((state) => state.rootPath)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const providerKeyInputRef = useRef<HTMLInputElement>(null)
   const requestRunIdRef = useRef(0)
   const activeRequestIdRef = useRef<string | null>(null)
   const disposedRef = useRef(false)
@@ -155,13 +151,8 @@ export default function AIComposer() {
   } = useAIStore()
   const [resultView, setResultView] = useState<AIResultView>('draft')
   const [providerState, setProviderState] = useState<AIProviderState | null>(null)
-  const [connectionOpen, setConnectionOpen] = useState(false)
   const [connectionLoading, setConnectionLoading] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
-  const [baseUrlInput, setBaseUrlInput] = useState('')
-  const [modelInput, setModelInput] = useState('')
-  const [projectInput, setProjectInput] = useState('')
-  const [apiKeyInput, setApiKeyInput] = useState('')
   const [workspaceExecutionStates, setWorkspaceExecutionStates] = useState<Record<string, {
     status: WorkspaceExecutionTaskStatus
     message?: string
@@ -209,6 +200,18 @@ export default function AIComposer() {
     !!effectivePrompt.trim() &&
     !!effectiveContext &&
     hasConnection
+  const desktopOnlyMode = !isAIRuntimeAvailable()
+  const showConnectionHint = !connectionLoading && (!hasConnection || connectionError !== null)
+  const connectionHintTitle = connectionError
+    ? t('notices.aiConnectionErrorTitle')
+    : desktopOnlyMode
+      ? t('notices.aiDesktopOnlyTitle')
+      : t('notices.aiProviderMissingTitle')
+  const connectionHintMessage = connectionError
+    ? connectionError
+    : desktopOnlyMode
+      ? t('notices.aiDesktopOnlyMessage')
+      : t('notices.aiProviderMissingMessage')
   const canApplyToEditor = viewMode !== 'preview'
   const canApplyDraft =
     composer.requestState !== 'streaming' &&
@@ -219,7 +222,6 @@ export default function AIComposer() {
     canApplyToEditor
   const showResultPanel =
     composer.requestState !== 'idle' || normalizedDraft.trim().length > 0 || composer.errorMessage !== null
-  const desktopOnlyMode = !isAIRuntimeAvailable()
   const hasDiffPreview = hasAIDiffPreview(composer.outputTarget, composer.diffBaseText, normalizedDraft)
   const hasInsertPreview = hasAIInsertPreview(composer.outputTarget, normalizedDraft)
   const insertTargets = getAIInsertTargets(hasSelection)
@@ -379,9 +381,6 @@ export default function AIComposer() {
       .then((state) => {
         if (cancelled) return
         setProviderState(state)
-        setBaseUrlInput(state.config?.baseUrl ?? '')
-        setModelInput(state.config?.model ?? '')
-        setProjectInput(state.config?.project ?? '')
       })
       .catch((error) => {
         if (cancelled) return
@@ -446,15 +445,6 @@ export default function AIComposer() {
     [effectiveContext, t]
   )
 
-  async function refreshProviderState() {
-    const state = await loadAIProviderState()
-    setProviderState(state)
-    setBaseUrlInput(state.config?.baseUrl ?? '')
-    setModelInput(state.config?.model ?? '')
-    setProjectInput(state.config?.project ?? '')
-    return state
-  }
-
   function updateActiveSessionHistory(
     patch: {
       status?: 'done' | 'error' | 'canceled'
@@ -475,69 +465,15 @@ export default function AIComposer() {
     }
   }
 
-  async function handleSaveConnection() {
-    setConnectionLoading(true)
-    setConnectionError(null)
-
-    try {
-      await saveAIProviderConfig({
-        provider: 'openai-compatible',
-        baseUrl: baseUrlInput,
-        model: modelInput,
-        project: projectInput,
-      })
-
-      if (apiKeyInput.trim()) {
-        await storeAIProviderApiKey(apiKeyInput)
-        setApiKeyInput('')
-        if (providerKeyInputRef.current) providerKeyInputRef.current.value = ''
-      }
-
-      await refreshProviderState()
-      pushSuccessNotice('notices.aiConnectionSavedTitle', 'notices.aiConnectionSavedMessage')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setConnectionError(message)
-      pushErrorNotice('notices.aiConnectionErrorTitle', 'notices.aiConnectionErrorMessage', {
-        values: { reason: message },
-      })
-    } finally {
-      setConnectionLoading(false)
-    }
-  }
-
-  async function handleClearApiKey() {
-    setConnectionLoading(true)
-    setConnectionError(null)
-
-    try {
-      await clearAIProviderApiKey()
-      await refreshProviderState()
-      setApiKeyInput('')
-      if (providerKeyInputRef.current) providerKeyInputRef.current.value = ''
-      pushInfoNotice('notices.aiApiKeyClearedTitle', 'notices.aiApiKeyClearedMessage')
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setConnectionError(message)
-      pushErrorNotice('notices.aiConnectionErrorTitle', 'notices.aiConnectionErrorMessage', {
-        values: { reason: message },
-      })
-    } finally {
-      setConnectionLoading(false)
-    }
-  }
-
   async function handleSubmit() {
     if (!effectiveContext) return
 
     if (desktopOnlyMode) {
-      setConnectionOpen(true)
       pushInfoNotice('notices.aiDesktopOnlyTitle', 'notices.aiDesktopOnlyMessage')
       return
     }
 
     if (!hasConnection) {
-      setConnectionOpen(true)
       pushInfoNotice('notices.aiProviderMissingTitle', 'notices.aiProviderMissingMessage')
       return
     }
@@ -1342,18 +1278,42 @@ export default function AIComposer() {
     })
   }
 
-  const outputTargetButtons = OUTPUT_TARGET_ORDER.map((target) => ({
-    target,
-    disabled:
-      target === 'replace-selection'
-        ? !canReplaceSelection
-        : false,
-    label: t(`ai.outputTarget.${target}`),
-  }))
+  // Derive a single "mode" from the current intent + outputTarget combination
+  const currentMode: 'chat' | 'edit' | 'insert' | 'new-note' =
+    composer.outputTarget === 'chat-only'
+      ? 'chat'
+      : composer.outputTarget === 'replace-selection'
+        ? 'edit'
+        : composer.outputTarget === 'new-note'
+          ? 'new-note'
+          : 'insert'
+
+  function handleSetMode(mode: 'chat' | 'edit' | 'insert' | 'new-note') {
+    switch (mode) {
+      case 'chat':
+        setIntent('ask')
+        setOutputTarget('chat-only')
+        break
+      case 'edit':
+        setIntent('edit')
+        setOutputTarget('replace-selection')
+        break
+      case 'insert':
+        setIntent('generate')
+        if (composer.outputTarget !== 'at-cursor' && composer.outputTarget !== 'insert-below') {
+          setOutputTarget(aiDefaultWriteTarget !== 'replace-selection' ? aiDefaultWriteTarget : 'insert-below')
+        }
+        break
+      case 'new-note':
+        setIntent('generate')
+        setOutputTarget('new-note')
+        break
+    }
+  }
 
   return (
     <div
-      className="fixed inset-0 z-[110] flex items-start justify-center px-4 pt-24 pb-6"
+      className="fixed inset-0 z-[110] flex items-start justify-center px-4 pt-16 pb-6"
       style={{ background: 'rgba(0, 0, 0, 0.24)', backdropFilter: 'blur(6px)' }}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) void handleCloseComposer()
@@ -1364,47 +1324,38 @@ export default function AIComposer() {
         role="dialog"
         aria-modal="true"
         aria-label={t('ai.title')}
-        className="glass-panel flex max-h-[calc(100vh-8rem)] w-full flex-col overflow-hidden rounded-[24px] border shadow-2xl"
+        className="glass-panel flex max-h-[calc(100vh-6rem)] w-full flex-col overflow-hidden rounded-[20px] border shadow-2xl"
         style={{
-          maxWidth: 'min(820px, calc(var(--focus-column-max-width) - 48px), calc(100vw - 2rem))',
+          maxWidth: 'min(620px, calc(var(--focus-column-max-width) - 48px), calc(100vw - 2rem))',
           background: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
           borderColor: 'color-mix(in srgb, var(--accent) 18%, var(--border))',
         }}
       >
+        {/* Header */}
         <div
-          className="flex items-center gap-3 px-5 py-4"
+          className="flex items-center gap-3 px-5 py-3.5"
           style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 82%, transparent)' }}
         >
           <span
-            className="flex h-9 w-9 items-center justify-center rounded-full"
+            className="flex h-8 w-8 items-center justify-center rounded-full"
             style={{
               background: 'color-mix(in srgb, var(--accent) 16%, transparent)',
               color: 'var(--accent)',
             }}
           >
-            <AppIcon name="sparkles" size={18} />
+            <AppIcon name="sparkles" size={16} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
               {t('ai.title')}
             </div>
-            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            <div className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
               {activeTab?.name ?? t('app.untitled')}
             </div>
           </div>
           <button
             type="button"
-            className="rounded-full p-2 transition-colors"
-            style={{ color: 'var(--text-muted)' }}
-            onClick={() => setConnectionOpen((value) => !value)}
-            aria-expanded={connectionOpen}
-            aria-label={t('ai.connection.toggle')}
-          >
-            <AppIcon name="panel" size={16} />
-          </button>
-          <button
-            type="button"
-            className="rounded-full p-2 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-full transition-colors"
             style={{ color: 'var(--text-muted)' }}
             onClick={() => void handleCloseComposer()}
             aria-label={t('dialog.cancel')}
@@ -1413,258 +1364,136 @@ export default function AIComposer() {
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4">
-          <div data-ai-composer-scroll="form" className="min-h-0 flex-1 overflow-y-auto pr-1">
-            {!hasConnection && (
-              <div
-                className="mb-4 rounded-2xl border px-4 py-3 text-sm"
+        {/* Body */}
+        <div
+          data-ai-composer-scroll="form"
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4"
+        >
+          {/* Connection hint */}
+          {showConnectionHint && (
+            <div
+              data-ai-setup-hint="true"
+              className="flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--accent) 16%, var(--border))',
+                background: 'color-mix(in srgb, var(--bg-secondary) 74%, transparent)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              <span
+                className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full"
                 style={{
-                  borderColor: 'color-mix(in srgb, #f97316 28%, var(--border))',
-                  background: 'color-mix(in srgb, #f97316 10%, transparent)',
-                  color: 'var(--text-primary)',
+                  background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+                  color: 'var(--accent)',
                 }}
               >
-                <div className="font-medium">
-                  {desktopOnlyMode ? t('ai.connection.title') : t('ai.connection.missingTitle')}
-                </div>
-                <div className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  {desktopOnlyMode ? t('ai.connection.desktopOnly') : t('ai.connection.missingMessage')}
-                </div>
-              </div>
-            )}
-
-            {connectionOpen && (
-              <div
-                className="mb-4 rounded-2xl border px-4 py-4"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--border) 86%, transparent)',
-                  background: 'color-mix(in srgb, var(--bg-secondary) 68%, transparent)',
-                }}
-              >
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      {t('ai.connection.title')}
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {providerState?.hasApiKey ? t('ai.connection.ready') : t('ai.connection.notReady')}
-                    </div>
-                  </div>
-                  {connectionLoading && (
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.loadingShort')}
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="flex flex-col gap-1 text-xs">
-                    <span style={{ color: 'var(--text-muted)' }}>{t('ai.connection.baseUrl')}</span>
-                    <input
-                      value={baseUrlInput}
-                      onChange={(event) => setBaseUrlInput(event.target.value)}
-                      className="rounded-xl border px-3 py-2 outline-none"
-                      style={{
-                        borderColor: 'var(--border)',
-                        background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                      }}
-                      placeholder="https://api.openai.com/v1"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-xs">
-                    <span style={{ color: 'var(--text-muted)' }}>{t('ai.connection.model')}</span>
-                    <input
-                      value={modelInput}
-                      onChange={(event) => setModelInput(event.target.value)}
-                      className="rounded-xl border px-3 py-2 outline-none"
-                      style={{
-                        borderColor: 'var(--border)',
-                        background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                      }}
-                      placeholder="gpt-4.1-mini"
-                    />
-                  </label>
-                </div>
-
-                <label className="mt-3 flex flex-col gap-1 text-xs">
-                  <span className="flex items-center justify-between gap-3" style={{ color: 'var(--text-muted)' }}>
-                    <span>{t('ai.connection.project')}</span>
-                    <span>{t('ai.connection.optional')}</span>
-                  </span>
-                  <input
-                    value={projectInput}
-                    onChange={(event) => setProjectInput(event.target.value)}
-                    className="rounded-xl border px-3 py-2 outline-none"
-                    style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)',
-                    }}
-                    placeholder={t('ai.connection.projectPlaceholder')}
-                  />
-                </label>
-
-                <label className="mt-3 flex flex-col gap-1 text-xs">
-                  <span style={{ color: 'var(--text-muted)' }}>{t('ai.connection.apiKey')}</span>
-                  <input
-                    ref={providerKeyInputRef}
-                    type="password"
-                    value={apiKeyInput}
-                    onChange={(event) => setApiKeyInput(event.target.value)}
-                    className="rounded-xl border px-3 py-2 outline-none"
-                    style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)',
-                    }}
-                    placeholder={
-                      providerState?.hasApiKey ? t('ai.connection.apiKeyStored') : t('ai.connection.apiKeyPlaceholder')
-                    }
-                  />
-                </label>
-
-                {connectionError && (
-                  <p className="mt-3 text-xs" style={{ color: '#dc2626' }}>
-                    {connectionError}
-                  </p>
-                )}
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveConnection()}
-                    className="rounded-xl px-3 py-2 text-sm font-medium transition-colors"
-                    style={{ background: 'var(--accent)', color: 'white' }}
-                    disabled={connectionLoading}
-                  >
-                    {t('ai.connection.save')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleClearApiKey()}
-                    className="rounded-xl border px-3 py-2 text-sm transition-colors"
-                    style={{
-                      borderColor: 'var(--border)',
-                      color: 'var(--text-secondary)',
-                      background: 'transparent',
-                    }}
-                    disabled={connectionLoading || !providerState?.hasApiKey}
-                  >
-                    {t('ai.connection.clearKey')}
-                  </button>
-                </div>
-                <div className="mt-3 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                  {t('ai.connection.privacyNote')}
-                </div>
-              </div>
-            )}
-
-            <div className="mb-4 flex flex-wrap gap-2">
-              {INTENT_ORDER.map((intent) => (
-                <button
-                  key={intent}
-                  type="button"
-                  onClick={() => setIntent(intent)}
-                  className="rounded-full px-3 py-1.5 text-sm transition-colors"
-                  style={{
-                    background:
-                      composer.intent === intent
-                        ? 'color-mix(in srgb, var(--accent) 15%, var(--bg-primary))'
-                        : 'color-mix(in srgb, var(--bg-secondary) 82%, transparent)',
-                    color: composer.intent === intent ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    border: `1px solid ${
-                      composer.intent === intent
-                        ? 'color-mix(in srgb, var(--accent) 30%, var(--border))'
-                        : 'color-mix(in srgb, var(--border) 86%, transparent)'
-                    }`,
-                  }}
-                >
-                  {t(`ai.intent.${intent}`)}
-                </button>
-              ))}
-            </div>
-
-            {contextChips.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {contextChips.map((chip) => (
-                  <span
-                    key={chip}
-                    className="rounded-full border px-3 py-1 text-xs"
-                    style={{
-                      borderColor: 'color-mix(in srgb, var(--accent) 14%, var(--border))',
-                      background: 'color-mix(in srgb, var(--bg-secondary) 74%, transparent)',
-                      color: 'var(--text-secondary)',
-                    }}
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <label className="mb-3 flex flex-col gap-2">
-              <span className="text-xs font-medium uppercase tracking-[0.18em]" style={{ color: 'var(--text-muted)' }}>
-                {t('ai.promptLabel')}
+                <AppIcon name="settings" size={13} />
               </span>
-              <AITemplateLibrary
-                templates={templateModels}
-                composerIntent={composer.intent}
-                composerOutputTarget={composer.outputTarget}
-                composerPrompt={effectivePrompt}
-                hasSelection={hasSelection}
-                aiDefaultWriteTarget={aiDefaultWriteTarget}
-                onSelectTemplate={applyTemplate}
-              />
-              <textarea
-                ref={textareaRef}
-                data-ai-composer-prompt="true"
-                value={composer.prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                rows={4}
-                className="w-full resize-none rounded-2xl border px-4 py-3 outline-none"
-                style={{
-                  background: 'color-mix(in srgb, var(--bg-primary) 94%, transparent)',
-                  color: 'var(--text-primary)',
-                }}
-                placeholder={t('ai.promptPlaceholder')}
-              />
-            </label>
+              <div className="min-w-0">
+                <div className="font-medium">{connectionHintTitle}</div>
+                <div className="mt-0.5 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>
+                  {connectionHintMessage}
+                </div>
+              </div>
+            </div>
+          )}
 
-            <div className="mb-4 flex flex-wrap gap-2">
-              {outputTargetButtons.map(({ target, disabled, label }) => (
-                <button
-                  key={target}
-                  type="button"
-                  onClick={() => !disabled && setOutputTarget(target)}
-                  disabled={disabled}
-                  className="rounded-xl px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+          {/* Context chips */}
+          {contextChips.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {contextChips.map((chip) => (
+                <span
+                  key={chip}
+                  className="rounded-full border px-2.5 py-0.5 text-xs"
                   style={{
-                    background:
-                      composer.outputTarget === target
-                        ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-primary))'
-                        : 'color-mix(in srgb, var(--bg-secondary) 78%, transparent)',
-                    color: composer.outputTarget === target ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    border: `1px solid ${
-                      composer.outputTarget === target
-                        ? 'color-mix(in srgb, var(--accent) 28%, var(--border))'
-                        : 'color-mix(in srgb, var(--border) 86%, transparent)'
-                    }`,
+                    borderColor: 'color-mix(in srgb, var(--accent) 14%, var(--border))',
+                    background: 'color-mix(in srgb, var(--bg-secondary) 74%, transparent)',
+                    color: 'var(--text-secondary)',
                   }}
                 >
-                  {label}
+                  {chip}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Textarea — primary element */}
+          <textarea
+            ref={textareaRef}
+            data-ai-composer-prompt="true"
+            value={composer.prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            rows={5}
+            className="w-full resize-none rounded-2xl border px-4 py-3 text-sm outline-none transition-colors"
+            style={{
+              background: 'color-mix(in srgb, var(--bg-primary) 94%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--border) 86%, transparent)',
+              color: 'var(--text-primary)',
+            }}
+            placeholder={t('ai.promptPlaceholder')}
+          />
+
+          {/* Quick action chips */}
+          <AIQuickChips
+            templates={templateModels}
+            currentMode={currentMode}
+            composerIntent={composer.intent}
+            composerOutputTarget={composer.outputTarget}
+            composerPrompt={effectivePrompt}
+            hasSelection={hasSelection}
+            aiDefaultWriteTarget={aiDefaultWriteTarget}
+            onSelectTemplate={applyTemplate}
+          />
+
+          {/* Mode selector + run actions in one row */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Mode pills */}
+            <div
+              className="inline-flex items-center gap-0.5 rounded-full border p-0.5"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--border) 84%, transparent)',
+                background: 'color-mix(in srgb, var(--bg-secondary) 64%, transparent)',
+              }}
+            >
+              {(
+                [
+                  { mode: 'chat', labelKey: 'ai.mode.chat' },
+                  { mode: 'edit', labelKey: 'ai.mode.edit', disabled: !canReplaceSelection },
+                  { mode: 'insert', labelKey: 'ai.mode.insert' },
+                  { mode: 'new-note', labelKey: 'ai.mode.newNote' },
+                ] as Array<{ mode: typeof currentMode; labelKey: string; disabled?: boolean }>
+              ).map(({ mode, labelKey, disabled }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => !disabled && handleSetMode(mode)}
+                  className="rounded-full px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{
+                    background:
+                      currentMode === mode
+                        ? 'color-mix(in srgb, var(--accent) 14%, var(--bg-primary))'
+                        : 'transparent',
+                    color: currentMode === mode ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    border:
+                      currentMode === mode
+                        ? '1px solid color-mix(in srgb, var(--accent) 28%, var(--border))'
+                        : '1px solid transparent',
+                  }}
+                >
+                  {t(labelKey)}
                 </button>
               ))}
             </div>
 
-            <div className="mb-4 flex flex-wrap gap-2">
+            {/* Run / Cancel */}
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => void handleSubmit()}
                 data-ai-action="run"
                 aria-keyshortcuts="Control+Enter Meta+Enter"
-                className="rounded-xl px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
                 style={{ background: 'var(--accent)', color: 'white' }}
                 disabled={!canSubmit}
                 title={`${t('ai.run')} (${runShortcutLabel})`}
@@ -1676,12 +1505,8 @@ export default function AIComposer() {
                   type="button"
                   onClick={() => void handleCancelRequest()}
                   data-ai-action="cancel-request"
-                  className="rounded-xl border px-4 py-2 text-sm transition-colors"
-                  style={{
-                    borderColor: 'var(--border)',
-                    color: 'var(--text-secondary)',
-                    background: 'transparent',
-                  }}
+                  className="rounded-full border px-4 py-1.5 text-sm transition-colors"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
                 >
                   {t('ai.cancelRequest')}
                 </button>
@@ -1693,85 +1518,64 @@ export default function AIComposer() {
                   void handleCloseComposer()
                 }}
                 data-ai-action="close"
-                className="rounded-xl border px-4 py-2 text-sm transition-colors"
-                style={{
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-secondary)',
-                  background: 'transparent',
-                }}
+                className="rounded-full border px-4 py-1.5 text-sm transition-colors"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
               >
                 {t('dialog.cancel')}
               </button>
             </div>
           </div>
 
+          {/* Result panel */}
           {showResultPanel && (
             <div
               data-ai-result-panel="true"
-              className="mt-4 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border"
+              className="flex flex-col overflow-hidden rounded-2xl border"
               style={{
                 borderColor: 'color-mix(in srgb, var(--border) 86%, transparent)',
                 background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
               }}
             >
+              {/* Result header */}
               <div
-                className="flex flex-wrap items-start gap-2 px-4 py-3"
+                className="flex flex-wrap items-center gap-1.5 px-4 py-2"
                 style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 82%, transparent)' }}
               >
-                <button
-                  type="button"
-                  onClick={() => setResultView('draft')}
-                  data-ai-result-view="draft"
-                  className="rounded-full px-3 py-1 text-xs transition-colors"
-                  style={{
-                    background:
-                      resultView === 'draft'
-                        ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
-                        : 'transparent',
-                    color: resultView === 'draft' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  }}
-                >
-                  {t('ai.result.draft')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setResultView('diff')}
-                  data-ai-result-view="diff"
-                  className="rounded-full px-3 py-1 text-xs transition-colors"
-                  style={{
-                    background:
-                      resultView === 'diff'
-                        ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
-                        : 'transparent',
-                    color: resultView === 'diff' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  }}
-                  disabled={!hasDiffPreview && !hasInsertPreview}
-                >
-                  {t('ai.result.diff')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setResultView('explain')}
-                  data-ai-result-view="explain"
-                  className="rounded-full px-3 py-1 text-xs transition-colors"
-                  style={{
-                    background:
-                      resultView === 'explain'
-                        ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
-                        : 'transparent',
-                    color: resultView === 'explain' ? 'var(--text-primary)' : 'var(--text-muted)',
-                  }}
-                >
-                  {t('ai.result.explain')}
-                </button>
-                <div className="hidden flex-1 md:block" />
+                <div className="flex items-center gap-0.5">
+                  {(
+                    [
+                      { view: 'draft', label: t('ai.result.draft') },
+                      { view: 'diff', label: t('ai.result.diff'), disabled: !hasDiffPreview && !hasInsertPreview },
+                      { view: 'explain', label: t('ai.result.explain') },
+                    ] as Array<{ view: typeof resultView; label: string; disabled?: boolean }>
+                  ).map(({ view, label, disabled }) => (
+                    <button
+                      key={view}
+                      type="button"
+                      onClick={() => !disabled && setResultView(view)}
+                      data-ai-result-view={view}
+                      disabled={disabled}
+                      className="rounded-full px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                      style={{
+                        background:
+                          resultView === view
+                            ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
+                            : 'transparent',
+                        color: resultView === view ? 'var(--text-primary)' : 'var(--text-muted)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex-1" />
                 {normalizedDraft && (
-                  <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">
+                  <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
                       onClick={() => void handleSubmit()}
                       data-ai-action="retry"
-                      className="rounded-lg border px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                      className="rounded-lg border px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-45"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                       disabled={composer.requestState === 'streaming' || !canSubmit}
                     >
@@ -1784,7 +1588,7 @@ export default function AIComposer() {
                         setResultView('draft')
                       }}
                       data-ai-action="discard"
-                      className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+                      className="rounded-lg border px-2.5 py-1 text-xs transition-colors"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                     >
                       {t('ai.discard')}
@@ -1793,7 +1597,7 @@ export default function AIComposer() {
                       type="button"
                       onClick={() => void handleCopy()}
                       data-ai-action="copy"
-                      className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+                      className="rounded-lg border px-2.5 py-1 text-xs transition-colors"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                     >
                       {t('ai.copy')}
@@ -1804,11 +1608,8 @@ export default function AIComposer() {
                           type="button"
                           onClick={() => void runWorkspaceAgent()}
                           data-ai-action="run-workspace-agent"
-                          className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
-                          style={{
-                            background: 'var(--accent)',
-                            color: 'white',
-                          }}
+                          className="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                          style={{ background: 'var(--accent)', color: 'white' }}
                           disabled={!canRunWorkspaceAgent}
                         >
                           {t('ai.workspaceExecution.runAgent')}
@@ -1818,7 +1619,7 @@ export default function AIComposer() {
                             type="button"
                             onClick={cancelWorkspaceAgentRun}
                             data-ai-action="stop-workspace-agent"
-                            className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+                            className="rounded-lg border px-2.5 py-1 text-xs transition-colors"
                             style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
                           >
                             {t('ai.workspaceExecution.stopAgent')}
@@ -1828,7 +1629,7 @@ export default function AIComposer() {
                           type="button"
                           onClick={openAllWorkspaceTaskDrafts}
                           data-ai-action="open-all-workspace-drafts"
-                          className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
+                          className="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45"
                           style={{
                             background: 'color-mix(in srgb, var(--accent) 12%, var(--bg-primary))',
                             color: 'var(--text-primary)',
@@ -1848,7 +1649,7 @@ export default function AIComposer() {
                             type="button"
                             onClick={() => handleApplyToTarget(target)}
                             data-ai-action={`insert-${target}`}
-                            className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                            className="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
                             style={{
                               background: 'color-mix(in srgb, var(--accent) 12%, var(--bg-primary))',
                               color: 'var(--text-primary)',
@@ -1866,7 +1667,7 @@ export default function AIComposer() {
                         onClick={handleApply}
                         data-ai-action="apply"
                         aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter"
-                        className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                        className="rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
                         style={{ background: 'var(--accent)', color: 'white' }}
                         title={`${t('ai.apply')} (${applyShortcutLabel})`}
                       >
@@ -1877,7 +1678,8 @@ export default function AIComposer() {
                 )}
               </div>
 
-              <div data-ai-result-body="true" className="max-h-[320px] min-h-0 overflow-y-auto px-4 py-4">
+              {/* Result body */}
+              <div data-ai-result-body="true" className="max-h-[280px] min-h-0 overflow-y-auto px-4 py-3">
                 {composer.requestState === 'streaming' && (
                   <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                     {t('ai.loading')}

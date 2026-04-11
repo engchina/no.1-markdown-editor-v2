@@ -33,22 +33,22 @@ const LOCALES = [
     code: 'en',
     quickAction: 'Translate',
     connectionLabel: 'Connection',
-    writeTargetLabel: 'Default Write Target',
-    roleLabel: 'Selected Text Role',
+    hiddenWriteTargetLabel: 'Default Write Target',
+    hiddenRoleLabel: 'Selected Text Role',
   },
   {
     code: 'ja',
     quickAction: '翻訳',
     connectionLabel: '接続',
-    writeTargetLabel: '既定の書き込み先',
-    roleLabel: '選択テキストの役割',
+    hiddenWriteTargetLabel: '既定の書き込み先',
+    hiddenRoleLabel: '選択テキストの役割',
   },
   {
     code: 'zh',
     quickAction: '翻译',
     connectionLabel: '连接',
-    writeTargetLabel: '默认写入目标',
-    roleLabel: '选中文本角色',
+    hiddenWriteTargetLabel: '默认写入目标',
+    hiddenRoleLabel: '选中文本角色',
   },
 ]
 
@@ -264,8 +264,8 @@ async function main() {
       )
 
       await page.locator('[data-toolbar-action="appearance"]').click()
-      await expectText(page, 'body', locale.writeTargetLabel)
-      await expectText(page, 'body', locale.roleLabel)
+      await expectNoText(page, 'body', locale.hiddenWriteTargetLabel)
+      await expectNoText(page, 'body', locale.hiddenRoleLabel)
       await waitForNoHorizontalOverflow(page, '[data-theme-panel="true"]')
       await page.mouse.click(1200, 900)
     }
@@ -299,6 +299,16 @@ async function expectLocatorText(locator, text) {
       return (content ?? '').includes(text)
     },
     `text "${text}" in locator`
+  )
+}
+
+async function expectNoText(page, selector, text) {
+  await waitForCondition(
+    async () => {
+      const content = await page.locator(selector).textContent()
+      return !(content ?? '').includes(text)
+    },
+    `text "${text}" to stay absent in ${selector}`
   )
 }
 

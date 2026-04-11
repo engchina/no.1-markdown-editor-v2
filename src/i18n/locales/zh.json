@@ -53,6 +53,7 @@
     "typewriterMode": "打字机模式",
     "commandPalette": "命令面板",
     "export": "导出",
+    "about": "关于",
     "appearance": "设置",
     "headings": "标题层级",
     "structure": "文档结构",
@@ -230,6 +231,7 @@
     "typewriterMode": "打字机模式"
   },
   "updates": {
+    "about": "关于",
     "aboutAndUpdates": "版本与更新",
     "versionLabel": "版本 {{version}}",
     "checkForUpdates": "检查更新",
@@ -946,7 +948,7 @@
     "externalFileRelinkErrorMessage": "无法将所选文件重新关联到此标签。",
     "externalFileRelinkAlreadyOpenMessage": "「{{name}}」已经在另一个标签中打开。",
     "aiProviderMissingTitle": "需要先完成 AI 设置",
-    "aiProviderMissingMessage": "运行 AI 操作前，请先添加 AI provider 设置。",
+    "aiProviderMissingMessage": "运行 AI 操作前，请先到设置里完成 AI provider 配置。",
     "aiDesktopOnlyTitle": "需要桌面版应用",
     "aiDesktopOnlyMessage": "AI provider 设置和请求执行目前只能在桌面版应用中使用。",
     "aiConnectionSavedTitle": "AI 连接已保存",

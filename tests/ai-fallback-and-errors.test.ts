@@ -20,7 +20,8 @@ test('AIComposer avoids desktop provider loading in web mode and shows desktop-o
   assert.match(composer, /const desktopOnlyMode = !isAIRuntimeAvailable\(\)/)
   assert.match(composer, /if \(desktopOnlyMode\) \{\s*setConnectionLoading\(false\)/)
   assert.match(composer, /pushInfoNotice\('notices\.aiDesktopOnlyTitle', 'notices\.aiDesktopOnlyMessage'\)/)
-  assert.match(composer, /desktopOnlyMode \? t\('ai\.connection\.desktopOnly'\)/)
+  assert.match(composer, /data-ai-setup-hint="true"/)
+  assert.match(composer, /t\('notices\.aiDesktopOnlyMessage'\)/)
 })
 
 test('AI client listens for streamed completion chunks and browser mock emits chunked draft updates', async () => {

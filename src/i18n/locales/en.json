@@ -53,6 +53,7 @@
     "typewriterMode": "Typewriter Mode",
     "commandPalette": "Command Palette",
     "export": "Export",
+    "about": "About",
     "appearance": "Settings",
     "headings": "Headings",
     "structure": "Structure",
@@ -235,6 +236,7 @@
     "typewriterMode": "Typewriter Mode"
   },
   "updates": {
+    "about": "About",
     "aboutAndUpdates": "About & Updates",
     "versionLabel": "Version {{version}}",
     "checkForUpdates": "Check for Updates",
@@ -952,7 +954,7 @@
     "externalFileRelinkErrorMessage": "The selected file could not be linked to this tab.",
     "externalFileRelinkAlreadyOpenMessage": "\"{{name}}\" is already open in another tab.",
     "aiProviderMissingTitle": "AI setup required",
-    "aiProviderMissingMessage": "Add your AI provider settings before running AI actions.",
+    "aiProviderMissingMessage": "Open Settings and finish your AI provider setup before running AI actions.",
     "aiDesktopOnlyTitle": "Desktop app required",
     "aiDesktopOnlyMessage": "AI provider settings and requests are only available in the desktop app right now.",
     "aiConnectionSavedTitle": "AI connection saved",

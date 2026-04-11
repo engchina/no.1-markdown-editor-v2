@@ -21,16 +21,16 @@ test('CodeMirrorEditor renders the selection bubble and listens for AI open/appl
   assert.match(editor, /new ResizeObserver\(\(\) => updateSelectionBubble\(\)\)/)
 })
 
-test('ThemePanel exposes AI connection settings and persisted AI preferences', async () => {
+test('ThemePanel keeps AI connection settings but removes editable AI preference controls', async () => {
   const panel = await readFile(new URL('../src/components/ThemePanel/ThemePanel.tsx', import.meta.url), 'utf8')
 
   assert.match(panel, /t\('ai\.connection\.baseUrl'\)/)
   assert.match(panel, /t\('ai\.connection\.model'\)/)
   assert.match(panel, /t\('ai\.connection\.apiKey'\)/)
-  assert.match(panel, /t\('ai\.preferences\.defaultWriteTarget'\)/)
-  assert.match(panel, /t\('ai\.preferences\.selectedTextRole'\)/)
-  assert.match(panel, /data-ai-history-provider-settings="true"/)
-  assert.match(panel, /t\('ai\.preferences\.historyProviderTitle'\)/)
-  assert.match(panel, /t\('ai\.preferences\.historyProviderEnabled'\)/)
-  assert.match(panel, /t\('ai\.preferences\.historyProviderBudget'\)/)
+  assert.doesNotMatch(panel, /t\('ai\.preferences\.defaultWriteTarget'\)/)
+  assert.doesNotMatch(panel, /t\('ai\.preferences\.selectedTextRole'\)/)
+  assert.doesNotMatch(panel, /data-ai-history-provider-settings="true"/)
+  assert.doesNotMatch(panel, /t\('ai\.preferences\.historyProviderTitle'\)/)
+  assert.doesNotMatch(panel, /t\('ai\.preferences\.historyProviderEnabled'\)/)
+  assert.doesNotMatch(panel, /t\('ai\.preferences\.historyProviderBudget'\)/)
 })

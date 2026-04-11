@@ -267,12 +267,21 @@ function sanitizeHistorySavedViewStatusFilter(value: unknown): AIHistorySavedVie
 function sanitizeHistorySavedViewRetrievalPreset(value: unknown): AIHistorySavedViewRetrievalPreset {
   if (!value || typeof value !== 'object') return createDefaultAIHistorySavedViewRetrievalPreset()
 
-  const candidate = value as Partial<AIHistorySavedViewRetrievalPreset>
+  const candidate = value as Partial<AIHistorySavedViewRetrievalPreset> & {
+    workspaceRunOnApply?: unknown
+  }
+  const automationMode =
+    candidate.automationMode !== undefined
+      ? sanitizeAIHistorySavedViewAutomationMode(candidate.automationMode)
+      : candidate.workspaceRunOnApply === true
+        ? 'workspace-run-draft'
+        : createDefaultAIHistorySavedViewRetrievalPreset().automationMode
+
   return {
     statusFilter: sanitizeHistorySavedViewStatusFilter(candidate.statusFilter),
     pinnedOnly: candidate.pinnedOnly === true,
     providerBudgetOverride: sanitizeOptionalHistoryProviderRerankBudget(candidate.providerBudgetOverride),
-    automationMode: sanitizeAIHistorySavedViewAutomationMode(candidate.automationMode),
+    automationMode,
   }
 }
 

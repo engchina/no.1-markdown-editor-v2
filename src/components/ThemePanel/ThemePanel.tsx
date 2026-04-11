@@ -3,11 +3,6 @@ import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { clearAIProviderApiKey, isAIDesktopAvailable, loadAIProviderState, saveAIProviderConfig, storeAIProviderApiKey } from '../../lib/ai/client.ts'
 import {
-  estimateAIHistoryProviderRerankSendCount,
-  getAIHistoryProviderRerankFieldSet,
-  resolveAIHistoryProviderRerankPolicy,
-} from '../../lib/ai/providerHistoryBudget.ts'
-import {
   FOCUS_WIDTH_CUSTOM_MAX,
   FOCUS_WIDTH_CUSTOM_MIN,
   FOCUS_WIDTH_CUSTOM_STEP,
@@ -20,7 +15,6 @@ import { THEMES, applyTheme, getThemeById } from '../../themes'
 import { useAnchoredOverlayStyle } from '../../hooks/useAnchoredOverlayStyle'
 import { useEditorStore } from '../../store/editor'
 import type { AIProviderState } from '../../lib/ai/types.ts'
-import UpdateSettingsSection from '../Updates/UpdateSettingsSection'
 
 interface Props {
   onClose: () => void
@@ -46,14 +40,6 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
     setWysiwygMode,
     typewriterMode,
     setTypewriterMode,
-    aiDefaultWriteTarget,
-    setAiDefaultWriteTarget,
-    aiDefaultSelectedTextRole,
-    setAiDefaultSelectedTextRole,
-    aiHistoryProviderRerankEnabled,
-    setAiHistoryProviderRerankEnabled,
-    aiHistoryProviderRerankBudget,
-    setAiHistoryProviderRerankBudget,
   } = useEditorStore()
   const panelRef = useRef<HTMLDivElement>(null)
   const [aiProviderState, setAiProviderState] = useState<AIProviderState | null>(null)
@@ -66,9 +52,6 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
   const overlayStyle = useAnchoredOverlayStyle(triggerRef, { align: 'right', width: 344 })
   const resolvedThemeId = getThemeById(activeThemeId).id
   const resolvedFocusWidthPx = resolveFocusWidthPx(focusWidthMode, focusWidthCustomPx)
-  const historyProviderPolicy = resolveAIHistoryProviderRerankPolicy(aiHistoryProviderRerankBudget)
-  const historyProviderFieldSet = getAIHistoryProviderRerankFieldSet(historyProviderPolicy)
-  const historyProviderEstimatedSendCount = estimateAIHistoryProviderRerankSendCount(12, aiHistoryProviderRerankBudget)
   const focusWidthPresets: Array<{
     mode: Exclude<FocusWidthMode, 'custom'>
     label: string
@@ -503,129 +486,9 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
                   {t('ai.connection.clearKey')}
                 </button>
               </div>
-              <div className="mt-3 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-                {t('ai.connection.privacyNote')}
-              </div>
             </div>
           )}
-
-          <div className="pt-2">
-            <div className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
-              {t('ai.preferences.defaultWriteTarget')}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {(['at-cursor', 'insert-below', 'replace-selection'] as const).map((target) => (
-                <button
-                  key={target}
-                  type="button"
-                  onClick={() => setAiDefaultWriteTarget(target)}
-                  className="rounded-lg px-2 py-1.5 text-[11px] transition-colors"
-                  style={{
-                    background: aiDefaultWriteTarget === target ? 'var(--accent)' : 'var(--bg-tertiary)',
-                    color: aiDefaultWriteTarget === target ? 'white' : 'var(--text-secondary)',
-                  }}
-                >
-                  {t(`ai.outputTarget.${target}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <div className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
-              {t('ai.preferences.selectedTextRole')}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setAiDefaultSelectedTextRole('transform-target')}
-                className="rounded-lg px-2 py-1.5 text-[11px] transition-colors"
-                style={{
-                  background:
-                    aiDefaultSelectedTextRole === 'transform-target' ? 'var(--accent)' : 'var(--bg-tertiary)',
-                  color: aiDefaultSelectedTextRole === 'transform-target' ? 'white' : 'var(--text-secondary)',
-                }}
-              >
-                {t('ai.preferences.roleTransformTarget')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAiDefaultSelectedTextRole('reference-only')}
-                className="rounded-lg px-2 py-1.5 text-[11px] transition-colors"
-                style={{
-                  background:
-                    aiDefaultSelectedTextRole === 'reference-only' ? 'var(--accent)' : 'var(--bg-tertiary)',
-                  color: aiDefaultSelectedTextRole === 'reference-only' ? 'white' : 'var(--text-secondary)',
-                }}
-              >
-                {t('ai.preferences.roleReferenceOnly')}
-              </button>
-            </div>
-          </div>
-
-          <div className="pt-2" data-ai-history-provider-settings="true">
-            <div className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
-              {t('ai.preferences.historyProviderTitle')}
-            </div>
-
-            <label className="flex items-center justify-between cursor-pointer">
-              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                {t('ai.preferences.historyProviderEnabled')}
-              </span>
-              <button
-                type="button"
-                onClick={() => setAiHistoryProviderRerankEnabled(!aiHistoryProviderRerankEnabled)}
-                className="relative rounded-full transition-colors flex-shrink-0"
-                style={{
-                  width: '36px',
-                  height: '20px',
-                  background: aiHistoryProviderRerankEnabled ? 'var(--accent)' : 'var(--bg-tertiary)',
-                }}
-              >
-                <span
-                  className="absolute top-0.5 rounded-full transition-transform"
-                  style={{
-                    width: '16px',
-                    height: '16px',
-                    background: 'white',
-                    left: aiHistoryProviderRerankEnabled ? '18px' : '2px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                  }}
-                />
-              </button>
-            </label>
-
-            <div className="mt-3 text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
-              {t('ai.preferences.historyProviderBudget')}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {(['conservative', 'balanced', 'deep'] as const).map((budget) => (
-                <button
-                  key={budget}
-                  type="button"
-                  onClick={() => setAiHistoryProviderRerankBudget(budget)}
-                  className="rounded-lg px-2 py-1.5 text-[11px] transition-colors"
-                  style={{
-                    background: aiHistoryProviderRerankBudget === budget ? 'var(--accent)' : 'var(--bg-tertiary)',
-                    color: aiHistoryProviderRerankBudget === budget ? 'white' : 'var(--text-secondary)',
-                  }}
-                >
-                  {t(`ai.preferences.historyProviderBudgetOption.${budget}`)}
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-3 text-[11px] leading-5" style={{ color: 'var(--text-muted)' }}>
-              {t('ai.preferences.historyProviderBudgetDetail', {
-                count: historyProviderEstimatedSendCount,
-                cost: t(`ai.preferences.historyProviderCost.${historyProviderPolicy.estimatedCost}`),
-                fields: t(`ai.preferences.historyProviderFields.${historyProviderFieldSet}`),
-              })}
-            </div>
-          </div>
         </div>
-
-        <UpdateSettingsSection />
       </div>
     </div>,
     document.body

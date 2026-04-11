@@ -26,7 +26,10 @@ export function sanitizeAIHistorySavedViewAutomationMode(
   value: unknown
 ): AIHistorySavedViewAutomationMode {
   switch (value) {
+    case 'workspace-run-draft':
+    case 'provider-ranked-workspace-run-draft':
     case 'manual':
+      return value
     default:
       return 'manual'
   }

@@ -29,29 +29,40 @@ test('AIComposer separates the form scroller from the bounded result panel', asy
   assert.match(composer, /data-ai-result-body="true"/)
 })
 
-test('AIComposer exposes explicit context mention insert controls and mention status cards', async () => {
+test('AIComposer keeps AI connection setup in Settings and removes inline provider editing controls', async () => {
   const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
 
-  assert.match(composer, /data-ai-mention-insert=\{kind\}/)
-  assert.match(composer, /insertMentionToken\('note'\)/)
-  assert.match(composer, /insertMentionToken\('heading'\)/)
-  assert.match(composer, /insertMentionToken\('search'\)/)
-  assert.match(composer, /data-ai-mention-card=\{resolution\.mention\.id\}/)
-  assert.match(composer, /data-ai-mention-status=\{resolution\.status\}/)
+  assert.match(composer, /data-ai-setup-hint="true"/)
+  assert.doesNotMatch(composer, /setConnectionOpen\(/)
+  assert.doesNotMatch(composer, /t\('ai\.connection\.toggle'\)/)
+  assert.doesNotMatch(composer, /t\('ai\.connection\.save'\)/)
+  assert.doesNotMatch(composer, /t\('ai\.connection\.clearKey'\)/)
+  assert.doesNotMatch(composer, /saveAIProviderConfig\(/)
+  assert.doesNotMatch(composer, /storeAIProviderApiKey\(/)
+  assert.doesNotMatch(composer, /clearAIProviderApiKey\(/)
 })
 
-test('AIComposer exposes a structured workspace context picker that feeds the existing note-mention pipeline', async () => {
+test('AIComposer no longer exposes explicit context mention helper UI or status cards', async () => {
   const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
-  const search = await readFile(new URL('../src/lib/workspaceSearch.ts', import.meta.url), 'utf8')
 
-  assert.match(composer, /data-ai-workspace-context="true"/)
-  assert.match(composer, /data-ai-attach-current-note="true"/)
-  assert.match(composer, /data-ai-attach-open-tab=\{tab\.id\}/)
-  assert.match(composer, /data-ai-note-search-input="true"/)
-  assert.match(composer, /data-ai-note-search-result=\{result\.path \?\? result\.name\}/)
-  assert.match(composer, /removePromptMention\(resolution\.mention\.id\)/)
-  assert.match(composer, /insertNoteMention\(result\.path \?\? result\.name\)/)
-  assert.match(search, /export async function findWorkspaceDocumentReferences/)
+  assert.doesNotMatch(composer, /data-ai-mention-insert=\{kind\}/)
+  assert.doesNotMatch(composer, /insertMentionToken\('note'\)/)
+  assert.doesNotMatch(composer, /insertMentionToken\('heading'\)/)
+  assert.doesNotMatch(composer, /insertMentionToken\('search'\)/)
+  assert.doesNotMatch(composer, /data-ai-mention-card=\{resolution\.mention\.id\}/)
+  assert.doesNotMatch(composer, /data-ai-mention-status=\{resolution\.status\}/)
+})
+
+test('AIComposer no longer renders the structured workspace context picker', async () => {
+  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(composer, /data-ai-workspace-context="true"/)
+  assert.doesNotMatch(composer, /data-ai-attach-current-note="true"/)
+  assert.doesNotMatch(composer, /data-ai-attach-open-tab=\{tab\.id\}/)
+  assert.doesNotMatch(composer, /data-ai-note-search-input="true"/)
+  assert.doesNotMatch(composer, /data-ai-note-search-result=\{result\.path \?\? result\.name\}/)
+  assert.doesNotMatch(composer, /removePromptMention\(resolution\.mention\.id\)/)
+  assert.doesNotMatch(composer, /insertNoteMention\(result\.path \?\? result\.name\)/)
 })
 
 test('AIComposer exposes workspace execution task cards and autonomous workspace agent session controls', async () => {
@@ -166,12 +177,12 @@ test('CodeMirrorEditor and AIComposer wire provenance markers into AI apply and 
   assert.match(extensions, /\.cm-ai-provenance-range/)
 })
 
-test('ThemePanel exposes privacy copy and AI default preference controls', async () => {
+test('ThemePanel removes privacy copy and editable AI default preference controls from the settings panel', async () => {
   const panel = await readFile(new URL('../src/components/ThemePanel/ThemePanel.tsx', import.meta.url), 'utf8')
 
-  assert.match(panel, /t\('ai\.connection\.privacyNote'\)/)
-  assert.match(panel, /setAiDefaultWriteTarget\(/)
-  assert.match(panel, /setAiDefaultSelectedTextRole\(/)
-  assert.match(panel, /t\('ai\.preferences\.defaultWriteTarget'\)/)
-  assert.match(panel, /t\('ai\.preferences\.selectedTextRole'\)/)
+  assert.doesNotMatch(panel, /t\('ai\.connection\.privacyNote'\)/)
+  assert.doesNotMatch(panel, /setAiDefaultWriteTarget\(/)
+  assert.doesNotMatch(panel, /setAiDefaultSelectedTextRole\(/)
+  assert.doesNotMatch(panel, /t\('ai\.preferences\.defaultWriteTarget'\)/)
+  assert.doesNotMatch(panel, /t\('ai\.preferences\.selectedTextRole'\)/)
 })

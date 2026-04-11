@@ -53,6 +53,7 @@
     "typewriterMode": "タイプライターモード",
     "commandPalette": "コマンドパレット",
     "export": "エクスポート",
+    "about": "このアプリについて",
     "appearance": "設定",
     "headings": "見出し",
     "structure": "文書構造",
@@ -230,6 +231,7 @@
     "typewriterMode": "タイプライターモード"
   },
   "updates": {
+    "about": "このアプリについて",
     "aboutAndUpdates": "バージョンとアップデート",
     "versionLabel": "バージョン {{version}}",
     "checkForUpdates": "アップデートを確認",
@@ -946,7 +948,7 @@
     "externalFileRelinkErrorMessage": "選択したファイルをこのタブへ再リンクできませんでした。",
     "externalFileRelinkAlreadyOpenMessage": "「{{name}}」は別のタブですでに開かれています。",
     "aiProviderMissingTitle": "AI 設定が必要です",
-    "aiProviderMissingMessage": "AI 操作を実行する前にプロバイダー設定を追加してください。",
+    "aiProviderMissingMessage": "AI 操作を実行する前に、設定で AI プロバイダー設定を完了してください。",
     "aiDesktopOnlyTitle": "デスクトップ版が必要です",
     "aiDesktopOnlyMessage": "AI プロバイダー設定とリクエスト実行は現在デスクトップ版でのみ利用できます。",
     "aiConnectionSavedTitle": "AI 接続を保存しました",

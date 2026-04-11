@@ -5,7 +5,11 @@ import { getBundledAppVersion, getCurrentAppVersion, isDesktopApp } from '../../
 import { useUpdateStore } from '../../store/update'
 import AppIcon from '../Icons/AppIcon'
 
-export default function UpdateSettingsSection() {
+interface UpdateSettingsSectionProps {
+  showSectionLabel?: boolean
+}
+
+export default function UpdateSettingsSection({ showSectionLabel = true }: UpdateSettingsSectionProps) {
   const { t } = useTranslation()
   const autoCheckEnabled = useUpdateStore((state) => state.autoCheckEnabled)
   const setAutoCheckEnabled = useUpdateStore((state) => state.setAutoCheckEnabled)
@@ -29,9 +33,11 @@ export default function UpdateSettingsSection() {
 
   return (
     <div data-update-settings="true">
-      <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
-        {t('updates.aboutAndUpdates')}
-      </p>
+      {showSectionLabel && (
+        <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
+          {t('updates.aboutAndUpdates')}
+        </p>
+      )}
 
       <div
         className="space-y-4 rounded-[1.25rem] px-4 py-4"

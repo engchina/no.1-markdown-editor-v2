@@ -14,6 +14,10 @@ Build the world's best Markdown editor.
 6. Choose the technology stack that is best suited to achieve the goals above, with strong bias toward product quality, maintainability, performance, and cross-platform consistency.
 7. 'references' folder contains the references for the product. You may study them and understand the product before making any changes. But you must not copy them and modify them directly. 
 
+## Permanent Memory
+
+- Whenever code or product behavior changes, including modifications, feature additions, or removals, update the corresponding tests in the same change.
+
 ## Decision Standard
 
 When there is a tradeoff, prefer the option that most directly advances the mission of building the world's best Markdown editor.
