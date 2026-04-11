@@ -16,7 +16,7 @@ coverage/
 playwright-report/
 test-results/
 .playwright-cli/
-output/playwright/
+output/
 
 # Editor / IDE
 .vscode/settings.json
