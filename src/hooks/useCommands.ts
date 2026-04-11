@@ -11,6 +11,7 @@ import { createAITemplateOpenDetail } from '../lib/ai/templateLibrary'
 import { getFormatShortcutLabel } from '../components/Editor/formatShortcuts'
 import type { Language } from '../i18n'
 import { formatPrimaryShortcut } from '../lib/platform'
+import { runManualUpdateCheck } from '../lib/updateActions'
 import {
   dispatchEditorHistory,
   getEditorRedoShortcutLabel,
@@ -100,6 +101,15 @@ export function useCommands(): Command[] {
         shortcut: saveAsShortcut,
         action: () => {
           void saveFileAs()
+        },
+      },
+      {
+        id: 'file.checkUpdates',
+        label: t('commands.checkForUpdates'),
+        icon: '⬇',
+        category: 'file',
+        action: () => {
+          void runManualUpdateCheck()
         },
       },
       ...recentCommands,

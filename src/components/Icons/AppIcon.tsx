@@ -36,6 +36,7 @@ export type IconName =
   | 'replace'
   | 'redo'
   | 'save'
+  | 'settings'
   | 'search'
   | 'sparkles'
   | 'split'
@@ -88,6 +89,7 @@ const PATHS: Record<IconName, string> = {
   replace: 'M4 7h8 M9 3l3 4-3 4 M20 17h-8 M15 13l-3 4 3 4',
   redo: 'M15 14l5-4-5-4 M20 10h-8a6 6 0 0 0-6 6v1',
   save: 'M5 3h11l5 5v13H5z M8 3v5h8 M8 21v-7h8v7',
+  settings: 'M12 3l1.2 2.5 2.7.4.9 2.6 2.3 1-1 2.5 1 2.5-2.3 1-.9 2.6-2.7.4L12 21l-1.2-2.5-2.7-.4-.9-2.6-2.3-1 1-2.5-1-2.5 2.3-1 .9-2.6 2.7-.4L12 3 M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
   search: 'M21 21l-4.3-4.3 M17 10a7 7 0 1 1-14 0a7 7 0 0 1 14 0',
   sparkles: 'M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3 M18 15l.8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8z',
   split: 'M3 5h18v14H3z M12 5v14',

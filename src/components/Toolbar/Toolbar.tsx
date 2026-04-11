@@ -421,8 +421,8 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           onClick={() => setShowTheme((open) => !open)}
           active={showTheme}
         >
-          <span data-toolbar-action="appearance" className="contents">
-          <AppIcon name="palette" size={16} />
+          <span data-toolbar-action="settings" className="contents">
+          <AppIcon name="settings" size={16} />
           </span>
         </ToolbarBtn>
         {showTheme && <ThemePanel onClose={() => setShowTheme(false)} triggerRef={themeButtonRef} />}

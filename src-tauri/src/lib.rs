@@ -1,4 +1,5 @@
 mod ai;
+mod update;
 
 use base64::Engine as _;
 use reqwest::header::{CONTENT_TYPE, USER_AGENT};
@@ -378,7 +379,8 @@ pub fn run() {
             allow_fs_scope_path,
             take_pending_open_paths,
             fetch_remote_image_data_url,
-            fetch_local_image_data_url
+            fetch_local_image_data_url,
+            update::check_for_app_update
         ])
         .setup(|_app| {
             #[cfg(debug_assertions)]

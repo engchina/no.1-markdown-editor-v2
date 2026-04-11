@@ -17,6 +17,7 @@ const COMMAND_PRIORITY = new Map<string, number>([
   ['file.open', 11],
   ['file.save', 12],
   ['file.saveAs', 13],
+  ['file.checkUpdates', 14],
   ['file.recent.clear', 19],
   ['edit.undo', 100],
   ['edit.redo', 101],
@@ -174,6 +175,8 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
     case 'file.save':
     case 'file.saveAs':
       return <SvgBadge name="save" />
+    case 'file.checkUpdates':
+      return <SvgBadge name="download" />
     case 'file.recent.clear':
       return <SvgBadge name="trash" />
     case 'view.source':

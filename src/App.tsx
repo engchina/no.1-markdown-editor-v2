@@ -10,6 +10,7 @@ import TitleBar from './components/TitleBar/TitleBar'
 import NotificationCenter from './components/Notifications/NotificationCenter'
 import ExternalFileConflictDialog from './components/ExternalFileConflicts/ExternalFileConflictDialog'
 import ExternalMissingFileDialog from './components/ExternalFileConflicts/ExternalMissingFileDialog'
+import UpdateAvailableDialog from './components/Updates/UpdateAvailableDialog'
 import RecoverableErrorBoundary from './components/ErrorBoundary/RecoverableErrorBoundary'
 import ErrorFallback from './components/ErrorBoundary/ErrorFallback'
 import { buildAIContextPacket } from './lib/ai/context'
@@ -23,6 +24,7 @@ import { openDesktopDocumentPaths, SINGLE_INSTANCE_OPEN_FILES_EVENT } from './li
 import { resolveFocusInlinePaddingPx, resolveFocusWidthPx } from './lib/focusWidth'
 import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './lib/layout'
 import { matchesPrimaryShortcut } from './lib/platform'
+import { maybeRunAutomaticUpdateCheck } from './lib/updateActions'
 import { useAIStore } from './store/ai'
 import { useActiveTab, useEditorStore } from './store/editor'
 import { applyTheme, getThemeById } from './themes'
@@ -127,6 +129,10 @@ export default function App() {
   useEffect(() => {
     applyTheme(getThemeById(activeThemeId))
   }, [activeThemeId])
+
+  useEffect(() => {
+    void maybeRunAutomaticUpdateCheck()
+  }, [])
 
   useEffect(() => {
     if (sidebarWidth === resolvedSidebarWidth) return
@@ -433,6 +439,7 @@ export default function App() {
         </Suspense>
       )}
 
+      <UpdateAvailableDialog />
       <NotificationCenter />
       <ExternalMissingFileDialog />
       <ExternalFileConflictDialog />

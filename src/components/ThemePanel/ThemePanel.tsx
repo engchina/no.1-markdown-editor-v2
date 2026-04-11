@@ -20,6 +20,7 @@ import { THEMES, applyTheme, getThemeById } from '../../themes'
 import { useAnchoredOverlayStyle } from '../../hooks/useAnchoredOverlayStyle'
 import { useEditorStore } from '../../store/editor'
 import type { AIProviderState } from '../../lib/ai/types.ts'
+import UpdateSettingsSection from '../Updates/UpdateSettingsSection'
 
 interface Props {
   onClose: () => void
@@ -623,6 +624,8 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
             </div>
           </div>
         </div>
+
+        <UpdateSettingsSection />
       </div>
     </div>,
     document.body

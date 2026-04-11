@@ -1,6 +1,12 @@
+import { readFileSync } from 'fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+
+const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, './package.json'), 'utf8')) as {
+  version?: string
+}
+const appVersion = typeof packageJson.version === 'string' ? packageJson.version : '0.0.0'
 
 const OPTIONAL_PREVIEW_CHUNK_PATTERN =
   /\/assets\/(?:MarkdownPreview|markdown(?:[A-Za-z]+)?|vendor-markdown(?:-(?:math|html))?|vendor-mermaid(?:-[^"]+)?|mermaid|.*katex[^"]*|.*rehype-katex[^"]*)/
@@ -9,6 +15,9 @@ const OPTIONAL_EDITOR_CHUNK_PATTERN =
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   plugins: [
     react(),
     {
