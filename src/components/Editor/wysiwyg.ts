@@ -20,6 +20,7 @@ import { ensureKatexStylesheet } from '../../lib/katexStylesheet'
 import { collectFencedCodeRanges, type TextRange } from './fencedCodeRanges'
 import { buildSortedRangeSet, type RangeSpec } from './sortedRangeSet'
 import { getTaskCheckboxChange } from './taskCheckbox'
+import { findInlineSuperscriptRanges } from './wysiwygSuperscript'
 
 // ── Widgets ────────────────────────────────────────────────────────────────
 
@@ -274,6 +275,8 @@ function processInline(
   text: string,
   lineFrom: number
 ): void {
+  processSuperscript(decorations, text, lineFrom)
+
   // Bold **text** or __text__
   processPattern(decorations, text, lineFrom, /(\*\*|__)((?:[^*_]|\*(?!\*))+?)\1/g, 'cm-wysiwyg-bold')
 
@@ -323,6 +326,28 @@ function processInline(
     queueDecoration(decorations, fullStart, fullStart + 1, Decoration.replace({}))
     queueDecoration(decorations, textEnd - 1, textEnd, Decoration.replace({}))
     queueDecoration(decorations, textEnd, fullEnd, Decoration.replace({}))
+  }
+}
+
+function processSuperscript(
+  decorations: DecorationSpec[],
+  text: string,
+  lineFrom: number
+): void {
+  for (const range of findInlineSuperscriptRanges(text)) {
+    const fullStart = lineFrom + range.from
+    const contentStart = lineFrom + range.contentFrom
+    const contentEnd = lineFrom + range.contentTo
+    const fullEnd = lineFrom + range.to
+
+    queueDecoration(decorations, fullStart, contentStart, Decoration.replace({}))
+    queueDecoration(
+      decorations,
+      contentStart,
+      contentEnd,
+      Decoration.mark({ class: 'cm-wysiwyg-superscript' })
+    )
+    queueDecoration(decorations, contentEnd, fullEnd, Decoration.replace({}))
   }
 }
 
@@ -438,6 +463,12 @@ export const wysiwygTheme = EditorView.baseTheme({
   '.cm-wysiwyg-italic': { fontStyle: 'italic', color: 'var(--text-primary) !important' },
   '.cm-wysiwyg-underline': { textDecoration: 'underline', color: 'var(--text-primary) !important' },
   '.cm-wysiwyg-strikethrough': { textDecoration: 'line-through', color: 'var(--text-muted) !important' },
+  '.cm-wysiwyg-superscript': {
+    fontSize: '0.75em',
+    lineHeight: '0',
+    verticalAlign: 'super',
+    color: 'var(--text-primary) !important',
+  },
   '.cm-wysiwyg-highlight': {
     backgroundColor: 'color-mix(in srgb, #FACC15 52%, transparent)',
     borderRadius: '0.28em',

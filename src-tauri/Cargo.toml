@@ -1,6 +1,6 @@
 [package]
 name = "no1-markdown-editor"
-version = "0.12.0"
+version = "0.12.1"
 description = "No.1 Markdown Editor — Free Forever"
 authors = []
 edition = "2021"

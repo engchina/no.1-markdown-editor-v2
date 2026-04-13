@@ -6,7 +6,7 @@ export type FrontMatterMeta = Record<string, string>
 
 export const sanitizeSchema = {
   ...defaultSchema,
-  tagNames: Array.from(new Set([...(defaultSchema.tagNames ?? []), 'mark', 'u'])),
+  tagNames: Array.from(new Set([...(defaultSchema.tagNames ?? []), 'mark', 'sup', 'u'])),
   protocols: {
     ...defaultSchema.protocols,
     src: Array.from(new Set([...(defaultSchema.protocols?.src ?? []), 'data', 'file'])),
@@ -118,6 +118,11 @@ export function buildStandaloneHtml(
       box-decoration-break: clone;
       -webkit-box-decoration-break: clone;
     }
+    sup {
+      font-size: 0.75em;
+      line-height: 0;
+      vertical-align: super;
+    }
     p { margin: 0; }
     code {
       font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
@@ -156,6 +161,13 @@ export function buildStandaloneHtml(
     ul, ol { padding-left: 2em; margin: 0; }
     li { margin: 0.25em 0; }
     input[type="checkbox"] { margin-right: 6px; }
+    a[data-footnote-ref] {
+      color: #2563eb;
+      text-decoration: none;
+      font-size: 1em;
+      font-weight: 600;
+    }
+    a[data-footnote-backref] { color: #6b7280; }
     .front-matter {
       background: #f9fafb;
       border: 1px solid #e5e7eb;

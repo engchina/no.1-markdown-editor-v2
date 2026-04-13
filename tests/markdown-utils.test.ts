@@ -148,6 +148,30 @@ test('renderMarkdown preserves highlight tags inserted from pasted html', async 
   assert.match(html, /<p>Hello <mark>world<\/mark><\/p>/)
 })
 
+test('renderMarkdown renders superscript markers in both preview and worker output', async () => {
+  const html = await renderMarkdown('2^10^')
+  const workerHtml = await renderMarkdownInWorker('2^10^')
+
+  assert.match(html, /<p>2<sup>10<\/sup><\/p>/)
+  assert.match(workerHtml, /<p>2<sup>10<\/sup><\/p>/)
+})
+
+test('renderMarkdown keeps escaped and invalid superscript markers literal', async () => {
+  const escapedHtml = await renderMarkdown('\\^text^')
+  const leadingSpaceHtml = await renderMarkdown('^ leading^')
+  const trailingSpaceHtml = await renderMarkdown('^trailing ^')
+  const unclosedHtml = await renderMarkdown('^text')
+
+  assert.match(escapedHtml, /<p>\^text\^<\/p>/)
+  assert.doesNotMatch(escapedHtml, /<sup>/)
+  assert.match(leadingSpaceHtml, /<p>\^ leading\^<\/p>/)
+  assert.doesNotMatch(leadingSpaceHtml, /<sup>/)
+  assert.match(trailingSpaceHtml, /<p>\^trailing \^<\/p>/)
+  assert.doesNotMatch(trailingSpaceHtml, /<sup>/)
+  assert.match(unclosedHtml, /<p>\^text<\/p>/)
+  assert.doesNotMatch(unclosedHtml, /<sup>/)
+})
+
 test('renderMarkdown converts ==highlight== syntax to mark tags across inline nodes', async () => {
   const markdown = 'Hello ==**world**=='
   const html = await renderMarkdown(markdown)
@@ -155,6 +179,31 @@ test('renderMarkdown converts ==highlight== syntax to mark tags across inline no
 
   assert.match(html, /<p>Hello <mark><strong>world<\/strong><\/mark><\/p>/)
   assert.match(workerHtml, /<p>Hello <mark><strong>world<\/strong><\/mark><\/p>/)
+})
+
+test('renderMarkdown keeps superscript markers out of code and inline math while preserving nested inline formatting', async () => {
+  const inlineCodeHtml = await renderMarkdown('`a^2^`')
+  const fencedCodeHtml = await renderMarkdown('```\na^2^\n```')
+  const mixedHtml = await renderMarkdown('Inline $a^2$ and 2^10^ plus x^*2*^ and y^**3**^')
+  const workerMathHtml = await renderMarkdownInWorker('Inline $a^2$ and 2^10^')
+
+  assert.match(inlineCodeHtml, /<code>a\^2\^<\/code>/)
+  assert.doesNotMatch(inlineCodeHtml, /<sup>2<\/sup>/)
+  assert.match(fencedCodeHtml, /a\^2\^/)
+  assert.doesNotMatch(fencedCodeHtml, /<sup>2<\/sup>/)
+  assert.match(mixedHtml, /class="katex"/)
+  assert.match(mixedHtml, /2<sup>10<\/sup>/)
+  assert.match(mixedHtml, /x<sup><em>2<\/em><\/sup>/)
+  assert.match(mixedHtml, /y<sup><strong>3<\/strong><\/sup>/)
+  assert.match(workerMathHtml, /<p>Inline \$a\^2\$ and 2<sup>10<\/sup><\/p>/)
+})
+
+test('renderMarkdown preserves footnotes while rendering superscript in surrounding text and footnote content', async () => {
+  const html = await renderMarkdown('Power 2^10^ and note[^1]\n\n[^1]: Footnote 3^2^')
+
+  assert.match(html, /Power 2<sup>10<\/sup> and note<sup><a[^>]*data-footnote-ref/)
+  assert.match(html, /data-footnotes/)
+  assert.match(html, /Footnote 3<sup>2<\/sup>/)
 })
 
 test('renderMarkdown keeps linked remote images from pasted web content', async () => {

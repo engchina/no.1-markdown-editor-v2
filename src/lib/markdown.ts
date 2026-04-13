@@ -15,6 +15,7 @@ import { containsLikelyRawHtml } from './markdownHtml.ts'
 import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { rehypeHighlightMarkers } from './rehypeHighlightMarkers.ts'
 import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
+import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithoutMath = unified()
@@ -22,6 +23,7 @@ const processorWithoutMath = unified()
   .use(remarkGfm)
   .use(remarkSoftBreaks)
   .use(remarkRehype)
+  .use(rehypeSuperscriptMarkers)
   .use(rehypeHighlightMarkers)
   .use(rehypeNormalizeImageSources)
   .use(rehypeSanitize, sanitizeSchema)
@@ -34,7 +36,10 @@ let mathHtmlRendererPromise: Promise<typeof import('./markdownMathHtmlRender.ts'
 
 async function renderBaseMarkdown(markdown: string): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
-  const rendered = await processorWithoutMath.process(body)
+  const rendered = await processorWithoutMath.process({
+    value: body,
+    data: { markdownSource: body },
+  })
   return finalizeRenderedMarkdownHtml(meta, String(rendered))
 }
 

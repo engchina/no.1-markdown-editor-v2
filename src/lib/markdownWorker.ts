@@ -9,6 +9,7 @@ import { containsLikelyRawHtml } from './markdownHtml.ts'
 import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { rehypeHighlightMarkers } from './rehypeHighlightMarkers.ts'
 import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
+import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const workerProcessor = unified()
@@ -16,6 +17,7 @@ const workerProcessor = unified()
   .use(remarkGfm)
   .use(remarkSoftBreaks)
   .use(remarkRehype)
+  .use(rehypeSuperscriptMarkers)
   .use(rehypeHighlightMarkers)
   .use(rehypeNormalizeImageSources)
   .use(rehypeSanitize, sanitizeSchema)
@@ -29,6 +31,9 @@ export async function renderMarkdownInWorker(markdown: string): Promise<string> 
     return renderMarkdownWithHtmlInWorker(markdown)
   }
 
-  const rendered = await workerProcessor.process(frontMatter.body)
+  const rendered = await workerProcessor.process({
+    value: frontMatter.body,
+    data: { markdownSource: frontMatter.body },
+  })
   return finalizeRenderedMarkdownHtml(frontMatter.meta, String(rendered))
 }

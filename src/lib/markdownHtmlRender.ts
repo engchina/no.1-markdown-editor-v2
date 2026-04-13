@@ -9,6 +9,7 @@ import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from '
 import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { rehypeHighlightMarkers } from './rehypeHighlightMarkers.ts'
 import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
+import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithHtml = unified()
@@ -17,6 +18,7 @@ const processorWithHtml = unified()
   .use(remarkSoftBreaks)
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
+  .use(rehypeSuperscriptMarkers)
   .use(rehypeHighlightMarkers)
   .use(rehypeNormalizeImageSources)
   .use(rehypeSanitize, sanitizeSchema)
@@ -25,6 +27,9 @@ const processorWithHtml = unified()
 
 export async function renderMarkdownWithHtml(markdown: string): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
-  const rendered = await processorWithHtml.process(body)
+  const rendered = await processorWithHtml.process({
+    value: body,
+    data: { markdownSource: body },
+  })
   return finalizeRenderedMarkdownHtml(meta, String(rendered))
 }

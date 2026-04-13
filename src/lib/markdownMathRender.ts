@@ -14,6 +14,7 @@ import {
 import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { rehypeHighlightMarkers } from './rehypeHighlightMarkers.ts'
 import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
+import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
 const processorWithMath = unified()
@@ -22,6 +23,7 @@ const processorWithMath = unified()
   .use(remarkMath)
   .use(remarkSoftBreaks)
   .use(remarkRehype)
+  .use(rehypeSuperscriptMarkers)
   .use(rehypeHighlightMarkers)
   .use(rehypeNormalizeImageSources)
   .use(rehypeSanitize, sanitizeSchema)
@@ -31,6 +33,9 @@ const processorWithMath = unified()
 
 export async function renderMarkdownWithMath(markdown: string): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
-  const rendered = await processorWithMath.process(body)
+  const rendered = await processorWithMath.process({
+    value: body,
+    data: { markdownSource: body },
+  })
   return finalizeRenderedMarkdownHtml(meta, String(rendered))
 }

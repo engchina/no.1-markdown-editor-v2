@@ -106,6 +106,7 @@ test('renderClipboardHtmlAstToMarkdown keeps semantic inline tags, task lists, f
   assert.match(markdown, /\[\^1]: Here is the \*text\* of the first \*\*footnote\*\*\./)
   assert.match(html, /<u>Underline<\/u>/)
   assert.match(html, /<mark>highlight<\/mark>/)
+  assert.match(html, /X<sup>2<\/sup>/)
   assert.match(html, /contains-task-list/)
   assert.match(html, /data-footnotes/)
 })
