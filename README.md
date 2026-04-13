@@ -34,7 +34,7 @@ Install latest package from [releases](https://github.com/engchina/no.1-markdown
 GitHub release automation is defined in `.github/workflows/release.yml`.
 
 - Keep the version aligned in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
-- Create and push a version tag such as `v0.12.0`. The workflow fails early if the tag does not match the app version.
+- Create and push a version tag such as `v0.13.0`. The workflow fails early if the tag does not match the app version.
 - Pushing the tag builds Windows x64, a single universal macOS release bundle for both Apple Silicon and Intel Macs, and Linux x64 release bundles on GitHub-hosted runners and uploads them to GitHub Releases automatically.
 
 For macOS builds:

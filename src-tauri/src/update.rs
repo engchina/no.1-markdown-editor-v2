@@ -313,7 +313,7 @@ mod tests {
     #[test]
     fn semver_comparison_detects_newer_release() {
         let current = Version::parse(&normalize_version("0.11.0").unwrap()).unwrap();
-        let latest = Version::parse(&normalize_version("v0.12.0").unwrap()).unwrap();
+        let latest = Version::parse(&normalize_version("v0.13.0").unwrap()).unwrap();
 
         assert!(latest > current);
     }
@@ -321,37 +321,37 @@ mod tests {
     #[test]
     fn windows_prefers_msi_and_matching_architecture() {
         let assets = vec![
-            asset("No1MarkdownEditor_0.12.0_arm64.exe", "https://example.com/arm64.exe"),
-            asset("No1MarkdownEditor_0.12.0_x64.exe", "https://example.com/x64.exe"),
-            asset("No1MarkdownEditor_0.12.0_x64.msi", "https://example.com/x64.msi"),
+            asset("No1MarkdownEditor_0.13.0_arm64.exe", "https://example.com/arm64.exe"),
+            asset("No1MarkdownEditor_0.13.0_x64.exe", "https://example.com/x64.exe"),
+            asset("No1MarkdownEditor_0.13.0_x64.msi", "https://example.com/x64.msi"),
         ];
 
         let selected = select_best_asset(&assets, UpdatePlatform::Windows, UpdateArchitecture::X86_64)
             .expect("expected a windows installer");
 
-        assert_eq!(selected.name, "No1MarkdownEditor_0.12.0_x64.msi");
+        assert_eq!(selected.name, "No1MarkdownEditor_0.13.0_x64.msi");
     }
 
     #[test]
     fn macos_prefers_dmg() {
         let assets = vec![
-            asset("No1MarkdownEditor_0.12.0_windows_x64.msi", "https://example.com/windows.msi"),
-            asset("No1MarkdownEditor_0.12.0_macos_universal.dmg", "https://example.com/macos.dmg"),
+            asset("No1MarkdownEditor_0.13.0_windows_x64.msi", "https://example.com/windows.msi"),
+            asset("No1MarkdownEditor_0.13.0_macos_universal.dmg", "https://example.com/macos.dmg"),
         ];
 
         let selected = select_best_asset(&assets, UpdatePlatform::Macos, UpdateArchitecture::AArch64)
             .expect("expected a macOS installer");
 
-        assert_eq!(selected.name, "No1MarkdownEditor_0.12.0_macos_universal.dmg");
+        assert_eq!(selected.name, "No1MarkdownEditor_0.13.0_macos_universal.dmg");
     }
 
     #[test]
     fn linux_prefers_appimage_then_deb_then_rpm() {
         let assets = vec![
-            asset("No1MarkdownEditor_0.12.0_linux_x86_64.rpm", "https://example.com/linux.rpm"),
-            asset("No1MarkdownEditor_0.12.0_linux_x86_64.deb", "https://example.com/linux.deb"),
+            asset("No1MarkdownEditor_0.13.0_linux_x86_64.rpm", "https://example.com/linux.rpm"),
+            asset("No1MarkdownEditor_0.13.0_linux_x86_64.deb", "https://example.com/linux.deb"),
             asset(
-                "No1MarkdownEditor_0.12.0_linux_x86_64.AppImage",
+                "No1MarkdownEditor_0.13.0_linux_x86_64.AppImage",
                 "https://example.com/linux.appimage",
             ),
         ];
@@ -359,14 +359,14 @@ mod tests {
         let selected = select_best_asset(&assets, UpdatePlatform::Linux, UpdateArchitecture::X86_64)
             .expect("expected a linux installer");
 
-        assert_eq!(selected.name, "No1MarkdownEditor_0.12.0_linux_x86_64.AppImage");
+        assert_eq!(selected.name, "No1MarkdownEditor_0.13.0_linux_x86_64.AppImage");
     }
 
     #[test]
     fn unsupported_assets_fall_back_to_release_page() {
         let assets = vec![
-            asset("No1MarkdownEditor_0.12.0_source.zip", "https://example.com/source.zip"),
-            asset("No1MarkdownEditor_0.12.0_checksums.txt", "https://example.com/checksums.txt"),
+            asset("No1MarkdownEditor_0.13.0_source.zip", "https://example.com/source.zip"),
+            asset("No1MarkdownEditor_0.13.0_checksums.txt", "https://example.com/checksums.txt"),
         ];
 
         let selected = select_best_asset(&assets, UpdatePlatform::Windows, UpdateArchitecture::X86_64);
@@ -376,11 +376,11 @@ mod tests {
     #[test]
     fn explicit_architecture_mismatch_is_rejected() {
         assert_eq!(
-            architecture_match_score("No1MarkdownEditor_0.12.0_arm64.dmg", UpdateArchitecture::X86_64),
+            architecture_match_score("No1MarkdownEditor_0.13.0_arm64.dmg", UpdateArchitecture::X86_64),
             None
         );
         assert_eq!(
-            architecture_match_score("No1MarkdownEditor_0.12.0_x64.msi", UpdateArchitecture::X86_64),
+            architecture_match_score("No1MarkdownEditor_0.13.0_x64.msi", UpdateArchitecture::X86_64),
             Some(2)
         );
     }
