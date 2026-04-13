@@ -821,6 +821,10 @@ function formatMarkdownDestination(url: string): string {
 function getImageSource(attributes?: Record<string, string>): string {
   if (!attributes) return ''
 
+  const previewSource =
+    sanitizeUrl(attributes['data-local-src']) ||
+    sanitizeUrl(attributes['data-external-src']) ||
+    sanitizeUrl(attributes['data-external-fallback-src'])
   const src = sanitizeUrl(attributes.src)
   const lazySource =
     sanitizeUrl(attributes['data-src']) ||
@@ -828,6 +832,7 @@ function getImageSource(attributes?: Record<string, string>): string {
     sanitizeUrl(attributes['data-actualsrc']) ||
     sanitizeUrl(attributes['data-lazy-src'])
 
+  if (previewSource) return previewSource
   if (src && !looksLikePlaceholderImage(src)) return src
   return lazySource || src
 }

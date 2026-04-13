@@ -58,7 +58,11 @@ import {
 } from '../../lib/ai/selectionBubble.ts'
 import { buildAIRequestMessages, normalizeAIDraftText } from '../../lib/ai/prompt.ts'
 import { clipboardHasType, readClipboardString } from '../../lib/clipboard'
-import { buildPlainTextClipboardHtml, renderClipboardHtmlFromMarkdown } from '../../lib/clipboardHtml'
+import {
+  buildMarkdownSafeClipboardPayload,
+  writeClipboardEventPayload,
+  writeClipboardPayload,
+} from '../../lib/clipboardHtml'
 import { getImageAltText } from '../../lib/fileTypes'
 import { getTauriFilePersistence, persistImageFilesAsMarkdown } from '../../lib/documentPersistence'
 import { prepareImageMarkdownInsertion } from '../../lib/imageMarkdownInsertion'
@@ -824,7 +828,8 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       if (selection.empty) return
 
       const markdownText = view.state.sliceDoc(selection.from, selection.to)
-      const fallbackCopied = writeClipboardEventFallback(event, markdownText)
+      const payload = buildMarkdownSafeClipboardPayload(markdownText)
+      const fallbackCopied = writeClipboardEventPayload(event, payload)
       event.preventDefault()
 
       const applyCut = () => {
@@ -838,19 +843,12 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
         applyCut()
       }
 
+      if (fallbackCopied) return
+
       try {
-        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return
+        await writeClipboardPayload(payload)
 
-        const mermaidTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'default'
-        const html = await renderClipboardHtmlFromMarkdown(markdownText, mermaidTheme)
-        await navigator.clipboard.write([
-          new ClipboardItem({
-            'text/html': new Blob([html], { type: 'text/html' }),
-            'text/plain': new Blob([markdownText], { type: 'text/plain' }),
-          }),
-        ])
-
-        if (mode === 'cut' && !fallbackCopied) {
+        if (mode === 'cut') {
           applyCut()
         }
       } catch (error) {
@@ -1410,15 +1408,6 @@ async function fileToBase64Markdown(file: File): Promise<string> {
     reader.onload = (event) => resolve(`![${altText}](${event.target?.result as string})`)
     reader.readAsDataURL(file)
   })
-}
-
-function writeClipboardEventFallback(event: ClipboardEvent, markdownText: string): boolean {
-  const clipboardData = event.clipboardData
-  if (!clipboardData) return false
-
-  clipboardData.setData('text/plain', markdownText)
-  clipboardData.setData('text/html', buildPlainTextClipboardHtml(markdownText))
-  return true
 }
 
 function resolveInsertedProvenanceRange(

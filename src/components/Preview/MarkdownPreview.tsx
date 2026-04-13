@@ -11,8 +11,14 @@ import {
   updateMermaidShellLabels,
 } from '../../lib/mermaid'
 import { ensureKatexStylesheet } from '../../lib/katexStylesheet'
+import {
+  buildMarkdownSafeClipboardPayload,
+  writeClipboardEventPayload,
+  writeClipboardPayload,
+} from '../../lib/clipboardHtml'
 import { pushErrorNotice } from '../../lib/notices'
 import { loadLocalPreviewImage } from '../../lib/previewLocalImage'
+import { convertPreviewSelectionHtmlToMarkdown, extractPreviewSelectionFragment } from '../../lib/previewClipboard'
 import { buildLocalPreviewImageKey, rewritePreviewHtmlLocalImages } from '../../lib/previewLocalImages'
 import { buildExternalPreviewImageKey, rewritePreviewHtmlExternalImages } from '../../lib/previewExternalImages'
 import { getPreviewExternalLink } from '../../lib/previewLinks'
@@ -282,6 +288,42 @@ export default function MarkdownPreview() {
       preview.removeEventListener('pointerover', onWarmIntent)
       preview.removeEventListener('focusin', onWarmIntent)
     }
+  }, [])
+
+  useEffect(() => {
+    // Preview selections do not reliably focus the preview container, so intercept copy at the document level.
+    const onCopy = (event: ClipboardEvent) => {
+      const preview = previewRef.current
+      if (!preview || typeof window === 'undefined') return
+
+      const selection = window.getSelection()
+      if (!selection) return
+
+      const fragment = extractPreviewSelectionFragment(selection, preview)
+      if (!fragment) return
+
+      const markdownText = convertPreviewSelectionHtmlToMarkdown(fragment.html, fragment.plainText)
+      if (!markdownText.trim()) return
+
+      const payload = buildMarkdownSafeClipboardPayload(markdownText)
+      const fallbackCopied = writeClipboardEventPayload(event, payload)
+      const canWriteClipboard =
+        typeof navigator !== 'undefined' && typeof navigator.clipboard?.write === 'function' && typeof ClipboardItem !== 'undefined'
+
+      if (!fallbackCopied && !canWriteClipboard) return
+
+      event.preventDefault()
+
+      if (fallbackCopied) return
+      if (!canWriteClipboard) return
+
+      void writeClipboardPayload(payload).catch((error) => {
+        console.error('Preview copy clipboard write error:', error)
+      })
+    }
+
+    document.addEventListener('copy', onCopy)
+    return () => document.removeEventListener('copy', onCopy)
   }, [])
 
   useEffect(() => {

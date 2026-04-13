@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useActiveTab } from '../store/editor'
-import { renderClipboardHtmlFromMarkdown } from '../lib/clipboardHtml'
+import { buildRichClipboardPayload, writeClipboardPayload } from '../lib/clipboardHtml'
 import { ensureFsPathAccess } from '../lib/fsAccess'
 import { pushErrorNotice, pushSuccessNotice } from '../lib/notices'
 
@@ -163,25 +163,20 @@ export function useExport() {
 
     try {
       const mermaidTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'default'
-      const bodyHtml = await renderClipboardHtmlFromMarkdown(activeTab.content, mermaidTheme)
+      const payload = await buildRichClipboardPayload(activeTab.content, mermaidTheme)
 
       let copied = false
       try {
-        if (navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'text/html': new Blob([bodyHtml], { type: 'text/html' }),
-              'text/plain': new Blob([activeTab.content], { type: 'text/plain' }),
-            }),
-          ])
+        if (typeof navigator.clipboard?.write === 'function' && typeof ClipboardItem !== 'undefined') {
+          await writeClipboardPayload(payload)
           copied = true
         } else {
-          await navigator.clipboard.writeText(bodyHtml)
+          await navigator.clipboard.writeText(payload.html)
           copied = true
         }
       } catch {
         const textarea = document.createElement('textarea')
-        textarea.value = bodyHtml
+        textarea.value = payload.html
         textarea.setAttribute('readonly', 'true')
         textarea.style.position = 'fixed'
         textarea.style.opacity = '0'
