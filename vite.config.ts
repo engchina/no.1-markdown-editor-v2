@@ -108,96 +108,110 @@ export default defineConfig(async () => ({
             return 'mermaid-parser'
           }
 
-          if (!id.includes('node_modules')) return
+          if (!normalizedId.includes('/node_modules/')) return
 
           if (mermaidParserRuntimeChunk) {
             return mermaidParserRuntimeChunk
           }
 
           const isMarkdownHtmlDependency =
-            id.includes('rehype-raw') ||
-            id.includes('hast-util-raw') ||
-            id.includes('hast-util-from-parse5') ||
-            id.includes('hast-util-to-parse5') ||
-            id.includes('parse5') ||
-            id.includes('vfile-location')
+            normalizedId.includes('rehype-raw') ||
+            normalizedId.includes('hast-util-raw') ||
+            normalizedId.includes('hast-util-from-parse5') ||
+            normalizedId.includes('hast-util-to-parse5') ||
+            normalizedId.includes('parse5') ||
+            normalizedId.includes('vfile-location')
           if (isMarkdownHtmlDependency) {
             return
           }
 
-          if (id.includes('@codemirror/autocomplete')) {
+          if (normalizedId.includes('/node_modules/@codemirror/autocomplete/')) {
             return 'vendor-editor-autocomplete'
           }
 
-          if (
-            id.includes('@codemirror/lang-html') ||
-            id.includes('@codemirror/lang-css') ||
-            id.includes('@codemirror/lang-javascript') ||
-            id.includes('@lezer/html') ||
-            id.includes('@lezer/css') ||
-            id.includes('@lezer/javascript')
-          ) {
+          const isCodeMirrorWebLanguage =
+            normalizedId.includes('/node_modules/@codemirror/lang-html/') ||
+            normalizedId.includes('/node_modules/@codemirror/lang-css/') ||
+            normalizedId.includes('/node_modules/@codemirror/lang-javascript/') ||
+            normalizedId.includes('/node_modules/@codemirror/lang-angular/') ||
+            normalizedId.includes('/node_modules/@codemirror/lang-jinja/') ||
+            normalizedId.includes('/node_modules/@codemirror/lang-less/') ||
+            normalizedId.includes('/node_modules/@codemirror/lang-liquid/') ||
+            normalizedId.includes('/node_modules/@codemirror/lang-vue/')
+
+          const isLezerWebLanguage =
+            normalizedId.includes('/node_modules/@lezer/html/') ||
+            normalizedId.includes('/node_modules/@lezer/css/') ||
+            normalizedId.includes('/node_modules/@lezer/javascript/')
+
+          if (isCodeMirrorWebLanguage || isLezerWebLanguage) {
             return 'vendor-editor-language-web'
           }
 
-          if (id.includes(`${path.sep}langium${path.sep}`)) {
-            return 'vendor-mermaid-parser-langium'
-          }
-
-          if (id.includes(`${path.sep}chevrotain${path.sep}`)) {
-            return 'vendor-mermaid-parser-chevrotain'
-          }
-
           if (
-            id.includes('remark-math') ||
-            id.includes('mdast-util-math') ||
-            id.includes('micromark-extension-math') ||
-            id.includes('rehype-katex') ||
-            id.includes(`${path.sep}katex${path.sep}`) ||
-            id.includes('/katex/')
-          ) {
-            return 'vendor-markdown-math'
-          }
-
-          if (id.includes('@codemirror/search')) {
-            return 'vendor-editor-search'
-          }
-
-          if (
-            id.includes('@codemirror/lang-markdown') ||
-            id.includes('@lezer/markdown')
+            normalizedId.includes('/node_modules/@codemirror/lang-') ||
+            normalizedId.includes('/node_modules/@codemirror/language-data/') ||
+            normalizedId.includes('/node_modules/@codemirror/legacy-modes/') ||
+            normalizedId.includes('/node_modules/@lezer/markdown/')
           ) {
             return 'vendor-editor-language'
           }
 
+          if (normalizedId.includes('/node_modules/langium/')) {
+            return 'vendor-mermaid-parser-langium'
+          }
+
+          if (normalizedId.includes('/node_modules/chevrotain/')) {
+            return 'vendor-mermaid-parser-chevrotain'
+          }
+
           if (
-            id.includes('@codemirror') ||
-            id.includes('/codemirror/') ||
-            id.includes('@lezer')
+            normalizedId.includes('remark-math') ||
+            normalizedId.includes('mdast-util-math') ||
+            normalizedId.includes('micromark-extension-math') ||
+            normalizedId.includes('rehype-katex') ||
+            normalizedId.includes('/node_modules/katex/') ||
+            normalizedId.includes('/katex/')
+          ) {
+            return 'vendor-markdown-math'
+          }
+
+          if (normalizedId.includes('/node_modules/@codemirror/search/')) {
+            return 'vendor-editor-search'
+          }
+
+          if (
+            normalizedId.includes('/node_modules/@codemirror/') ||
+            normalizedId.includes('/codemirror/') ||
+            normalizedId.includes('/node_modules/@lezer/')
           ) {
             return 'vendor-editor'
           }
 
           if (
-            id.includes('remark') ||
-            id.includes('rehype') ||
-            id.includes('unified') ||
-            id.includes('micromark') ||
-            id.includes('mdast') ||
-            id.includes('hast')
+            normalizedId.includes('remark') ||
+            normalizedId.includes('rehype') ||
+            normalizedId.includes('unified') ||
+            normalizedId.includes('micromark') ||
+            normalizedId.includes('mdast') ||
+            normalizedId.includes('hast')
           ) {
             return 'vendor-markdown'
           }
 
-          if (id.includes('@tauri-apps')) {
+          if (normalizedId.includes('/node_modules/@tauri-apps/')) {
             return 'vendor-tauri'
           }
 
-          if (id.includes('react') || id.includes('scheduler')) {
+          if (normalizedId.includes('/node_modules/react') || normalizedId.includes('/node_modules/scheduler/')) {
             return 'vendor-react'
           }
 
-          if (id.includes('zustand') || id.includes('i18next') || id.includes('react-i18next')) {
+          if (
+            normalizedId.includes('/node_modules/zustand/') ||
+            normalizedId.includes('/node_modules/i18next/') ||
+            normalizedId.includes('/node_modules/react-i18next/')
+          ) {
             return 'vendor-state'
           }
         },

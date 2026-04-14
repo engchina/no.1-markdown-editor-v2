@@ -381,8 +381,8 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     }
 
     let cancelled = false
-    void import('./wysiwyg').then(({ wysiwygPlugin, wysiwygTheme }) => {
-      if (!cancelled) setWysiwygExtensions([wysiwygPlugin, wysiwygTheme])
+    void import('./wysiwyg').then(({ wysiwygPlugin, wysiwygTheme, wysiwygTableDecorations }) => {
+      if (!cancelled) setWysiwygExtensions([wysiwygTableDecorations, wysiwygPlugin, wysiwygTheme])
     })
 
     return () => {
