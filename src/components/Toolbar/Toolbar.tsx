@@ -222,6 +222,8 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
     setSidebarOpen,
     focusMode,
     setFocusMode,
+    wysiwygMode,
+    setWysiwygMode,
     language,
     setLanguage,
     tabs,
@@ -410,6 +412,14 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
       )}
 
       <div className="flex-1" />
+
+      <ToolbarBtn
+        title={wysiwygMode ? t('toolbar.disableWysiwyg') : t('toolbar.enableWysiwyg')}
+        onClick={() => setWysiwygMode(!wysiwygMode)}
+        active={wysiwygMode}
+      >
+        <AppIcon name="wysiwyg" size={16} />
+      </ToolbarBtn>
 
       <ToolbarBtn title={t('toolbar.focusMode')} onClick={() => setFocusMode(!focusMode)} active={focusMode}>
         <span data-toolbar-action="focus-mode" className="contents">
