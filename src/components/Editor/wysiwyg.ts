@@ -1020,12 +1020,10 @@ export const wysiwygTheme = EditorView.baseTheme({
     overflow: 'hidden',
   },
   '.cm-wysiwyg-table-gap-line': {
-    height: '0.75em',
-    minHeight: '0.75em',
+    minHeight: '1.15em',
     padding: '0 !important',
-    lineHeight: '0',
-    fontSize: '0',
-    overflow: 'hidden',
+    lineHeight: '1.15',
+    fontSize: 'inherit',
   },
   '.cm-wysiwyg-table': {
     display: 'block',
@@ -1033,7 +1031,7 @@ export const wysiwygTheme = EditorView.baseTheme({
     cursor: 'text',
   },
   '.cm-wysiwyg-table__surface': {
-    margin: '0 32px',
+    margin: '0 16px',
     overflowX: 'auto',
     borderRadius: '0',
     border: 'none',
@@ -1052,7 +1050,7 @@ export const wysiwygTheme = EditorView.baseTheme({
     margin: '0',
     color: 'var(--preview-text)',
     fontFamily: 'var(--font-preview, Inter, system-ui, sans-serif)',
-    lineHeight: '1.75',
+    fontSize: 'inherit',
   },
   '.cm-wysiwyg-table__head-cell, .cm-wysiwyg-table__cell': {
     border: '1px solid var(--border)',
@@ -1064,7 +1062,7 @@ export const wysiwygTheme = EditorView.baseTheme({
     overflowWrap: 'anywhere',
     color: 'var(--preview-text)',
     fontFamily: 'var(--font-preview, Inter, system-ui, sans-serif)',
-    fontSize: '1rem',
+    fontSize: 'inherit',
     fontWeight: '400',
   },
   '.cm-wysiwyg-table__head-cell': {
@@ -1072,7 +1070,7 @@ export const wysiwygTheme = EditorView.baseTheme({
     fontWeight: '600',
   },
   '.cm-wysiwyg-table__grid tbody tr:nth-child(even) .cm-wysiwyg-table__cell': {
-    backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 88%, transparent)',
+    backgroundColor: 'var(--bg-secondary)',
   },
   '.cm-wysiwyg-table__head-cell[align="center"], .cm-wysiwyg-table__cell[align="center"]': {
     textAlign: 'center',
