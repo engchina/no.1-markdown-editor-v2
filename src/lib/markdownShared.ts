@@ -7,12 +7,6 @@ export type FrontMatterMeta = Record<string, string>
 export const sanitizeSchema = {
   ...defaultSchema,
   tagNames: Array.from(new Set([...(defaultSchema.tagNames ?? []), 'mark', 'sup', 'u'])),
-  attributes: {
-    ...defaultSchema.attributes,
-    code: ['className', 'style'],
-    span: ['className', 'style'],
-    pre: ['className', 'style'],
-  },
   protocols: {
     ...defaultSchema.protocols,
     src: Array.from(new Set([...(defaultSchema.protocols?.src ?? []), 'data', 'file'])),

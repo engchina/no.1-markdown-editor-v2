@@ -15,12 +15,12 @@ import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeShiki from '@shikijs/rehype'
 
-const processors: Record<string, ReturnType<typeof unified>> = {}
+const processors: Record<string, any> = {}
 
 function getProcessor(engine: 'highlightjs' | 'shiki') {
   if (processors[engine]) return processors[engine]
 
-  let processor = unified()
+  let processor: any = unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkSoftBreaks)
@@ -31,7 +31,10 @@ function getProcessor(engine: 'highlightjs' | 'shiki') {
     .use(rehypeSanitize, sanitizeSchema)
 
   if (engine === 'shiki') {
-    processor = processor.use(rehypeShiki, { themes: { light: 'github-light', dark: 'github-dark' } })
+    processor = processor.use(rehypeShiki, { 
+      themes: { light: 'github-light', dark: 'github-dark' },
+      fallbackLanguage: 'txt'
+    })
   } else {
     processor = processor.use(rehypeHighlight, { ignoreMissing: true })
   }

@@ -12,22 +12,46 @@ import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
 import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
-const processorWithHtml = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkSoftBreaks)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeRaw)
-  .use(rehypeSuperscriptMarkers)
-  .use(rehypeHighlightMarkers)
-  .use(rehypeNormalizeImageSources)
-  .use(rehypeSanitize, sanitizeSchema)
-  .use(rehypeHeadingIds)
-  .use(rehypeStringify)
+import rehypeHighlight from 'rehype-highlight'
+import rehypeShiki from '@shikijs/rehype'
 
-export async function renderMarkdownWithHtml(markdown: string): Promise<string> {
+const processors: Record<string, any> = {}
+
+function getProcessorWithHtml(engine: 'highlightjs' | 'shiki') {
+  if (processors[engine]) return processors[engine]
+
+  let processor: any = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkSoftBreaks)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeRaw)
+    .use(rehypeSuperscriptMarkers)
+    .use(rehypeHighlightMarkers)
+    .use(rehypeNormalizeImageSources)
+    .use(rehypeSanitize, sanitizeSchema)
+
+  if (engine === 'shiki') {
+    processor = processor.use(rehypeShiki, { 
+      themes: { light: 'github-light', dark: 'github-dark' },
+      fallbackLanguage: 'txt'
+    })
+  } else {
+    processor = processor.use(rehypeHighlight, { ignoreMissing: true })
+  }
+
+  processor = processor
+    .use(rehypeHeadingIds)
+    .use(rehypeStringify)
+
+  processors[engine] = processor
+  return processor
+}
+
+export async function renderMarkdownWithHtml(markdown: string, syntaxHighlightEngine: 'highlightjs' | 'shiki' = 'highlightjs'): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
-  const rendered = await processorWithHtml.process({
+  const processor = getProcessorWithHtml(syntaxHighlightEngine)
+  const rendered = await processor.process({
     value: body,
     data: { markdownSource: body },
   })
