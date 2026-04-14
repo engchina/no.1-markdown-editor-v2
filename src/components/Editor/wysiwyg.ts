@@ -22,6 +22,7 @@ import { collectMathBlocks, type MathBlock } from './mathBlockRanges.ts'
 import { buildSortedRangeSet, type RangeSpec } from './sortedRangeSet'
 import { getTaskCheckboxChange } from './taskCheckbox'
 import { parseWysiwygBlockquoteLine } from './wysiwygBlockquote'
+import { findInlineMathRanges } from './wysiwygInlineMath.ts'
 import { findInlineSuperscriptRanges } from './wysiwygSuperscript'
 import {
   collectWysiwygCodeBlockDecorations,
@@ -45,14 +46,19 @@ class HrWidget extends WidgetType {
 // KaTeX inline math widget
 class InlineMathWidget extends WidgetType {
   private readonly latex: string
+  private readonly editAnchor: number
 
-  constructor(latex: string) {
+  constructor(latex: string, editAnchor: number) {
     super()
     this.latex = latex
+    this.editAnchor = editAnchor
   }
   toDOM() {
     const el = document.createElement('span')
     el.className = 'cm-wysiwyg-math-inline'
+    el.dataset.mathEditAnchor = String(this.editAnchor)
+    el.setAttribute('aria-label', 'Edit inline math')
+    el.setAttribute('role', 'button')
     void ensureKatexStylesheet().catch(() => {})
     try {
       katex.render(this.latex, el, { throwOnError: false, displayMode: false })
@@ -61,8 +67,8 @@ class InlineMathWidget extends WidgetType {
     }
     return el
   }
-  ignoreEvent() { return true }
-  eq(other: InlineMathWidget) { return this.latex === other.latex }
+  ignoreEvent() { return false }
+  eq(other: InlineMathWidget) { return this.latex === other.latex && this.editAnchor === other.editAnchor }
 }
 
 // KaTeX block math widget
@@ -380,14 +386,15 @@ function processInlineMath(
   text: string,
   lineFrom: number
 ): void {
-  // Inline math: $expr$ (not $$)
-  const re = /(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    const latex = m[1]
-    const from = lineFrom + m.index
-    const to = from + m[0].length
-    queueDecoration(decorations, from, to, Decoration.replace({ widget: new InlineMathWidget(latex) }))
+  for (const range of findInlineMathRanges(text)) {
+    const from = lineFrom + range.from
+    const to = lineFrom + range.to
+    queueDecoration(
+      decorations,
+      from,
+      to,
+      Decoration.replace({ widget: new InlineMathWidget(range.latex, lineFrom + range.editAnchor) })
+    )
   }
 }
 
@@ -524,11 +531,11 @@ function toggleTaskCheckbox(view: EditorView, target: EventTarget | null): boole
   return true
 }
 
-function activateMathBlock(view: EditorView, target: EventTarget | null): boolean {
-  const mathBlock = (target as HTMLElement | null)?.closest<HTMLElement>('.cm-wysiwyg-math-block')
-  if (!mathBlock) return false
+function activateMathTarget(view: EditorView, target: EventTarget | null): boolean {
+  const mathTarget = (target as HTMLElement | null)?.closest<HTMLElement>('.cm-wysiwyg-math-block, .cm-wysiwyg-math-inline')
+  if (!mathTarget) return false
 
-  const editAnchor = Number(mathBlock.dataset.mathEditAnchor)
+  const editAnchor = Number(mathTarget.dataset.mathEditAnchor)
   if (!Number.isFinite(editAnchor)) return false
 
   view.dispatch({
@@ -573,12 +580,12 @@ export const wysiwygPlugin = ViewPlugin.fromClass(
     decorations: (v) => v.decorations,
     eventHandlers: {
       mousedown(event, view) {
-        if (!activateMathBlock(view, event.target)) return false
+        if (!activateMathTarget(view, event.target)) return false
         event.preventDefault()
         return true
       },
       click(event, view) {
-        if (activateMathBlock(view, event.target)) {
+        if (activateMathTarget(view, event.target)) {
           event.preventDefault()
           return true
         }
@@ -722,7 +729,14 @@ export const wysiwygTheme = EditorView.baseTheme({
   '.cm-wysiwyg-math-inline': {
     display: 'inline-block',
     verticalAlign: 'middle',
-    cursor: 'default',
+    cursor: 'text',
+    padding: '0 0.14em',
+    borderRadius: '0.34em',
+    transition: 'background-color 140ms ease, box-shadow 140ms ease',
+  },
+  '.cm-wysiwyg-math-inline:hover': {
+    backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 62%, transparent)',
+    boxShadow: '0 0 0 1px color-mix(in srgb, var(--border) 68%, transparent)',
   },
   '.cm-wysiwyg-math-block-anchor-line': {
     padding: '0 !important',

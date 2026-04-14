@@ -584,8 +584,16 @@ test('getInlineKatexCss replaces KaTeX font urls with data urls', async () => {
 test('containsLikelyMath detects inline, block, and fenced math', () => {
   assert.equal(containsLikelyMath('Price is $19.99'), false)
   assert.equal(containsLikelyMath('Inline $E=mc^2$ example'), true)
+  assert.equal(containsLikelyMath('Literal `$E=mc^2$` example'), false)
   assert.equal(containsLikelyMath('$$\na^2 + b^2 = c^2\n$$'), true)
   assert.equal(containsLikelyMath('```math\nx = y + z\n```'), true)
+})
+
+test('renderMarkdown keeps inline code literals around math markers instead of rendering KaTeX inside code spans', async () => {
+  const html = await renderMarkdown('Literal `$E=mc^2$` example')
+
+  assert.match(html, /<code>\$E=mc\^2\$<\/code>/)
+  assert.doesNotMatch(html, /class="katex"/)
 })
 
 test('renderMarkdownInWorker keeps the worker-safe path free of KaTeX rendering', async () => {
