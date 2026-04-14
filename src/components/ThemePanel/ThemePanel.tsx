@@ -40,6 +40,8 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
     setWysiwygMode,
     typewriterMode,
     setTypewriterMode,
+    syntaxHighlightEngine,
+    setSyntaxHighlightEngine,
   } = useEditorStore()
   const panelRef = useRef<HTMLDivElement>(null)
   const [aiProviderState, setAiProviderState] = useState<AIProviderState | null>(null)
@@ -364,6 +366,34 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
                 </button>
               </label>
             ))}
+          </div>
+
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs font-medium mb-3" style={{ color: 'var(--text-muted)' }}>
+              {t('themePanel.syntaxHighlighter') ?? 'Syntax Highlighting'}
+            </p>
+            <div className="flex gap-2">
+              {(['highlightjs', 'shiki'] as const).map((engine) => (
+                <button
+                  key={engine}
+                  type="button"
+                  onClick={() => setSyntaxHighlightEngine(engine)}
+                  className="flex-1 text-[11px] px-2 py-1.5 rounded transition-all hover-scale"
+                  style={{
+                    background: syntaxHighlightEngine === engine ? 'var(--accent)' : 'var(--bg-tertiary)',
+                    color: syntaxHighlightEngine === engine ? 'white' : 'var(--text-muted)',
+                  }}
+                >
+                  {engine === 'highlightjs' ? 'Highlight.js' : 'Shiki'}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 text-[10px] leading-4" style={{ color: 'var(--text-secondary)' }}>
+              {syntaxHighlightEngine === 'highlightjs' 
+                ? (t('themePanel.highlightjsHint') ?? 'High performance, low memory footprint. Recommended for most users.') 
+                : (t('themePanel.shikiHint') ?? 'VS Code quality parsing with exact colors. Slower to load and uses more memory.')
+              }
+            </div>
           </div>
         </div>
 

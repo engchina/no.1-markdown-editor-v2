@@ -335,11 +335,13 @@ export async function loadAutocompleteExtensions(): Promise<Extension[]> {
 export async function loadMarkdownLanguageExtensions(): Promise<Extension[]> {
   markdownLanguageExtensionsPromise ??= (async () => {
     const { markdown, markdownLanguage } = await import('@codemirror/lang-markdown')
+    const { languages } = await import('@codemirror/language-data')
 
     return [
       markdown({
         base: markdownLanguage,
         addKeymap: true,
+        codeLanguages: languages,
       }),
     ]
   })()

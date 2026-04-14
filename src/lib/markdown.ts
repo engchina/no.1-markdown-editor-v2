@@ -18,25 +18,46 @@ import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
 import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
-const processorWithoutMath = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkSoftBreaks)
-  .use(remarkRehype)
-  .use(rehypeSuperscriptMarkers)
-  .use(rehypeHighlightMarkers)
-  .use(rehypeNormalizeImageSources)
-  .use(rehypeSanitize, sanitizeSchema)
-  .use(rehypeHeadingIds)
-  .use(rehypeStringify)
+import rehypeHighlight from 'rehype-highlight'
+import rehypeShiki from '@shikijs/rehype'
+
+const processors: Record<string, ReturnType<typeof unified>> = {}
+
+function getProcessorWithoutMath(engine: 'highlightjs' | 'shiki') {
+  if (processors[engine]) return processors[engine]
+
+  let processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkSoftBreaks)
+    .use(remarkRehype)
+    .use(rehypeSuperscriptMarkers)
+    .use(rehypeHighlightMarkers)
+    .use(rehypeNormalizeImageSources)
+    .use(rehypeSanitize, sanitizeSchema)
+
+  if (engine === 'shiki') {
+    processor = processor.use(rehypeShiki, { themes: { light: 'github-light', dark: 'github-dark' } })
+  } else {
+    processor = processor.use(rehypeHighlight, { ignoreMissing: true })
+  }
+
+  processor = processor
+    .use(rehypeHeadingIds)
+    .use(rehypeStringify)
+
+  processors[engine] = processor
+  return processor
+}
 
 let mathRendererPromise: Promise<typeof import('./markdownMathRender.ts')> | null = null
 let htmlRendererPromise: Promise<typeof import('./markdownHtmlRender.ts')> | null = null
 let mathHtmlRendererPromise: Promise<typeof import('./markdownMathHtmlRender.ts')> | null = null
 
-async function renderBaseMarkdown(markdown: string): Promise<string> {
+async function renderBaseMarkdown(markdown: string, syntaxHighlightEngine: 'highlightjs' | 'shiki' = 'highlightjs'): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
-  const rendered = await processorWithoutMath.process({
+  const processor = getProcessorWithoutMath(syntaxHighlightEngine)
+  const rendered = await processor.process({
     value: body,
     data: { markdownSource: body },
   })
@@ -45,28 +66,28 @@ async function renderBaseMarkdown(markdown: string): Promise<string> {
 
 export { buildStandaloneHtml, containsLikelyMath, stripFrontMatter }
 
-export async function renderMarkdown(markdown: string): Promise<string> {
+export async function renderMarkdown(markdown: string, syntaxHighlightEngine: 'highlightjs' | 'shiki' = 'highlightjs'): Promise<string> {
   const { body } = stripFrontMatter(markdown)
   const hasMath = containsLikelyMath(body)
   const hasRawHtml = containsLikelyRawHtml(body)
 
   if (!hasMath && !hasRawHtml) {
-    return renderBaseMarkdown(markdown)
+    return renderBaseMarkdown(markdown, syntaxHighlightEngine)
   }
 
   if (!hasMath) {
     htmlRendererPromise ??= import('./markdownHtmlRender.ts')
     const { renderMarkdownWithHtml } = await htmlRendererPromise
-    return renderMarkdownWithHtml(markdown)
+    return renderMarkdownWithHtml(markdown, syntaxHighlightEngine)
   }
 
   if (!hasRawHtml) {
     mathRendererPromise ??= import('./markdownMathRender.ts')
     const { renderMarkdownWithMath } = await mathRendererPromise
-    return renderMarkdownWithMath(markdown)
+    return renderMarkdownWithMath(markdown, syntaxHighlightEngine)
   }
 
   mathHtmlRendererPromise ??= import('./markdownMathHtmlRender.ts')
   const { renderMarkdownWithMathAndHtml } = await mathHtmlRendererPromise
-  return renderMarkdownWithMathAndHtml(markdown)
+  return renderMarkdownWithMathAndHtml(markdown, syntaxHighlightEngine)
 }

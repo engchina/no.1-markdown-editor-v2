@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { containsLikelyMath } from '../lib/markdownMath'
 import type { MarkdownRenderResponse } from '../workers/markdownMessages'
 
-async function renderMarkdownOnMainThread(markdown: string): Promise<string> {
+async function renderMarkdownOnMainThread(markdown: string, syntaxHighlightEngine?: 'highlightjs' | 'shiki'): Promise<string> {
   const { renderMarkdown } = await import('../lib/markdown')
-  return renderMarkdown(markdown)
+  return renderMarkdown(markdown, syntaxHighlightEngine)
 }
+
+import { useEditorStore } from '../store/editor'
 
 function stripFrontMatterBody(markdown: string): string {
   const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
@@ -14,16 +16,19 @@ function stripFrontMatterBody(markdown: string): string {
 }
 
 export function useMarkdown(markdown: string) {
+  const syntaxHighlightEngine = useEditorStore((s) => s.syntaxHighlightEngine)
   const [html, setHtml] = useState('')
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestIdRef = useRef(0)
   const workerRef = useRef<Worker | null>(null)
   const workerUnavailableRef = useRef(false)
   const latestMarkdownRef = useRef(markdown)
+  const latestEngineRef = useRef(syntaxHighlightEngine)
 
   useEffect(() => {
     latestMarkdownRef.current = markdown
-  }, [markdown])
+    latestEngineRef.current = syntaxHighlightEngine
+  }, [markdown, syntaxHighlightEngine])
 
   useEffect(() => {
     if (import.meta.env.DEV || typeof Worker === 'undefined') {
@@ -38,7 +43,7 @@ export function useMarkdown(markdown: string) {
       })
 
       const fallbackToMainThread = async (requestId: number) => {
-        const fallbackHtml = await renderMarkdownOnMainThread(latestMarkdownRef.current)
+        const fallbackHtml = await renderMarkdownOnMainThread(latestMarkdownRef.current, latestEngineRef.current)
         if (requestIdRef.current === requestId) setHtml(fallbackHtml)
       }
 
@@ -90,11 +95,11 @@ export function useMarkdown(markdown: string) {
       try {
         const body = stripFrontMatterBody(markdown)
         if (workerRef.current && !workerUnavailableRef.current && !containsLikelyMath(body)) {
-          workerRef.current.postMessage({ id: requestId, markdown })
+          workerRef.current.postMessage({ id: requestId, markdown, syntaxHighlightEngine })
           return
         }
 
-        const nextHtml = await renderMarkdownOnMainThread(markdown)
+        const nextHtml = await renderMarkdownOnMainThread(markdown, syntaxHighlightEngine)
         if (requestIdRef.current === requestId) setHtml(nextHtml)
       } catch (error) {
         console.error('Markdown processing error:', error)
@@ -104,7 +109,7 @@ export function useMarkdown(markdown: string) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [markdown])
+  }, [markdown, syntaxHighlightEngine])
 
   return html
 }

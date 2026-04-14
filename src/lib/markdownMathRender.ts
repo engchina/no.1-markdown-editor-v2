@@ -17,23 +17,44 @@ import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
 import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 import { remarkSoftBreaks } from './remarkSoftBreaks.ts'
 
-const processorWithMath = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath)
-  .use(remarkSoftBreaks)
-  .use(remarkRehype)
-  .use(rehypeSuperscriptMarkers)
-  .use(rehypeHighlightMarkers)
-  .use(rehypeNormalizeImageSources)
-  .use(rehypeSanitize, sanitizeSchema)
-  .use(rehypeKatex)
-  .use(rehypeHeadingIds)
-  .use(rehypeStringify)
+import rehypeHighlight from 'rehype-highlight'
+import rehypeShiki from '@shikijs/rehype'
 
-export async function renderMarkdownWithMath(markdown: string): Promise<string> {
+const processors: Record<string, ReturnType<typeof unified>> = {}
+
+function getProcessorWithMath(engine: 'highlightjs' | 'shiki') {
+  if (processors[engine]) return processors[engine]
+
+  let processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .use(remarkSoftBreaks)
+    .use(remarkRehype)
+    .use(rehypeSuperscriptMarkers)
+    .use(rehypeHighlightMarkers)
+    .use(rehypeNormalizeImageSources)
+    .use(rehypeSanitize, sanitizeSchema)
+
+  if (engine === 'shiki') {
+    processor = processor.use(rehypeShiki, { themes: { light: 'github-light', dark: 'github-dark' } })
+  } else {
+    processor = processor.use(rehypeHighlight, { ignoreMissing: true })
+  }
+
+  processor = processor
+    .use(rehypeKatex)
+    .use(rehypeHeadingIds)
+    .use(rehypeStringify)
+
+  processors[engine] = processor
+  return processor
+}
+
+export async function renderMarkdownWithMath(markdown: string, syntaxHighlightEngine: 'highlightjs' | 'shiki' = 'highlightjs'): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
-  const rendered = await processorWithMath.process({
+  const processor = getProcessorWithMath(syntaxHighlightEngine)
+  const rendered = await processor.process({
     value: body,
     data: { markdownSource: body },
   })

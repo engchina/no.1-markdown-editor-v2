@@ -21,6 +21,7 @@ import type { AIDefaultWriteTarget } from '../lib/ai/opening.ts'
 export type Theme = 'light' | 'dark'
 export type ViewMode = 'source' | 'split' | 'preview' | 'focus'
 export type SidebarTab = 'outline' | 'files' | 'recent' | 'search'
+export type SyntaxHighlightEngine = 'highlightjs' | 'shiki'
 
 export interface FileTab {
   id: string
@@ -147,6 +148,10 @@ interface EditorState {
   aiDefaultSelectedTextRole: AISelectedTextRole
   aiHistoryProviderRerankEnabled: boolean
   aiHistoryProviderRerankBudget: AIHistoryProviderRerankBudget
+
+  // Editor and Preview advanced features
+  syntaxHighlightEngine: SyntaxHighlightEngine
+  setSyntaxHighlightEngine: (engine: SyntaxHighlightEngine) => void
 }
 
 function generateId() {
@@ -214,6 +219,10 @@ export const useEditorStore = create<EditorState>()(
       setSidebarTab: (sidebarTab) => set({ sidebarTab }),
       editorRatio: 0.5,
       setEditorRatio: (editorRatio) => set({ editorRatio }),
+
+      // Advanced Options
+      syntaxHighlightEngine: 'highlightjs',
+      setSyntaxHighlightEngine: (syntaxHighlightEngine) => set({ syntaxHighlightEngine }),
 
       // Tabs
       tabs: [initialTab],
@@ -557,6 +566,7 @@ export const useEditorStore = create<EditorState>()(
         typewriterMode: s.typewriterMode,
         wysiwygMode: s.wysiwygMode,
         activeThemeId: s.activeThemeId,
+        syntaxHighlightEngine: s.syntaxHighlightEngine,
         zoom: s.zoom,
         tabs: s.tabs.filter(isRestorableDraftTab),
         activeTabId: s.tabs.some((tab) => tab.id === s.activeTabId && isRestorableDraftTab(tab))
@@ -587,6 +597,7 @@ export const useEditorStore = create<EditorState>()(
           aiDefaultSelectedTextRole: 'transform-target',
           aiHistoryProviderRerankEnabled: true,
           aiHistoryProviderRerankBudget: 'balanced',
+          syntaxHighlightEngine: persistedState?.syntaxHighlightEngine ?? 'highlightjs',
         }
       },
       onRehydrateStorage: () => (state) => {

@@ -6,10 +6,10 @@ import type { MarkdownRenderRequest, MarkdownRenderResponse } from './markdownMe
 declare const self: DedicatedWorkerGlobalScope
 
 self.onmessage = async (event: MessageEvent<MarkdownRenderRequest>) => {
-  const { id, markdown } = event.data
+  const { id, markdown, syntaxHighlightEngine } = event.data
 
   try {
-    const html = await renderMarkdownInWorker(markdown)
+    const html = await renderMarkdownInWorker(markdown, syntaxHighlightEngine)
     const response: MarkdownRenderResponse = { id, html }
     self.postMessage(response)
   } catch (error) {
