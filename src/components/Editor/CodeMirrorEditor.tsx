@@ -18,7 +18,6 @@ import {
 } from './optionalFeatures'
 import {
   isBlankLineBelowTableSelection,
-  resolveAdjacentTableCellLocation,
 } from './wysiwygTable.ts'
 import AISelectionBubble from '../AI/AISelectionBubble'
 import { applyFormat } from './formatCommands'
@@ -354,28 +353,6 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     )
     view.focus()
     return true
-  }, [])
-
-  const shouldInsertTerminalBlankLineFromTableInput = useCallback((target: EventTarget | null): boolean => {
-    const view = viewRef.current
-    const input = (target as HTMLElement | null)?.closest<HTMLInputElement>('.cm-wysiwyg-table__input')
-    if (!view || !input || !view.dom.contains(input)) return false
-
-    const tableFrom = Number(input.dataset.tableFrom)
-    const section = input.dataset.tableSection
-    const rowIndex = Number(input.dataset.tableRowIndex)
-    const columnIndex = Number(input.dataset.tableColumnIndex)
-    if (!Number.isFinite(tableFrom) || !Number.isFinite(rowIndex) || !Number.isFinite(columnIndex)) return false
-    if (section !== 'head' && section !== 'body') return false
-
-    const tables = collectMarkdownTableBlocks(view.state.doc.toString())
-    const table = tables.find((candidate) => candidate.from === tableFrom)
-    if (!table) return false
-
-    const nextLocation = resolveAdjacentTableCellLocation(table, { section, rowIndex, columnIndex }, 'down')
-    if (nextLocation) return false
-
-    return view.state.doc.lineAt(table.to).number === view.state.doc.lines && !hasTerminalBlankLine(view.state.doc)
   }, [])
 
   const reconfigure = useCallback((compartment: Compartment, extension: Extension) => {
@@ -833,13 +810,6 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
 
       if (event.key !== 'ArrowDown') return
       if (event.isComposing || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return
-      // Table widget inputs do not always route ArrowDown through the plugin keydown
-      // handler in packaged/browser runs, so keep a capture-phase EOF fallback here.
-      if (shouldInsertTerminalBlankLineFromTableInput(event.target)) {
-        event.preventDefault()
-        insertTerminalBlankLine(view)
-        return
-      }
       if (event.target instanceof HTMLInputElement && view.dom.contains(event.target)) return
 
       const selection = view.state.selection.main
@@ -889,7 +859,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       container.removeEventListener('keydown', handleArrowDownToTerminalBlankLine, true)
       container.removeEventListener('mousedown', handleClickBelowDocumentEnd, true)
     }
-  }, [insertTerminalBlankLine, shouldInsertTerminalBlankLineFromTableInput])
+  }, [insertTerminalBlankLine])
 
   useEffect(() => {
     const container = containerRef.current

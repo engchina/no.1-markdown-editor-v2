@@ -10,6 +10,8 @@ import {
   isBlankLineBelowTableSelection,
   resolveAdjacentTableCellLocation,
   resolveNearestTableCellLocation,
+  resolveTableBodyRowInsertionPlan,
+  resolveTableKeyAction,
   resolveTableCell,
 } from '../src/components/Editor/wysiwygTable.ts'
 
@@ -90,6 +92,100 @@ test('table cell navigation moves across the header and body grid', () => {
   })
 })
 
+test('table key actions resolve Typora-style enter, tab, shift-tab, ctrl-enter, and shift-enter behavior', () => {
+  const markdown = [
+    '| Left | Right |',
+    '| --- | ---: |',
+    '| a | b |',
+    '| c | d |',
+  ].join('\n')
+
+  const [table] = collectMarkdownTableBlocks(markdown)
+
+  assert.deepEqual(resolveTableKeyAction(table, { section: 'head', rowIndex: 0, columnIndex: 1 }, 'enter'), {
+    kind: 'focus-cell',
+    location: { section: 'body', rowIndex: 0, columnIndex: 1 },
+    selectionBehavior: 'end',
+  })
+  assert.deepEqual(resolveTableKeyAction(table, { section: 'body', rowIndex: 0, columnIndex: 0 }, 'tab'), {
+    kind: 'focus-cell',
+    location: { section: 'body', rowIndex: 0, columnIndex: 1 },
+    selectionBehavior: 'preserve',
+  })
+  assert.deepEqual(resolveTableKeyAction(table, { section: 'body', rowIndex: 0, columnIndex: 1 }, 'shift-tab'), {
+    kind: 'focus-cell',
+    location: { section: 'body', rowIndex: 0, columnIndex: 0 },
+    selectionBehavior: 'preserve',
+  })
+  assert.deepEqual(resolveTableKeyAction(table, { section: 'body', rowIndex: 1, columnIndex: 1 }, 'enter'), {
+    kind: 'exit-table',
+  })
+  assert.deepEqual(resolveTableKeyAction(table, { section: 'body', rowIndex: 1, columnIndex: 1 }, 'arrow-down'), {
+    kind: 'exit-table',
+  })
+  assert.deepEqual(resolveTableKeyAction(table, { section: 'body', rowIndex: 0, columnIndex: 1 }, 'shift-enter'), {
+    kind: 'insert-inline-break',
+    insertText: '<br />',
+  })
+})
+
+test('table row insertion plans target the next body row slot for tab boundaries and ctrl-enter', () => {
+  const markdown = [
+    '| Left | Right |',
+    '| --- | ---: |',
+    '| a | b |',
+    '| c | d |',
+  ].join('\n')
+
+  const [table] = collectMarkdownTableBlocks(markdown)
+
+  assert.deepEqual(
+    resolveTableBodyRowInsertionPlan(table, { section: 'head', rowIndex: 0, columnIndex: 0 }),
+    {
+      insertFrom: table.rows[0].from,
+      insertText: '|  |  |\n',
+      focusAnchor: table.rows[0].from + 1,
+      focusLocation: { section: 'body', rowIndex: 0, columnIndex: 0 },
+    }
+  )
+  assert.deepEqual(
+    resolveTableKeyAction(table, { section: 'body', rowIndex: 1, columnIndex: 1 }, 'tab'),
+    {
+      kind: 'insert-body-row-below',
+      plan: {
+        insertFrom: table.rows[1].to,
+        insertText: '\n|  |  |',
+        focusAnchor: table.rows[1].to + 2,
+        focusLocation: { section: 'body', rowIndex: 2, columnIndex: 0 },
+      },
+    }
+  )
+  assert.deepEqual(
+    resolveTableKeyAction(table, { section: 'head', rowIndex: 0, columnIndex: 0 }, 'shift-tab'),
+    {
+      kind: 'insert-body-row-below',
+      plan: {
+        insertFrom: table.rows[0].from,
+        insertText: '|  |  |\n',
+        focusAnchor: table.rows[0].from + 1,
+        focusLocation: { section: 'body', rowIndex: 0, columnIndex: 0 },
+      },
+    }
+  )
+  assert.deepEqual(
+    resolveTableKeyAction(table, { section: 'body', rowIndex: 0, columnIndex: 0 }, 'ctrl-enter'),
+    {
+      kind: 'insert-body-row-below',
+      plan: {
+        insertFrom: table.rows[0].to,
+        insertText: '\n|  |  |',
+        focusAnchor: table.rows[0].to + 2,
+        focusLocation: { section: 'body', rowIndex: 1, columnIndex: 0 },
+      },
+    }
+  )
+})
+
 test('nearest table cell resolution still resolves a real editable cell for divider positions', () => {
   const markdown = [
     '| Left | Right |',
@@ -146,7 +242,14 @@ test('wysiwyg table integration keeps the table rendered while exposing an inlin
   assert.match(source, /input\.type = 'text'/u)
   assert.match(source, /decodeMarkdownTableCellText\(cell\.text\)/u)
   assert.match(source, /encodeMarkdownTableCellText\(input\.value\)/u)
-  assert.match(source, /resolveAdjacentTableCellLocation\(resolved\.table, resolved\.location, direction\)/u)
+  assert.match(source, /ensureTableInputKeydownBinding\(input\)/u)
+  assert.match(source, /input\.addEventListener\('keydown', handleNativeTableInputKeydown\)/u)
+  assert.match(source, /const view = EditorView\.findFromDOM\(input\)/u)
+  assert.match(source, /event\.stopPropagation\(\)/u)
+  assert.match(source, /const command = resolveTableKeyCommand\(event\)/u)
+  assert.match(source, /const action = resolveTableKeyAction\(resolved\.table, resolved\.location, command\)/u)
+  assert.match(source, /case 'insert-body-row-below':[\s\S]*?insertTableBodyRowBelow/u)
+  assert.match(source, /case 'insert-inline-break':[\s\S]*?insertInlineBreakInTableCell/u)
   assert.match(source, /matchesWysiwygUndoShortcut\(event\)/u)
   assert.match(source, /matchesWysiwygRedoShortcut\(event\)/u)
   assert.match(source, /dispatchWysiwygHistory\('undo'\)/u)
@@ -188,7 +291,7 @@ test('wysiwyg table exit path restores editor focus after moving below the table
   assert.match(source, /const shouldRestoreActiveTableInputFocus =[\s\S]*?this\.activeTableCell !== null[\s\S]*?update\.selectionSet[\s\S]*?!areActiveTableCellsEqual\(this\.activeTableCell, focusedActiveTableCell\)/u)
   assert.match(source, /if \(exitedTableEditing\) \{[\s\S]*?restoreEditorFocusAfterTableExit\(update\.view\)/u)
   assert.match(source, /if \(\s*this\.activeTableCell &&[\s\S]*?shouldRestoreActiveTableInputFocus[\s\S]*?\) \{[\s\S]*?queueFocusTableCellInput\(update\.view, this\.activeTableCell\)/u)
-  assert.match(source, /if \(!nextLocation \|\| !nextCell\) \{[\s\S]*?if \(direction === 'down'\) \{[\s\S]*?input\.blur\(\)[\s\S]*?selection: \{ anchor: posAfterTable \}/u)
+  assert.match(source, /function exitTableFromKeyboardAction\([\s\S]*?input\.blur\(\)[\s\S]*?changes: \{ from: doc\.length, insert: '\\n' \}[\s\S]*?selection: \{ anchor: Math\.min\(resolved\.table\.to \+ 1, doc\.length\) \}/u)
 })
 
 test('CodeMirrorEditor keeps table width aligned with other source-mode block renderers instead of preview-specific gutter offsets', async () => {
@@ -197,6 +300,7 @@ test('CodeMirrorEditor keeps table width aligned with other source-mode block re
   assert.doesNotMatch(source, /syncWysiwygTablePreviewInsets/u)
   assert.doesNotMatch(source, /--cm-wysiwyg-preview-inline-start/u)
   assert.doesNotMatch(source, /--cm-wysiwyg-preview-inline-end/u)
+  assert.doesNotMatch(source, /shouldInsertTerminalBlankLineFromTableInput/u)
 })
 
 test('CodeMirrorEditor restores editor focus when a blank-line selection lands immediately below a table', async () => {

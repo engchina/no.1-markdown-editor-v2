@@ -41,13 +41,16 @@ import {
   decodeMarkdownTableCellText,
   encodeMarkdownTableCellText,
   isActiveTableCellLocation,
-  resolveAdjacentTableCellLocation,
+  resolveTableKeyAction,
   resolveDecodedTableCellOffset,
   resolveEncodedTableCellOffset,
   resolveNearestTableCellLocation,
   resolveTableCell,
   type ActiveWysiwygTableCell,
   type MarkdownTableCellLocation,
+  type WysiwygTableCellSelectionBehavior,
+  type WysiwygTableKeyCommand,
+  type WysiwygTableRowInsertionPlan,
 } from './wysiwygTable.ts'
 
 // ── Widgets ────────────────────────────────────────────────────────────────
@@ -386,6 +389,7 @@ function syncTableEditorInput(
   input.dataset.tableRowIndex = String(location.rowIndex)
   input.dataset.tableColumnIndex = String(location.columnIndex)
   input.setAttribute('aria-label', `Edit table cell ${location.rowIndex + 1}:${location.columnIndex + 1}`)
+  ensureTableInputKeydownBinding(input)
   syncTextInputSelection(input, activeCell.selectionStart, activeCell.selectionEnd)
 }
 
@@ -404,6 +408,26 @@ function syncTextInputSelection(
   } catch {
     // Ignore selection restoration failures on browsers that reject stale inputs.
   }
+}
+
+function ensureTableInputKeydownBinding(input: HTMLInputElement): void {
+  if (input.dataset.tableKeydownBound === 'true') return
+  input.dataset.tableKeydownBound = 'true'
+  input.addEventListener('keydown', handleNativeTableInputKeydown)
+}
+
+function handleNativeTableInputKeydown(event: KeyboardEvent): void {
+  const input = event.currentTarget
+  if (!(input instanceof HTMLInputElement)) return
+
+  const editorRoot = input.closest<HTMLElement>('.cm-editor')
+  const view = EditorView.findFromDOM(input) ??
+    (editorRoot ? EditorView.findFromDOM(editorRoot) : null)
+  if (!view) return
+
+  if (!handleTableInputKeydown(event, view, input)) return
+  event.preventDefault()
+  event.stopPropagation()
 }
 
 function areActiveTableCellsEqual(
@@ -1317,13 +1341,40 @@ function findTableCellInput(
   return input ?? null
 }
 
+function findTableCellElement(
+  view: EditorView,
+  activeCell: ActiveWysiwygTableCell
+): HTMLTableCellElement | null {
+  const baseSelector =
+    activeCell.section === 'head'
+      ? '.cm-wysiwyg-table__head-cell'
+      : '.cm-wysiwyg-table__cell'
+  const selector =
+    `${baseSelector}` +
+    `[data-table-from="${activeCell.tableFrom}"]` +
+    `[data-table-section="${activeCell.section}"]` +
+    `[data-table-row-index="${activeCell.rowIndex}"]` +
+    `[data-table-column-index="${activeCell.columnIndex}"]`
+
+  const element = view.dom.querySelector<HTMLTableCellElement>(selector)
+  return element ?? null
+}
+
 function queueFocusTableCellInput(
   view: EditorView,
   activeCell: ActiveWysiwygTableCell
 ): void {
   const focusInput = () => {
     const plugin = getWysiwygPluginState(view)
-    if (!plugin || !areActiveTableCellsEqual(plugin.activeTableCell, activeCell)) return
+    if (!plugin) return
+
+    const selectionActiveCell = resolveActiveTableCellFromSelection(view.state, plugin.tables)
+    if (
+      !areActiveTableCellsEqual(plugin.activeTableCell, activeCell) &&
+      !areActiveTableCellsEqual(selectionActiveCell, activeCell)
+    ) {
+      return
+    }
 
     const input = findTableCellInput(view, activeCell)
     if (!input) return
@@ -1334,8 +1385,42 @@ function queueFocusTableCellInput(
 
   focusInput()
   setTimeout(focusInput, 0)
+  setTimeout(focusInput, 24)
+  setTimeout(focusInput, 96)
   requestAnimationFrame(focusInput)
   requestAnimationFrame(() => requestAnimationFrame(focusInput))
+}
+
+function queueActivateTableCellInput(
+  view: EditorView,
+  activeCell: ActiveWysiwygTableCell
+): void {
+  const activateCell = () => {
+    const plugin = getWysiwygPluginState(view)
+    if (!plugin) return
+
+    const selectionActiveCell = resolveActiveTableCellFromSelection(view.state, plugin.tables)
+    if (!areActiveTableCellsEqual(selectionActiveCell, activeCell)) return
+
+    const input = findTableCellInput(view, activeCell)
+    if (input) {
+      input.focus({ preventScroll: true })
+      syncTextInputSelection(input, activeCell.selectionStart, activeCell.selectionEnd)
+      return
+    }
+
+    const cell = findTableCellElement(view, activeCell)
+    if (cell) {
+      activateTable(view, cell)
+    }
+  }
+
+  activateCell()
+  setTimeout(activateCell, 0)
+  setTimeout(activateCell, 24)
+  setTimeout(activateCell, 96)
+  requestAnimationFrame(activateCell)
+  requestAnimationFrame(() => requestAnimationFrame(activateCell))
 }
 
 function restoreEditorFocusAfterTableExit(view: EditorView): void {
@@ -1466,55 +1551,80 @@ function applyTableInputChange(view: EditorView, input: HTMLInputElement): boole
   return true
 }
 
-function moveTableCellFocus(
+function buildActiveTableCell(
+  tableFrom: number,
+  location: MarkdownTableCellLocation,
+  selectionStart: number,
+  selectionEnd: number
+): ActiveWysiwygTableCell {
+  return {
+    tableFrom,
+    ...location,
+    selectionStart,
+    selectionEnd,
+  }
+}
+
+function resolveTableCellSelection(
+  input: HTMLInputElement,
+  displayText: string,
+  selectionBehavior: WysiwygTableCellSelectionBehavior
+): Pick<ActiveWysiwygTableCell, 'selectionStart' | 'selectionEnd'> {
+  switch (selectionBehavior) {
+    case 'start':
+      return { selectionStart: 0, selectionEnd: 0 }
+    case 'end':
+      return { selectionStart: displayText.length, selectionEnd: displayText.length }
+    case 'preserve': {
+      const currentSelectionStart = input.selectionStart ?? input.value.length
+      const currentSelectionEnd = input.selectionEnd ?? input.value.length
+      return {
+        selectionStart: Math.min(currentSelectionStart, displayText.length),
+        selectionEnd: Math.min(currentSelectionEnd, displayText.length),
+      }
+    }
+  }
+}
+
+function resolveTableKeyCommand(event: KeyboardEvent): WysiwygTableKeyCommand | null {
+  if (event.key === 'Tab' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+    return event.shiftKey ? 'shift-tab' : 'tab'
+  }
+
+  if (event.key === 'ArrowUp' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+    return 'arrow-up'
+  }
+
+  if (event.key === 'ArrowDown' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+    return 'arrow-down'
+  }
+
+  if (event.key !== 'Enter' || event.metaKey) return null
+  if (event.shiftKey) return 'shift-enter'
+  if (event.ctrlKey) return 'ctrl-enter'
+  return 'enter'
+}
+
+function focusTableCellFromKeyboardAction(
   view: EditorView,
   input: HTMLInputElement,
-  direction: 'next' | 'previous' | 'up' | 'down'
+  resolved: ResolvedTableCellTarget,
+  location: MarkdownTableCellLocation,
+  selectionBehavior: WysiwygTableCellSelectionBehavior
 ): boolean {
-  const resolved = resolveTableCellTargetFromElement(view, input)
-  const plugin = getWysiwygPluginState(view)
-  if (!resolved || !plugin) return false
-
-  const nextLocation = resolveAdjacentTableCellLocation(resolved.table, resolved.location, direction)
-  const nextCell = nextLocation ? resolveTableCell(resolved.table, nextLocation) : null
-  if (!nextLocation || !nextCell) {
-    if (direction === 'down') {
-      const doc = view.state.doc
-      const tableClosingLine = doc.lineAt(resolved.table.to)
-      if (tableClosingLine.number === doc.lines && !hasTerminalBlankLine(doc)) {
-        input.blur()
-        view.dispatch({
-          changes: { from: doc.length, insert: '\n' },
-          selection: { anchor: doc.length + 1 },
-          userEvent: 'input',
-          scrollIntoView: true,
-        })
-        return true
-      }
-
-      const posAfterTable = Math.min(resolved.table.to + 1, doc.length)
-      input.blur()
-      view.dispatch({
-        selection: { anchor: posAfterTable },
-        userEvent: 'select',
-        scrollIntoView: true,
-      })
-      return true
-    }
-    return false
-  }
+  const nextCell = resolveTableCell(resolved.table, location)
+  if (!nextCell) return false
 
   const nextDisplayText = decodeMarkdownTableCellText(nextCell.text)
-  const currentSelectionStart = input.selectionStart ?? input.value.length
-  const currentSelectionEnd = input.selectionEnd ?? input.value.length
-  const nextActiveTableCell: ActiveWysiwygTableCell = {
-    tableFrom: resolved.table.from,
-    ...nextLocation,
-    selectionStart: Math.min(currentSelectionStart, nextDisplayText.length),
-    selectionEnd: Math.min(currentSelectionEnd, nextDisplayText.length),
-  }
-  plugin.activeTableCell = nextActiveTableCell
+  const selection = resolveTableCellSelection(input, nextDisplayText, selectionBehavior)
+  const nextActiveTableCell = buildActiveTableCell(
+    resolved.table.from,
+    location,
+    selection.selectionStart,
+    selection.selectionEnd
+  )
 
+  input.blur()
   view.dispatch({
     selection: resolveEditorSelectionForTableCell(
       nextCell,
@@ -1522,11 +1632,117 @@ function moveTableCellFocus(
       nextActiveTableCell.selectionStart,
       nextActiveTableCell.selectionEnd
     ),
-    userEvent: 'select.pointer',
+    userEvent: 'select',
     scrollIntoView: true,
   })
   queueFocusTableCellInput(view, nextActiveTableCell)
   return true
+}
+
+function insertTableBodyRowBelow(
+  view: EditorView,
+  input: HTMLInputElement,
+  resolved: ResolvedTableCellTarget,
+  plan: WysiwygTableRowInsertionPlan
+): boolean {
+  const nextActiveTableCell = buildActiveTableCell(resolved.table.from, plan.focusLocation, 0, 0)
+
+  input.blur()
+  view.dispatch({
+    changes: { from: plan.insertFrom, to: plan.insertFrom, insert: plan.insertText },
+    selection: { anchor: plan.focusAnchor },
+    userEvent: 'input',
+    scrollIntoView: true,
+  })
+  queueActivateTableCellInput(view, nextActiveTableCell)
+  return true
+}
+
+function insertInlineBreakInTableCell(
+  view: EditorView,
+  input: HTMLInputElement,
+  resolved: ResolvedTableCellTarget,
+  insertText: string
+): boolean {
+  const selectionStart = input.selectionStart ?? resolved.displayText.length
+  const selectionEnd = input.selectionEnd ?? resolved.displayText.length
+  const nextDisplayText =
+    `${resolved.displayText.slice(0, selectionStart)}${insertText}${resolved.displayText.slice(selectionEnd)}`
+  const nextSelectionOffset = selectionStart + insertText.length
+  const nextActiveTableCell = buildActiveTableCell(
+    resolved.table.from,
+    resolved.location,
+    nextSelectionOffset,
+    nextSelectionOffset
+  )
+
+  input.blur()
+  view.dispatch({
+    changes: {
+      from: resolved.cell.editAnchor,
+      to: resolved.cell.editHead,
+      insert: encodeMarkdownTableCellText(nextDisplayText),
+    },
+    selection: resolveEditorSelectionForTableCell(
+      resolved.cell,
+      nextDisplayText,
+      nextSelectionOffset,
+      nextSelectionOffset
+    ),
+    userEvent: 'input.type',
+  })
+  queueFocusTableCellInput(view, nextActiveTableCell)
+  return true
+}
+
+function exitTableFromKeyboardAction(
+  view: EditorView,
+  input: HTMLInputElement,
+  resolved: ResolvedTableCellTarget
+): boolean {
+  const doc = view.state.doc
+  const tableClosingLine = doc.lineAt(resolved.table.to)
+
+  input.blur()
+  if (tableClosingLine.number === doc.lines && !hasTerminalBlankLine(doc)) {
+    view.dispatch({
+      changes: { from: doc.length, insert: '\n' },
+      selection: { anchor: doc.length + 1 },
+      userEvent: 'input',
+      scrollIntoView: true,
+    })
+    return true
+  }
+
+  view.dispatch({
+    selection: { anchor: Math.min(resolved.table.to + 1, doc.length) },
+    userEvent: 'select',
+    scrollIntoView: true,
+  })
+  return true
+}
+
+function applyTableKeyCommand(
+  view: EditorView,
+  input: HTMLInputElement,
+  command: WysiwygTableKeyCommand
+): boolean {
+  const resolved = resolveTableCellTargetFromElement(view, input)
+  if (!resolved) return false
+
+  const action = resolveTableKeyAction(resolved.table, resolved.location, command)
+  if (!action) return false
+
+  switch (action.kind) {
+    case 'focus-cell':
+      return focusTableCellFromKeyboardAction(view, input, resolved, action.location, action.selectionBehavior)
+    case 'insert-body-row-below':
+      return insertTableBodyRowBelow(view, input, resolved, action.plan)
+    case 'insert-inline-break':
+      return insertInlineBreakInTableCell(view, input, resolved, action.insertText)
+    case 'exit-table':
+      return exitTableFromKeyboardAction(view, input, resolved)
+  }
 }
 
 function handleTableInputKeydown(
@@ -1546,19 +1762,9 @@ function handleTableInputKeydown(
     return true
   }
 
-  if (event.key === 'Tab') {
-    return moveTableCellFocus(view, input, event.shiftKey ? 'previous' : 'next')
-  }
-
-  if (event.key === 'ArrowUp') {
-    return moveTableCellFocus(view, input, 'up')
-  }
-
-  if (event.key === 'ArrowDown' || event.key === 'Enter') {
-    return moveTableCellFocus(view, input, 'down')
-  }
-
-  return false
+  const command = resolveTableKeyCommand(event)
+  if (!command) return false
+  return applyTableKeyCommand(view, input, command)
 }
 
 function resolveTableColumnKind(table: MarkdownTableBlock, columnIndex: number): 'text' | 'numeric' {

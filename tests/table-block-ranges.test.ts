@@ -71,3 +71,19 @@ test('collectMarkdownTableBlocks keeps escaped pipes inside a single cell', () =
   assert.equal(tables.length, 1)
   assert.equal(tables[0].rows[0].cells[1].text, 'left \\| right')
 })
+
+test('collectMarkdownTableBlocks preserves fully empty body rows so WYSIWYG table row insertion stays editable', () => {
+  const markdown = [
+    '| Left | Right |',
+    '| --- | ---: |',
+    '| alpha | beta |',
+    '|  |  |',
+    '| gamma | delta |',
+  ].join('\n')
+
+  const tables = collectMarkdownTableBlocks(markdown)
+
+  assert.equal(tables.length, 1)
+  assert.equal(tables[0].rows.length, 3)
+  assert.deepEqual(tables[0].rows[1].cells.map((cell) => cell.text), ['', ''])
+})

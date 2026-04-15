@@ -16,6 +16,13 @@ const TARGET_LINE_TEXT = SOURCE_SMOKE_LINES[TARGET_LINE_NUMBER - 1]
 const TERMINAL_BLANK_LINE_MARKDOWN = '# terminal heading\nplain tail'
 const TERMINAL_BLANK_LINE_LAST_LINE = 'plain tail'
 const TERMINAL_TABLE_MARKDOWN = ['| Left | Right |', '| --- | ---: |', '| tail | done |'].join('\n')
+const TABLE_KEYBOARD_MARKDOWN = [
+  '| Left | Right |',
+  '| --- | ---: |',
+  '| alpha | beta |',
+  '| gamma | delta |',
+  'after table',
+].join('\n')
 const ORDINARY_INSERTION = ' ordinary smoke'
 const PASTE_INSERTION = ' paste smoke'
 const AI_INSERTION = ' ai smoke'
@@ -217,6 +224,11 @@ async function readEditorSnapshot(page) {
     const scroller = view.scrollDOM
     const editor = document.querySelector('.cm-editor')
     const activeElement = document.activeElement
+    const activeTableInput =
+      activeElement instanceof HTMLInputElement &&
+        activeElement.classList.contains('cm-wysiwyg-table__input')
+        ? activeElement
+        : null
 
     return {
       docText: view.state.doc.toString(),
@@ -237,9 +249,13 @@ async function readEditorSnapshot(page) {
       activeIsInEditor: !!(activeElement && editor instanceof HTMLElement && editor.contains(activeElement)),
       hasWysiwygHeading: document.querySelector('.cm-wysiwyg-h1') !== null,
       hasWysiwygTable: document.querySelector('.cm-wysiwyg-table') !== null,
-      hasTableInputFocus:
-        activeElement instanceof HTMLInputElement &&
-        activeElement.classList.contains('cm-wysiwyg-table__input'),
+      hasTableInputFocus: activeTableInput !== null,
+      activeTableSection: activeTableInput?.dataset.tableSection ?? null,
+      activeTableRowIndex: activeTableInput ? Number(activeTableInput.dataset.tableRowIndex) : null,
+      activeTableColumnIndex: activeTableInput ? Number(activeTableInput.dataset.tableColumnIndex) : null,
+      activeTableValue: activeTableInput?.value ?? null,
+      activeTableSelectionStart: activeTableInput?.selectionStart ?? null,
+      activeTableSelectionEnd: activeTableInput?.selectionEnd ?? null,
     }
   })
 }
@@ -500,6 +516,53 @@ async function waitForTableInput(page, description) {
   }, description)
 }
 
+function buildRenderedTableCellSelector(options) {
+  const {
+    section = 'body',
+    rowIndex,
+    columnIndex,
+  } = options
+
+  const baseClass = section === 'head' ? '.cm-wysiwyg-table__head-cell' : '.cm-wysiwyg-table__cell'
+  return `${baseClass}[data-table-section="${section}"][data-table-row-index="${rowIndex}"][data-table-column-index="${columnIndex}"]`
+}
+
+async function activateTableCell(page, options) {
+  const selector = buildRenderedTableCellSelector(options)
+  await page.locator(selector).click()
+  await waitForCondition(async () => {
+    const snapshot = await readEditorSnapshot(page)
+    return (
+      snapshot?.hasTableInputFocus === true &&
+      snapshot.activeTableSection === (options.section ?? 'body') &&
+      snapshot.activeTableRowIndex === options.rowIndex &&
+      snapshot.activeTableColumnIndex === options.columnIndex
+    )
+  }, `${selector} inline table input`)
+}
+
+async function waitForActiveTableInputState(page, expected, description) {
+  await waitForCondition(async () => {
+    const snapshot = await readEditorSnapshot(page)
+    if (!snapshot || snapshot.hasTableInputFocus !== true) return false
+    if (expected.section !== undefined && snapshot.activeTableSection !== expected.section) return false
+    if (expected.rowIndex !== undefined && snapshot.activeTableRowIndex !== expected.rowIndex) return false
+    if (expected.columnIndex !== undefined && snapshot.activeTableColumnIndex !== expected.columnIndex) return false
+    if (expected.value !== undefined && snapshot.activeTableValue !== expected.value) return false
+    if (expected.selectionStart !== undefined && snapshot.activeTableSelectionStart !== expected.selectionStart) return false
+    if (expected.selectionEnd !== undefined && snapshot.activeTableSelectionEnd !== expected.selectionEnd) return false
+    return true
+  }, description)
+}
+
+async function readRenderedTableCellHtml(page, options) {
+  const selector = buildRenderedTableCellSelector(options)
+  return page.evaluate((query) => {
+    const cell = document.querySelector(query)
+    return cell?.innerHTML ?? null
+  }, selector)
+}
+
 async function runOrdinaryInputScenario(page, diagnostics) {
   await resetEditor(page)
   await placeCursorAtLineEnd(page, TARGET_LINE_TEXT)
@@ -703,6 +766,300 @@ async function runWysiwygTerminalBlankLineTableScenario(page, diagnostics) {
   assert.equal(activeElement?.isInEditor, true, `${scenarioName} should keep focus inside the editor`)
 }
 
+async function runWysiwygTerminalBlankLineTableEnterScenario(page, diagnostics, options) {
+  const { keyPress, diagnosticPrefix } = options
+  const scenarioName = `WYSIWYG table EOF ${keyPress}`
+  const expectedDocText = `${TERMINAL_TABLE_MARKDOWN}\n`
+
+  await resetEditor(page, {
+    content: TERMINAL_TABLE_MARKDOWN,
+    name: `${diagnosticPrefix}.md`,
+    wysiwygMode: true,
+  })
+
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    `${scenarioName} rendered table`
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 0 })
+
+  const before = await readEditorSnapshot(page)
+  diagnostics[`${diagnosticPrefix}Before`] = before
+
+  await page.keyboard.press(keyPress)
+  await waitForCondition(async () => {
+    const snapshot = await readEditorSnapshot(page)
+    return (
+      !!snapshot &&
+      snapshot.docText === expectedDocText &&
+      snapshot.lineText === '' &&
+      snapshot.lastLineText === '' &&
+      snapshot.column === 1 &&
+      snapshot.activeIsInEditor === true &&
+      snapshot.hasTableInputFocus === false
+    )
+  }, `${scenarioName} table exit`)
+
+  const after = await readEditorSnapshot(page)
+  diagnostics[`${diagnosticPrefix}After`] = after
+
+  assertTerminalBlankLineInserted(after, expectedDocText, scenarioName)
+  assert.equal(after?.hasTableInputFocus, false, `${scenarioName} should leave table input focus behind`)
+}
+
+async function runWysiwygTableKeyboardScenario(page, diagnostics) {
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-keyboard.md',
+    wysiwygMode: true,
+  })
+
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table keyboard rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 0 })
+  await page.keyboard.press('Enter')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 1,
+    columnIndex: 0,
+    value: 'gamma',
+    selectionStart: 5,
+    selectionEnd: 5,
+  }, 'WYSIWYG table Enter same-column navigation')
+  diagnostics.wysiwygTableEnterNavigation = await readEditorSnapshot(page)
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-alt-enter.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Alt+Enter rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 1 })
+  await page.keyboard.press('Alt+Enter')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 1,
+    columnIndex: 1,
+    value: 'delta',
+    selectionStart: 5,
+    selectionEnd: 5,
+  }, 'WYSIWYG table Alt+Enter same-column navigation')
+  diagnostics.wysiwygTableAltEnterNavigation = await readEditorSnapshot(page)
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-enter-exit.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Enter exit rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 1, columnIndex: 0 })
+  await page.keyboard.press('Enter')
+  await waitForCondition(async () => {
+    const snapshot = await readEditorSnapshot(page)
+    return (
+      !!snapshot &&
+      snapshot.docText === TABLE_KEYBOARD_MARKDOWN &&
+      snapshot.lineText === 'after table' &&
+      snapshot.column === 1 &&
+      snapshot.hasTableInputFocus === false &&
+      snapshot.activeIsInEditor === true
+    )
+  }, 'WYSIWYG table Enter should exit to the next physical line')
+  diagnostics.wysiwygTableEnterExit = await readEditorSnapshot(page)
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-alt-enter-exit.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Alt+Enter exit rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 1, columnIndex: 1 })
+  await page.keyboard.press('Alt+Enter')
+  await waitForCondition(async () => {
+    const snapshot = await readEditorSnapshot(page)
+    return (
+      !!snapshot &&
+      snapshot.docText === TABLE_KEYBOARD_MARKDOWN &&
+      snapshot.lineText === 'after table' &&
+      snapshot.column === 1 &&
+      snapshot.hasTableInputFocus === false &&
+      snapshot.activeIsInEditor === true
+    )
+  }, 'WYSIWYG table Alt+Enter should exit to the next physical line')
+  diagnostics.wysiwygTableAltEnterExit = await readEditorSnapshot(page)
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-tab.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Tab rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 0 })
+  await page.keyboard.press('Tab')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 0,
+    columnIndex: 1,
+  }, 'WYSIWYG table Tab grid navigation')
+  diagnostics.wysiwygTableTabNavigation = await readEditorSnapshot(page)
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-tab-insert-row.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Tab row insertion rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 1, columnIndex: 1 })
+  await page.keyboard.press('Tab')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 2,
+    columnIndex: 0,
+    value: '',
+    selectionStart: 0,
+    selectionEnd: 0,
+  }, 'WYSIWYG table Tab row insertion')
+  diagnostics.wysiwygTableTabInsertRow = await readEditorSnapshot(page)
+  assert.equal(
+    diagnostics.wysiwygTableTabInsertRow?.docText,
+    [
+      '| Left | Right |',
+      '| --- | ---: |',
+      '| alpha | beta |',
+      '| gamma | delta |',
+      '|  |  |',
+      'after table',
+    ].join('\n')
+  )
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-shift-tab-insert-row.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Shift+Tab row insertion rendered table'
+  )
+
+  await activateTableCell(page, { section: 'head', rowIndex: 0, columnIndex: 0 })
+  await page.keyboard.press('Shift+Tab')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 0,
+    columnIndex: 0,
+    value: '',
+    selectionStart: 0,
+    selectionEnd: 0,
+  }, 'WYSIWYG table Shift+Tab row insertion')
+  diagnostics.wysiwygTableShiftTabInsertRow = await readEditorSnapshot(page)
+  assert.equal(
+    diagnostics.wysiwygTableShiftTabInsertRow?.docText,
+    [
+      '| Left | Right |',
+      '| --- | ---: |',
+      '|  |  |',
+      '| alpha | beta |',
+      '| gamma | delta |',
+      'after table',
+    ].join('\n')
+  )
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-ctrl-enter.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Ctrl+Enter rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 1 })
+  await page.keyboard.press('Control+Enter')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 1,
+    columnIndex: 0,
+    value: '',
+    selectionStart: 0,
+    selectionEnd: 0,
+  }, 'WYSIWYG table Ctrl+Enter row insertion')
+  diagnostics.wysiwygTableCtrlEnterInsertRow = await readEditorSnapshot(page)
+  assert.equal(
+    diagnostics.wysiwygTableCtrlEnterInsertRow?.docText,
+    [
+      '| Left | Right |',
+      '| --- | ---: |',
+      '| alpha | beta |',
+      '|  |  |',
+      '| gamma | delta |',
+      'after table',
+    ].join('\n')
+  )
+
+  await resetEditor(page, {
+    content: TABLE_KEYBOARD_MARKDOWN,
+    name: 'wysiwyg-table-shift-enter.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Shift+Enter rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 0 })
+  await page.keyboard.press('Shift+Enter')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 0,
+    columnIndex: 0,
+    value: 'alpha<br />',
+    selectionStart: 11,
+    selectionEnd: 11,
+  }, 'WYSIWYG table Shift+Enter inline break')
+  diagnostics.wysiwygTableShiftEnter = await readEditorSnapshot(page)
+  assert.equal(
+    diagnostics.wysiwygTableShiftEnter?.docText,
+    [
+      '| Left | Right |',
+      '| --- | ---: |',
+      '| alpha<br /> | beta |',
+      '| gamma | delta |',
+      'after table',
+    ].join('\n')
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 1 })
+  const renderedHtml = await readRenderedTableCellHtml(page, { section: 'body', rowIndex: 0, columnIndex: 0 })
+  diagnostics.wysiwygTableShiftEnterRenderedHtml = renderedHtml
+  assert.match(renderedHtml ?? '', /alpha<br\s*\/?>/u, 'WYSIWYG table Shift+Enter should render a visible line break')
+}
+
 async function main() {
   const staticServer = await createStaticDistServer(DIST_DIR)
   let browser
@@ -741,6 +1098,15 @@ async function main() {
     await runTerminalBlankLineArrowScenario(page, diagnostics, { wysiwygMode: true })
     await runTerminalBlankLineClickScenario(page, diagnostics, { wysiwygMode: true })
     await runWysiwygTerminalBlankLineTableScenario(page, diagnostics)
+    await runWysiwygTerminalBlankLineTableEnterScenario(page, diagnostics, {
+      keyPress: 'Enter',
+      diagnosticPrefix: 'wysiwygTableTerminalBlankLineEnter',
+    })
+    await runWysiwygTerminalBlankLineTableEnterScenario(page, diagnostics, {
+      keyPress: 'Alt+Enter',
+      diagnosticPrefix: 'wysiwygTableTerminalBlankLineAltEnter',
+    })
+    await runWysiwygTableKeyboardScenario(page, diagnostics)
 
     assert.equal(pageErrors.length, 0, `Unexpected page errors:\n${pageErrors.join('\n')}`)
     console.log('Source interaction smoke test passed.')

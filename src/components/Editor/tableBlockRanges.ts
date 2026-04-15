@@ -67,7 +67,7 @@ export function collectMarkdownTableBlocks(
       }
       if (lineIntersectsRange(nextLine, ignoredRanges[ignoredRangeIndex])) break
 
-      const row = parseMarkdownTableRow(nextLine)
+      const row = parseMarkdownTableRow(nextLine, { allowAllEmpty: true })
       if (!row || row.cells.length !== header.cells.length) break
 
       rows.push(row)
@@ -107,9 +107,19 @@ function splitMarkdownLines(markdown: string): LineInfo[] {
   return lines
 }
 
-function parseMarkdownTableRow(line: LineInfo): MarkdownTableRow | null {
+function parseMarkdownTableRow(
+  line: LineInfo,
+  options: {
+    allowAllEmpty?: boolean
+  } = {}
+): MarkdownTableRow | null {
   const cells = splitMarkdownTableCells(line.text, line.from)
-  if (!cells || cells.length < 2 || cells.every((cell) => cell.text.length === 0) || cells.every((cell) => tableDividerPattern.test(cell.text))) {
+  if (
+    !cells ||
+    cells.length < 2 ||
+    (!options.allowAllEmpty && cells.every((cell) => cell.text.length === 0)) ||
+    cells.every((cell) => tableDividerPattern.test(cell.text))
+  ) {
     return null
   }
 

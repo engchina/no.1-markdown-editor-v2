@@ -16,3 +16,9 @@ test('renderInlineMarkdownFragment keeps code spans literal instead of rendering
   assert.match(html, /<code>\$E=mc\^2\$<\/code>/)
   assert.doesNotMatch(html, /class="katex"/)
 })
+
+test('renderInlineMarkdownFragment preserves inline html breaks for table cells', () => {
+  const html = renderInlineMarkdownFragment('Line 1<br />Line 2')
+
+  assert.match(html, /Line 1<br\s*\/?>Line 2/u)
+})

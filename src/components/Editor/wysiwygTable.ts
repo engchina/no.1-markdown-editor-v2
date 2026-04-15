@@ -13,6 +13,42 @@ export interface ActiveWysiwygTableCell extends MarkdownTableCellLocation {
   selectionEnd: number
 }
 
+export type WysiwygTableCellSelectionBehavior = 'preserve' | 'start' | 'end'
+
+export type WysiwygTableKeyCommand =
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'enter'
+  | 'tab'
+  | 'shift-tab'
+  | 'ctrl-enter'
+  | 'shift-enter'
+
+export interface WysiwygTableRowInsertionPlan {
+  insertFrom: number
+  insertText: string
+  focusAnchor: number
+  focusLocation: MarkdownTableCellLocation
+}
+
+export type WysiwygTableKeyAction =
+  | {
+    kind: 'focus-cell'
+    location: MarkdownTableCellLocation
+    selectionBehavior: WysiwygTableCellSelectionBehavior
+  }
+  | {
+    kind: 'insert-body-row-below'
+    plan: WysiwygTableRowInsertionPlan
+  }
+  | {
+    kind: 'insert-inline-break'
+    insertText: '<br />'
+  }
+  | {
+    kind: 'exit-table'
+  }
+
 export function collectInactiveWysiwygTables(
   view: WysiwygDecorationView,
   tables: readonly MarkdownTableBlock[]
@@ -138,6 +174,93 @@ export function resolveAdjacentTableCellLocation(
   }
 }
 
+export function resolveTableBodyRowInsertionPlan(
+  table: MarkdownTableBlock,
+  location: MarkdownTableCellLocation
+): WysiwygTableRowInsertionPlan | null {
+  const rowText = buildEmptyMarkdownTableBodyRow(table.header.cells.length)
+  if (!rowText) return null
+
+  if (location.section === 'head') {
+    if (table.rows.length > 0) {
+      return {
+        insertFrom: table.rows[0].from,
+        insertText: `${rowText}\n`,
+        focusAnchor: table.rows[0].from + 1,
+        focusLocation: { section: 'body', rowIndex: 0, columnIndex: 0 },
+      }
+    }
+
+    return {
+      insertFrom: table.to,
+      insertText: `\n${rowText}`,
+      focusAnchor: table.to + 2,
+      focusLocation: { section: 'body', rowIndex: 0, columnIndex: 0 },
+    }
+  }
+
+  const currentRow = table.rows[location.rowIndex]
+  if (!currentRow) return null
+
+  return {
+    insertFrom: currentRow.to,
+    insertText: `\n${rowText}`,
+    focusAnchor: currentRow.to + 2,
+    focusLocation: { section: 'body', rowIndex: location.rowIndex + 1, columnIndex: 0 },
+  }
+}
+
+export function resolveTableKeyAction(
+  table: MarkdownTableBlock,
+  location: MarkdownTableCellLocation,
+  command: WysiwygTableKeyCommand
+): WysiwygTableKeyAction | null {
+  switch (command) {
+    case 'arrow-up': {
+      const nextLocation = resolveAdjacentTableCellLocation(table, location, 'up')
+      return nextLocation
+        ? { kind: 'focus-cell', location: nextLocation, selectionBehavior: 'preserve' }
+        : null
+    }
+    case 'arrow-down': {
+      const nextLocation = resolveAdjacentTableCellLocation(table, location, 'down')
+      return nextLocation
+        ? { kind: 'focus-cell', location: nextLocation, selectionBehavior: 'preserve' }
+        : { kind: 'exit-table' }
+    }
+    case 'enter': {
+      const nextLocation = resolveAdjacentTableCellLocation(table, location, 'down')
+      return nextLocation
+        ? { kind: 'focus-cell', location: nextLocation, selectionBehavior: 'end' }
+        : { kind: 'exit-table' }
+    }
+    case 'tab': {
+      const nextLocation = resolveAdjacentTableCellLocation(table, location, 'next')
+      if (nextLocation) {
+        return { kind: 'focus-cell', location: nextLocation, selectionBehavior: 'preserve' }
+      }
+
+      const plan = resolveTableBodyRowInsertionPlan(table, location)
+      return plan ? { kind: 'insert-body-row-below', plan } : null
+    }
+    case 'shift-tab': {
+      const nextLocation = resolveAdjacentTableCellLocation(table, location, 'previous')
+      if (nextLocation) {
+        return { kind: 'focus-cell', location: nextLocation, selectionBehavior: 'preserve' }
+      }
+
+      const plan = resolveTableBodyRowInsertionPlan(table, location)
+      return plan ? { kind: 'insert-body-row-below', plan } : null
+    }
+    case 'ctrl-enter': {
+      const plan = resolveTableBodyRowInsertionPlan(table, location)
+      return plan ? { kind: 'insert-body-row-below', plan } : null
+    }
+    case 'shift-enter':
+      return { kind: 'insert-inline-break', insertText: '<br />' }
+  }
+}
+
 export function isBlankLineBelowTableSelection(
   doc: Pick<WysiwygDecorationView['state']['doc'], 'lineAt' | 'line' | 'lines'>,
   tables: readonly MarkdownTableBlock[],
@@ -213,4 +336,9 @@ export function resolveDecodedTableCellOffset(rawText: string, rawOffset: number
 export function resolveEncodedTableCellOffset(displayText: string, displayOffset: number): number {
   const cappedOffset = Math.max(0, Math.min(displayOffset, displayText.length))
   return encodeMarkdownTableCellText(displayText.slice(0, cappedOffset)).length
+}
+
+function buildEmptyMarkdownTableBodyRow(columnCount: number): string {
+  if (columnCount < 1) return ''
+  return `| ${Array.from({ length: columnCount }, () => '').join(' | ')} |`
 }
