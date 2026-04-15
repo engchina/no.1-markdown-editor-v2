@@ -7,7 +7,8 @@
       "Bash(grep -r \"\\\\\\\\\\\\\\\\r\\\\\\\\\\\\\\\\n\\\\|splitLines\\\\|\\\\\\\\\\\\\\\\r\" node_modules/@codemirror/state/dist/index.js)",
       "Bash(grep -n \"\\\\\\\\\\\\\\\\r\\\\|carriage\\\\|CRLF\\\\|splitLines\\\\|Text\\\\.of\" node_modules/@codemirror/state/dist/index.js)",
       "Bash(node -e ':*)",
-      "Bash(node --test tests/editor-paste-event.test.ts tests/editor-insertion.test.ts)"
+      "Bash(node --test tests/editor-paste-event.test.ts tests/editor-insertion.test.ts)",
+      "Bash(node --test tests/wysiwyg-tables.test.ts)"
     ]
   }
 }
