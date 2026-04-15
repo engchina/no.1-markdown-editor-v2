@@ -16,7 +16,10 @@ import {
   loadSearchSupport,
   type SearchSupport,
 } from './optionalFeatures'
-import { isBlankLineBelowTableSelection } from './wysiwygTable.ts'
+import {
+  isBlankLineBelowTableSelection,
+  resolveAdjacentTableCellLocation,
+} from './wysiwygTable.ts'
 import AISelectionBubble from '../AI/AISelectionBubble'
 import { applyFormat } from './formatCommands'
 import { getFormatActionFromShortcut } from './formatShortcuts'
@@ -75,6 +78,11 @@ import { prepareImageMarkdownInsertion } from '../../lib/imageMarkdownInsertion'
 import { prepareMarkdownInsertion } from '../../lib/markdownInsertion'
 import { resolveSafeEditorInsertion } from '../../lib/editorInsertion.ts'
 import { appendEditorSelectionScrollEffect, keepEditorCursorBottomGap } from '../../lib/editorScroll.ts'
+import {
+  hasTerminalBlankLine,
+  shouldInsertTerminalBlankLineOnArrowDown,
+  shouldInsertTerminalBlankLineOnClickBelowDocumentEnd,
+} from '../../lib/editorTerminalBlankLine.ts'
 import { convertClipboardHtmlToMarkdown } from '../../lib/pasteHtml'
 import { pushErrorNotice, pushInfoNotice } from '../../lib/notices'
 import {
@@ -322,6 +330,52 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
 
       view.focus()
     }, 0)
+  }, [])
+
+  const insertTerminalBlankLine = useCallback((viewOverride?: EditorView | null): boolean => {
+    const view = viewOverride ?? viewRef.current
+    if (!view) return false
+    if (hasTerminalBlankLine(view.state.doc)) return false
+
+    const activeElement = view.dom.ownerDocument.activeElement
+    if (activeElement instanceof HTMLInputElement && view.dom.contains(activeElement)) {
+      activeElement.blur()
+    }
+
+    const docLength = view.state.doc.length
+    insertMarkdown(
+      view,
+      '\n',
+      { from: docLength, to: docLength },
+      {
+        selectionAnchor: docLength + 1,
+        userEvent: 'input',
+      }
+    )
+    view.focus()
+    return true
+  }, [])
+
+  const shouldInsertTerminalBlankLineFromTableInput = useCallback((target: EventTarget | null): boolean => {
+    const view = viewRef.current
+    const input = (target as HTMLElement | null)?.closest<HTMLInputElement>('.cm-wysiwyg-table__input')
+    if (!view || !input || !view.dom.contains(input)) return false
+
+    const tableFrom = Number(input.dataset.tableFrom)
+    const section = input.dataset.tableSection
+    const rowIndex = Number(input.dataset.tableRowIndex)
+    const columnIndex = Number(input.dataset.tableColumnIndex)
+    if (!Number.isFinite(tableFrom) || !Number.isFinite(rowIndex) || !Number.isFinite(columnIndex)) return false
+    if (section !== 'head' && section !== 'body') return false
+
+    const tables = collectMarkdownTableBlocks(view.state.doc.toString())
+    const table = tables.find((candidate) => candidate.from === tableFrom)
+    if (!table) return false
+
+    const nextLocation = resolveAdjacentTableCellLocation(table, { section, rowIndex, columnIndex }, 'down')
+    if (nextLocation) return false
+
+    return view.state.doc.lineAt(table.to).number === view.state.doc.lines && !hasTerminalBlankLine(view.state.doc)
   }, [])
 
   const reconfigure = useCallback((compartment: Compartment, extension: Extension) => {
@@ -768,6 +822,74 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     view.focus()
     setPendingNavigation(null)
   }, [activeTab?.id, pendingNavigation, setPendingNavigation])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleArrowDownToTerminalBlankLine = (event: KeyboardEvent) => {
+      const view = viewRef.current
+      if (!view) return
+
+      if (event.key !== 'ArrowDown') return
+      if (event.isComposing || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return
+      // Table widget inputs do not always route ArrowDown through the plugin keydown
+      // handler in packaged/browser runs, so keep a capture-phase EOF fallback here.
+      if (shouldInsertTerminalBlankLineFromTableInput(event.target)) {
+        event.preventDefault()
+        insertTerminalBlankLine(view)
+        return
+      }
+      if (event.target instanceof HTMLInputElement && view.dom.contains(event.target)) return
+
+      const selection = view.state.selection.main
+      const line = view.state.doc.lineAt(selection.head)
+      if (!shouldInsertTerminalBlankLineOnArrowDown({
+        hasSingleCursor: view.state.selection.ranges.length === 1,
+        selectionEmpty: selection.empty,
+        selectionLineNumber: line.number,
+        docLineCount: view.state.doc.lines,
+        hasTerminalBlankLine: hasTerminalBlankLine(view.state.doc),
+      })) {
+        return
+      }
+
+      event.preventDefault()
+      insertTerminalBlankLine(view)
+    }
+
+    const handleClickBelowDocumentEnd = (event: MouseEvent) => {
+      const view = viewRef.current
+      if (!view) return
+
+      if (event.button !== 0) return
+      if (event.shiftKey) return
+
+      const target = event.target
+      if (!(target instanceof Node) || !view.scrollDOM.contains(target)) return
+
+      const documentEndCoords = view.coordsAtPos(view.state.doc.length)
+      if (!documentEndCoords) return
+
+      if (!shouldInsertTerminalBlankLineOnClickBelowDocumentEnd({
+        clickY: event.clientY,
+        documentEndBottom: documentEndCoords.bottom,
+        hasTerminalBlankLine: hasTerminalBlankLine(view.state.doc),
+      })) {
+        return
+      }
+
+      event.preventDefault()
+      insertTerminalBlankLine(view)
+    }
+
+    container.addEventListener('keydown', handleArrowDownToTerminalBlankLine, true)
+    container.addEventListener('mousedown', handleClickBelowDocumentEnd, true)
+    return () => {
+      container.removeEventListener('keydown', handleArrowDownToTerminalBlankLine, true)
+      container.removeEventListener('mousedown', handleClickBelowDocumentEnd, true)
+    }
+  }, [insertTerminalBlankLine, shouldInsertTerminalBlankLineFromTableInput])
 
   useEffect(() => {
     const container = containerRef.current

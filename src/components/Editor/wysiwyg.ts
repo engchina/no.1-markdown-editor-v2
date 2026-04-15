@@ -36,6 +36,7 @@ import {
   type WysiwygDecorationView,
 } from './wysiwygCodeBlock.ts'
 import { collectInactiveWysiwygMathBlocks } from './wysiwygMathBlock.ts'
+import { hasTerminalBlankLine } from '../../lib/editorTerminalBlankLine.ts'
 import {
   decodeMarkdownTableCellText,
   encodeMarkdownTableCellText,
@@ -1479,6 +1480,18 @@ function moveTableCellFocus(
   if (!nextLocation || !nextCell) {
     if (direction === 'down') {
       const doc = view.state.doc
+      const tableClosingLine = doc.lineAt(resolved.table.to)
+      if (tableClosingLine.number === doc.lines && !hasTerminalBlankLine(doc)) {
+        input.blur()
+        view.dispatch({
+          changes: { from: doc.length, insert: '\n' },
+          selection: { anchor: doc.length + 1 },
+          userEvent: 'input',
+          scrollIntoView: true,
+        })
+        return true
+      }
+
       const posAfterTable = Math.min(resolved.table.to + 1, doc.length)
       input.blur()
       view.dispatch({
@@ -1521,6 +1534,8 @@ function handleTableInputKeydown(
   view: EditorView,
   input: HTMLInputElement
 ): boolean {
+  if (event.isComposing) return false
+
   if (matchesWysiwygUndoShortcut(event)) {
     dispatchWysiwygHistory('undo')
     return true
