@@ -294,6 +294,18 @@
       "empty": "The result will appear here.",
       "noDiff": "Diff preview is only available when replacing existing content."
     },
+    "retrieval": {
+      "title": "Query & Search Results",
+      "summary": "Retrieved {{count}} passages",
+      "summaryUnavailable": "Retrieval metadata available",
+      "query": "Query",
+      "results": "Search Results",
+      "resultsCount": "{{count}} results",
+      "show": "Show",
+      "hide": "Hide",
+      "noQuery": "The provider did not return the executed retrieval query.",
+      "noResults": "The provider did not return search result previews."
+    },
     "requestState": {
       "idle": "Idle",
       "streaming": "Streaming",
@@ -385,7 +397,7 @@
       "missingTitle": "AI setup is incomplete",
       "missingMessage": "Add a compatible base URL, model, and API key before running AI actions.",
       "hostedAgentMissingTitle": "Hosted agent setup is incomplete",
-      "hostedAgentMissingMessage": "Choose a hosted agent profile and store its client secret before running structured execution.",
+      "hostedAgentMissingMessage": "Choose a hosted agent profile and store its client secret before running Agent.",
       "baseUrl": "Base URL",
       "model": "Model",
       "project": "Project",
@@ -441,7 +453,8 @@
       "type": {
         "none": "None",
         "docs": "Docs",
-        "data": "Data"
+        "data": "Data",
+        "agent": "Agent"
       },
       "structuredAction": {
         "sqlDraft": "SQL Draft",

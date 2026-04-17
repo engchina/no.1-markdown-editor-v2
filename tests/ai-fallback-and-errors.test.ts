@@ -36,4 +36,8 @@ test('AI client listens for streamed completion chunks and browser mock emits ch
   assert.match(client, /options\.onChunk\?\.\(payload\.chunk\)/)
   assert.match(client, /const chunks = buildBrowserMockChunks\(response\.text\)/)
   assert.match(client, /options\.onChunk\?\.\(nextChunk\)/)
+  assert.match(client, /retrievalExecuted:/)
+  assert.match(client, /retrievalQuery:/)
+  assert.match(client, /retrievalResults:/)
+  assert.match(client, /retrievalResultCount:/)
 })

@@ -289,6 +289,18 @@
       "empty": "結果はここに表示されます。",
       "noDiff": "差分プレビューは既存内容を置換する場合のみ利用できます。"
     },
+    "retrieval": {
+      "title": "Query と検索結果",
+      "summary": "{{count}} 件の検索結果を取得",
+      "summaryUnavailable": "検索メタデータを利用可能",
+      "query": "Query",
+      "results": "検索結果",
+      "resultsCount": "{{count}} 件",
+      "show": "表示",
+      "hide": "非表示",
+      "noQuery": "provider は実行した検索 query を返しませんでした。",
+      "noResults": "provider は検索結果プレビューを返しませんでした。"
+    },
     "requestState": {
       "idle": "待機中",
       "streaming": "生成中",
@@ -380,7 +392,7 @@
       "missingTitle": "AI の設定が未完了です",
       "missingMessage": "AI 操作を実行する前に互換ベース URL、モデル、API キーを設定してください。",
       "hostedAgentMissingTitle": "Hosted Agent の設定が未完了です",
-      "hostedAgentMissingMessage": "構造化データ実行前に Agent Profile と対応する秘密情報を設定してください。",
+      "hostedAgentMissingMessage": "Agent を実行する前に Agent Profile を選択し、対応する秘密情報を保存してください。",
       "baseUrl": "ベース URL",
       "model": "モデル",
       "project": "Project",
@@ -436,7 +448,8 @@
       "type": {
         "none": "なし",
         "docs": "ドキュメント",
-        "data": "データ"
+        "data": "データ",
+        "agent": "Agent"
       },
       "structuredAction": {
         "sqlDraft": "SQL 下書き",

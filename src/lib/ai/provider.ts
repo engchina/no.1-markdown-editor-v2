@@ -98,7 +98,14 @@ export function isOpenAICompatibleProviderConfig(
   return config?.provider === OPENAI_COMPATIBLE_PROVIDER
 }
 
-export function getAIKnowledgeType(selection: AIKnowledgeSelection): 'none' | 'docs' | 'data' {
+export function getAIKnowledgeType(
+  selection: AIKnowledgeSelection,
+  executionTargetKind: 'direct-provider' | 'oracle-hosted-agent' = 'direct-provider'
+): 'none' | 'docs' | 'data' | 'agent' {
+  if (executionTargetKind === 'oracle-hosted-agent') {
+    return 'agent'
+  }
+
   switch (selection.kind) {
     case 'oracle-unstructured-store':
       return 'docs'

@@ -19,8 +19,23 @@ test('AI store opens composer, tracks request lifecycle, and closes cleanly', ()
   assert.equal(useAIStore.getState().composer.intent, 'generate')
   assert.equal(useAIStore.getState().composer.outputTarget, 'at-cursor')
 
+  useAIStore.getState().setRetrievalQuery('Who is Mei\'s sister?')
+  useAIStore.getState().setRetrievalExecuted(true)
+  useAIStore.getState().setRetrievalResults([
+    {
+      title: 'totoro-character-guide.md',
+      detail: 'references/totoro-character-guide.md',
+      snippet: 'Satsuki is Mei\'s older sister.',
+    },
+  ])
+  useAIStore.getState().setRetrievalResultCount(1)
+
   useAIStore.getState().startRequest()
   assert.equal(useAIStore.getState().composer.requestState, 'streaming')
+  assert.equal(useAIStore.getState().composer.retrievalExecuted, false)
+  assert.equal(useAIStore.getState().composer.retrievalQuery, null)
+  assert.equal(useAIStore.getState().composer.retrievalResults.length, 0)
+  assert.equal(useAIStore.getState().composer.retrievalResultCount, null)
 
   useAIStore.getState().appendDraftText('Hello')
   useAIStore.getState().appendDraftText(' world')

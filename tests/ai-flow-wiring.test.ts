@@ -35,8 +35,17 @@ test('AIComposer separates the form scroller from the bounded result panel', asy
   const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
 
   assert.match(composer, /data-ai-composer-scroll="form"/)
+  assert.match(composer, /data-ai-retrieval-panel="true"/)
+  assert.match(composer, /data-ai-retrieval-toggle="true"/)
+  assert.match(composer, /data-ai-retrieval-body="true"/)
+  assert.match(composer, /data-ai-retrieval-query="true"/)
+  assert.match(composer, /data-ai-retrieval-result=\{index\}/)
+  assert.match(composer, /aria-expanded=\{expanded\}/)
+  assert.match(composer, /<AppIcon name="search" size=\{18\} \/>/)
+  assert.match(composer, /<AppIcon name="chevronRight" size=\{16\} \/>/)
   assert.match(composer, /data-ai-result-panel="true"/)
   assert.match(composer, /data-ai-result-body="true"/)
+  assert.match(composer, /showResultPanel && hasRetrievalDetails && !composer\.errorMessage && !workspaceExecution/)
   assert.match(composer, /const promptRows = showResultPanel \? 3 : 4/)
   assert.match(composer, /const promptMinHeight = showResultPanel \? '96px' : '124px'/)
   assert.match(composer, /const resultPanelMinHeight = hasWorkspaceExecutionTasks \? '260px' : '220px'/)
@@ -57,6 +66,16 @@ test('AIComposer keeps AI connection setup in Settings and removes inline provid
   assert.doesNotMatch(composer, /saveAIProviderConfig\(/)
   assert.doesNotMatch(composer, /storeAIProviderApiKey\(/)
   assert.doesNotMatch(composer, /clearAIProviderApiKey\(/)
+})
+
+test('AIComposer strips legacy inline retrieval query prefixes from the final answer and stores retrieval metadata separately', async () => {
+  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+
+  assert.match(composer, /extractLegacyAIRetrievalMetadata\(response\.text\)/)
+  assert.match(composer, /setRetrievalExecuted\(response\.retrievalExecuted \|\| legacyRetrieval\.query !== null\)/)
+  assert.match(composer, /setRetrievalQuery\(response\.retrievalQuery \?\? legacyRetrieval\.query\)/)
+  assert.match(composer, /setRetrievalResults\(response\.retrievalResults\)/)
+  assert.match(composer, /setRetrievalResultCount\(response\.retrievalResultCount\)/)
 })
 
 test('AIComposer no longer exposes explicit context mention helper UI or status cards', async () => {
@@ -80,6 +99,16 @@ test('AIComposer no longer renders the structured workspace context picker', asy
   assert.doesNotMatch(composer, /data-ai-note-search-result=\{result\.path \?\? result\.name\}/)
   assert.doesNotMatch(composer, /removePromptMention\(resolution\.mention\.id\)/)
   assert.doesNotMatch(composer, /insertNoteMention\(result\.path \?\? result\.name\)/)
+})
+
+test('AIComposer promotes Hosted Agent to a top-level knowledge tab instead of nesting it under Data', async () => {
+  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+
+  assert.match(composer, /getAIKnowledgeType\(composer\.knowledgeSelection, composer\.executionTargetKind\)/)
+  assert.match(composer, /{ value: 'agent', label: t\('ai\.knowledge\.type\.agent'\) }/)
+  assert.match(composer, /data-ai-agent-profile-select="true"/)
+  assert.doesNotMatch(composer, /data-ai-structured-mode=/)
+  assert.doesNotMatch(composer, /data-ai-hosted-agent-select=/)
 })
 
 test('AIComposer exposes workspace execution task cards and autonomous workspace agent session controls', async () => {

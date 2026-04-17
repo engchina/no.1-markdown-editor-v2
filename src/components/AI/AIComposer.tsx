@@ -20,6 +20,7 @@ import {
   type MarkdownPreviewLineKind,
 } from '../../lib/ai/diffPresentation.ts'
 import { buildAIRequestMessages, normalizeAIDraftText } from '../../lib/ai/prompt.ts'
+import { extractLegacyAIRetrievalMetadata } from '../../lib/ai/retrievalMetadata.ts'
 import {
   hasAIDiffPreview,
   hasAIInsertPreview,
@@ -43,8 +44,8 @@ import {
 import type {
   AIIntent,
   AIKnowledgeType,
-  AIOracleStructuredStoreMode,
   AIProviderState,
+  AIRetrievalResultPreview,
 } from '../../lib/ai/types.ts'
 import { findWorkspaceDocumentReferences } from '../../lib/workspaceSearch.ts'
 import {
@@ -169,6 +170,10 @@ export default function AIComposer() {
     setExplanationText,
     setWarningText,
     setSourceLabel,
+    setRetrievalExecuted,
+    setRetrievalQuery,
+    setRetrievalResults,
+    setRetrievalResultCount,
     setDiffBaseText,
     startRequest,
     finishRequest,
@@ -181,6 +186,7 @@ export default function AIComposer() {
   } = useAIStore()
   const initialTemplatePromptRef = useRef<string | null>(composer.prompt)
   const [resultView, setResultView] = useState<AIResultView>('draft')
+  const [retrievalPanelOpen, setRetrievalPanelOpen] = useState(false)
   const [providerState, setProviderState] = useState<AIProviderState | null>(null)
   const [connectionLoading, setConnectionLoading] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
@@ -229,7 +235,7 @@ export default function AIComposer() {
   const hasSlashCommandContext = slashCommandContext !== null && !slashCommandContext.isEmpty
   const showSlashCommandHint = composer.source === 'slash-command' && slashCommandContext !== null
   const oracleProviderConfig = isOCIResponsesProviderConfig(providerState?.config) ? providerState.config : null
-  const knowledgeType = getAIKnowledgeType(composer.knowledgeSelection)
+  const knowledgeType = getAIKnowledgeType(composer.knowledgeSelection, composer.executionTargetKind)
   const selectedUnstructuredRegistrationId =
     composer.knowledgeSelection.kind === 'oracle-unstructured-store'
       ? composer.knowledgeSelection.registrationId
@@ -242,14 +248,10 @@ export default function AIComposer() {
     selectedStructuredRegistrationId
       ? oracleProviderConfig?.structuredStores.find((store) => store.id === selectedStructuredRegistrationId) ?? null
       : null
-  const selectedHostedAgentProfile = findHostedAgentProfile(
-    oracleProviderConfig,
-    composer.hostedAgentProfileId ?? selectedStructuredStore?.executionAgentProfileId ?? null
-  )
-  const isStructuredAgentAnswer =
-    composer.knowledgeSelection.kind === 'oracle-structured-store' &&
-    composer.knowledgeSelection.mode === 'agent-answer'
-  const hasConnection = isStructuredAgentAnswer
+  const selectedHostedAgentProfile = findHostedAgentProfile(oracleProviderConfig, composer.hostedAgentProfileId)
+  const defaultHostedAgentProfile = oracleProviderConfig?.hostedAgentProfiles[0] ?? null
+  const isHostedAgentKnowledge = knowledgeType === 'agent'
+  const hasConnection = isHostedAgentKnowledge
     ? !!selectedHostedAgentProfile &&
       providerState?.hasHostedAgentClientSecretById?.[selectedHostedAgentProfile.id] === true
     : isAIProviderConnectionReady(providerState)
@@ -277,14 +279,14 @@ export default function AIComposer() {
     ? t('notices.aiConnectionErrorTitle')
     : desktopOnlyMode
       ? t('notices.aiDesktopOnlyTitle')
-      : isStructuredAgentAnswer
+      : isHostedAgentKnowledge
         ? t('ai.connection.hostedAgentMissingTitle')
         : t('notices.aiProviderMissingTitle')
   const connectionHintMessage = connectionError
     ? connectionError
     : desktopOnlyMode
       ? t('notices.aiDesktopOnlyMessage')
-      : isStructuredAgentAnswer
+      : isHostedAgentKnowledge
         ? t('ai.connection.hostedAgentMissingMessage')
         : t('notices.aiProviderMissingMessage')
   const canApplyToEditor = viewMode !== 'preview'
@@ -302,6 +304,11 @@ export default function AIComposer() {
     !!composer.sourceSnapshot &&
     !!activeTab &&
     canApplyToEditor
+  const hasRetrievalDetails =
+    composer.retrievalExecuted ||
+    !!composer.retrievalQuery ||
+    composer.retrievalResults.length > 0 ||
+    composer.retrievalResultCount !== null
   const showResultPanel =
     composer.requestState !== 'idle' || normalizedDraft.trim().length > 0 || composer.errorMessage !== null
   const promptRows = showResultPanel ? 3 : 4
@@ -396,6 +403,10 @@ export default function AIComposer() {
   useEffect(() => {
     setResultView('draft')
   }, [composer.draftText, composer.outputTarget])
+
+  useEffect(() => {
+    setRetrievalPanelOpen(false)
+  }, [composer.startedAt, composer.retrievalQuery, composer.retrievalResultCount, composer.retrievalResults.length])
 
   useEffect(() => {
     const nextSelection = pendingPromptSelectionRef.current
@@ -515,11 +526,34 @@ export default function AIComposer() {
 
   useEffect(() => {
     if (!oracleProviderConfig) {
-      if (composer.knowledgeSelection.kind !== 'none') {
+      if (
+        composer.knowledgeSelection.kind !== 'none' ||
+        composer.executionTargetKind !== 'direct-provider' ||
+        composer.invocationCapability !== 'text-generation' ||
+        composer.hostedAgentProfileId !== null
+      ) {
         setKnowledgeSelection({ kind: 'none' })
         setExecutionTargetKind('direct-provider')
         setInvocationCapability('text-generation')
         setHostedAgentProfileId(null)
+      }
+      return
+    }
+
+    if (composer.executionTargetKind === 'oracle-hosted-agent') {
+      if (composer.knowledgeSelection.kind !== 'none') {
+        setKnowledgeSelection({ kind: 'none' })
+      }
+      if (composer.invocationCapability !== 'structured-execution') {
+        setInvocationCapability('structured-execution')
+      }
+
+      const profileExists = oracleProviderConfig.hostedAgentProfiles.some(
+        (profile) => profile.id === composer.hostedAgentProfileId
+      )
+      const fallbackProfileId = profileExists ? composer.hostedAgentProfileId : defaultHostedAgentProfile?.id ?? null
+      if (fallbackProfileId !== composer.hostedAgentProfileId) {
+        setHostedAgentProfileId(fallbackProfileId)
       }
       return
     }
@@ -530,7 +564,13 @@ export default function AIComposer() {
       )
       if (!stillExists) {
         setKnowledgeSelection({ kind: 'none' })
+        setExecutionTargetKind('direct-provider')
         setInvocationCapability('text-generation')
+        return
+      }
+
+      if (composer.invocationCapability !== 'rag-unstructured') {
+        setInvocationCapability('rag-unstructured')
       }
       return
     }
@@ -544,20 +584,34 @@ export default function AIComposer() {
         setKnowledgeSelection({ kind: 'none' })
         setExecutionTargetKind('direct-provider')
         setInvocationCapability('text-generation')
-        setHostedAgentProfileId(null)
         return
       }
 
-      if (composer.knowledgeSelection.mode === 'agent-answer') {
-        const fallbackProfileId = composer.hostedAgentProfileId ?? store.executionAgentProfileId ?? null
-        if (fallbackProfileId !== composer.hostedAgentProfileId) {
-          setHostedAgentProfileId(fallbackProfileId)
-        }
+      if (composer.knowledgeSelection.mode !== 'sql-draft') {
+        setKnowledgeSelection({
+          kind: 'oracle-structured-store',
+          registrationId: store.id,
+          mode: 'sql-draft',
+        })
       }
+      if (composer.executionTargetKind !== 'direct-provider') {
+        setExecutionTargetKind('direct-provider')
+      }
+      if (composer.invocationCapability !== 'nl2sql-draft') {
+        setInvocationCapability('nl2sql-draft')
+      }
+      return
+    }
+
+    if (composer.invocationCapability !== 'text-generation') {
+      setInvocationCapability('text-generation')
     }
   }, [
+    composer.executionTargetKind,
+    composer.invocationCapability,
     composer.hostedAgentProfileId,
     composer.knowledgeSelection,
+    defaultHostedAgentProfile?.id,
     oracleProviderConfig,
     setExecutionTargetKind,
     setHostedAgentProfileId,
@@ -616,7 +670,6 @@ export default function AIComposer() {
       setKnowledgeSelection({ kind: 'none' })
       setExecutionTargetKind('direct-provider')
       setInvocationCapability('text-generation')
-      setHostedAgentProfileId(null)
       return
     }
 
@@ -629,7 +682,14 @@ export default function AIComposer() {
       })
       setExecutionTargetKind('direct-provider')
       setInvocationCapability('rag-unstructured')
-      setHostedAgentProfileId(null)
+      return
+    }
+
+    if (nextType === 'agent') {
+      setKnowledgeSelection({ kind: 'none' })
+      setExecutionTargetKind('oracle-hosted-agent')
+      setInvocationCapability('structured-execution')
+      setHostedAgentProfileId(composer.hostedAgentProfileId ?? defaultHostedAgentProfile?.id ?? null)
       return
     }
 
@@ -638,37 +698,8 @@ export default function AIComposer() {
     setKnowledgeSelection({
       kind: 'oracle-structured-store',
       registrationId: fallback.id,
-      mode: fallback.defaultMode,
+      mode: 'sql-draft',
     })
-    setHostedAgentProfileId(fallback.executionAgentProfileId)
-    if (fallback.defaultMode === 'agent-answer') {
-      setExecutionTargetKind('oracle-hosted-agent')
-      setInvocationCapability('structured-execution')
-    } else {
-      setExecutionTargetKind('direct-provider')
-      setInvocationCapability('nl2sql-draft')
-      if (composer.outputTarget === 'replace-selection' || composer.outputTarget === 'replace-current-block') {
-        setOutputTarget('insert-below')
-      }
-    }
-  }
-
-  function setStructuredMode(nextMode: AIOracleStructuredStoreMode) {
-    if (composer.knowledgeSelection.kind !== 'oracle-structured-store') return
-    const store =
-      oracleProviderConfig?.structuredStores.find((candidate) => candidate.id === selectedStructuredRegistrationId) ?? null
-    setKnowledgeSelection({
-      kind: 'oracle-structured-store',
-      registrationId: selectedStructuredRegistrationId ?? '',
-      mode: nextMode,
-    })
-    setHostedAgentProfileId(composer.hostedAgentProfileId ?? store?.executionAgentProfileId ?? null)
-    if (nextMode === 'agent-answer') {
-      setExecutionTargetKind('oracle-hosted-agent')
-      setInvocationCapability('structured-execution')
-      return
-    }
-
     setExecutionTargetKind('direct-provider')
     setInvocationCapability('nl2sql-draft')
     if (composer.outputTarget === 'replace-selection' || composer.outputTarget === 'replace-current-block') {
@@ -686,8 +717,8 @@ export default function AIComposer() {
 
     if (!hasConnection) {
       pushInfoNotice(
-        isStructuredAgentAnswer ? 'ai.connection.hostedAgentMissingTitle' : 'notices.aiProviderMissingTitle',
-        isStructuredAgentAnswer ? 'ai.connection.hostedAgentMissingMessage' : 'notices.aiProviderMissingMessage'
+        isHostedAgentKnowledge ? 'ai.connection.hostedAgentMissingTitle' : 'notices.aiProviderMissingTitle',
+        isHostedAgentKnowledge ? 'ai.connection.hostedAgentMissingMessage' : 'notices.aiProviderMissingMessage'
       )
       return
     }
@@ -717,7 +748,8 @@ export default function AIComposer() {
         composer.knowledgeSelection.kind === 'oracle-structured-store'
           ? composer.knowledgeSelection.mode
           : null,
-      executionAgentLabel: selectedHostedAgentProfile?.label ?? null,
+      executionAgentLabel:
+        composer.executionTargetKind === 'oracle-hosted-agent' ? selectedHostedAgentProfile?.label ?? null : null,
       threadId: composer.threadId,
     })
     activeSessionHistoryRef.current = {
@@ -744,7 +776,10 @@ export default function AIComposer() {
         invocationCapability: composer.invocationCapability,
         knowledgeSelection: composer.knowledgeSelection,
         threadId: composer.threadId,
-        hostedAgentProfileId: composer.hostedAgentProfileId ?? selectedHostedAgentProfile?.id ?? null,
+        hostedAgentProfileId:
+          composer.executionTargetKind === 'oracle-hosted-agent'
+            ? composer.hostedAgentProfileId ?? selectedHostedAgentProfile?.id ?? null
+            : null,
       }, {
         onChunk: (chunk) => {
           if (disposedRef.current || runId !== requestRunIdRef.current) return
@@ -754,15 +789,21 @@ export default function AIComposer() {
       if (disposedRef.current || runId !== requestRunIdRef.current) return
       activeRequestIdRef.current = null
 
+      const legacyRetrieval = extractLegacyAIRetrievalMetadata(response.text)
+      const responseText = legacyRetrieval.text
       const draft =
         response.contentType === 'sql'
-          ? response.text.trim()
-          : normalizeAIDraftText(response.text, effectiveContext.outputTarget)
+          ? responseText.trim()
+          : normalizeAIDraftText(responseText, effectiveContext.outputTarget)
       setDraftText(draft)
       setDraftFormat(response.contentType)
       setExplanationText(response.explanationText ?? '')
       setWarningText(response.warningText)
       setSourceLabel(response.sourceLabel)
+      setRetrievalExecuted(response.retrievalExecuted || legacyRetrieval.query !== null)
+      setRetrievalQuery(response.retrievalQuery ?? legacyRetrieval.query)
+      setRetrievalResults(response.retrievalResults)
+      setRetrievalResultCount(response.retrievalResultCount)
       setThreadId(response.threadId ?? threadId)
       if (response.contentType === 'sql') {
         setDiffBaseText(null)
@@ -780,7 +821,8 @@ export default function AIComposer() {
         resultPreview: draft,
         errorMessage: null,
         generatedSqlPreview: response.contentType === 'sql' ? draft : null,
-        executionAgentLabel: selectedHostedAgentProfile?.label ?? null,
+        executionAgentLabel:
+          composer.executionTargetKind === 'oracle-hosted-agent' ? selectedHostedAgentProfile?.label ?? null : null,
       })
       if (nextWorkspaceExecution) {
         setWorkspaceHistoryBinding({
@@ -1581,7 +1623,7 @@ export default function AIComposer() {
         {/* Body */}
         <div
           data-ai-composer-scroll="form"
-          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4"
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-5 py-4"
         >
           {/* Connection hint */}
           {showConnectionHint && (
@@ -1651,11 +1693,12 @@ export default function AIComposer() {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
                   {t('ai.knowledge.title')}
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {([
                     { value: 'none', label: t('ai.knowledge.type.none') },
                     { value: 'docs', label: t('ai.knowledge.type.docs') },
                     { value: 'data', label: t('ai.knowledge.type.data') },
+                    { value: 'agent', label: t('ai.knowledge.type.agent') },
                   ] as const).map((option) => (
                     <button
                       key={option.value}
@@ -1698,7 +1741,6 @@ export default function AIComposer() {
                       setKnowledgeSelection({ kind: 'oracle-unstructured-store', registrationId: storeId })
                       setExecutionTargetKind('direct-provider')
                       setInvocationCapability('rag-unstructured')
-                      setHostedAgentProfileId(null)
                     }}
                     className="rounded-2xl border px-3 py-2 text-xs outline-none"
                     style={{
@@ -1720,122 +1762,83 @@ export default function AIComposer() {
               )}
 
               {knowledgeType === 'data' && (
-                <div className="grid gap-3">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.knowledge.dataLabel')}
-                    </span>
-                    <select
-                      value={
-                        composer.knowledgeSelection.kind === 'oracle-structured-store'
-                          ? composer.knowledgeSelection.registrationId
-                          : ''
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.knowledge.dataLabel')}
+                  </span>
+                  <select
+                    value={
+                      composer.knowledgeSelection.kind === 'oracle-structured-store'
+                        ? composer.knowledgeSelection.registrationId
+                        : ''
+                    }
+                    onChange={(event) => {
+                      const registrationId = event.target.value
+                      const store =
+                        oracleProviderConfig.structuredStores.find((candidate) => candidate.id === registrationId) ?? null
+                      if (!store) {
+                        setKnowledgeType('none')
+                        return
                       }
-                      onChange={(event) => {
-                        const registrationId = event.target.value
-                        const store =
-                          oracleProviderConfig.structuredStores.find((candidate) => candidate.id === registrationId) ?? null
-                        if (!store) {
-                          setKnowledgeType('none')
-                          return
-                        }
-                        setKnowledgeSelection({
-                          kind: 'oracle-structured-store',
-                          registrationId,
-                          mode: store.defaultMode,
-                        })
-                        setHostedAgentProfileId(store.executionAgentProfileId)
-                        if (store.defaultMode === 'agent-answer') {
-                          setExecutionTargetKind('oracle-hosted-agent')
-                          setInvocationCapability('structured-execution')
-                        } else {
-                          setExecutionTargetKind('direct-provider')
-                          setInvocationCapability('nl2sql-draft')
-                          if (composer.outputTarget === 'replace-selection' || composer.outputTarget === 'replace-current-block') {
-                            setOutputTarget('insert-below')
-                          }
-                        }
-                      }}
-                      className="rounded-2xl border px-3 py-2 text-xs outline-none"
-                      style={{
-                        borderColor: 'var(--border)',
-                        background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                      }}
-                    >
-                      <option value="">{t('ai.connection.noneOption')}</option>
-                      {oracleProviderConfig.structuredStores
-                        .filter((store) => store.enabled)
-                        .map((store) => (
-                          <option key={store.id} value={store.id}>
-                            {store.label || store.id}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-
-                  <div className="grid gap-1">
-                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      {t('ai.knowledge.action')}
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        { value: 'sql-draft', label: t('ai.knowledge.structuredAction.sqlDraft') },
-                        { value: 'agent-answer', label: t('ai.knowledge.structuredAction.agentAnswer') },
-                      ] as const).map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          data-ai-structured-mode={option.value}
-                          onClick={() => setStructuredMode(option.value)}
-                          className="rounded-lg border px-3 py-2 text-xs font-medium transition-colors"
-                          style={{
-                            borderColor:
-                              composer.knowledgeSelection.kind === 'oracle-structured-store' &&
-                              composer.knowledgeSelection.mode === option.value
-                                ? 'var(--accent)'
-                                : 'var(--border)',
-                            background:
-                              composer.knowledgeSelection.kind === 'oracle-structured-store' &&
-                              composer.knowledgeSelection.mode === option.value
-                                ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-primary))'
-                                : 'var(--bg-primary)',
-                            color: 'var(--text-primary)',
-                          }}
-                        >
-                          {option.label}
-                        </button>
+                      setKnowledgeSelection({
+                        kind: 'oracle-structured-store',
+                        registrationId,
+                        mode: 'sql-draft',
+                      })
+                      setExecutionTargetKind('direct-provider')
+                      setInvocationCapability('nl2sql-draft')
+                      if (composer.outputTarget === 'replace-selection' || composer.outputTarget === 'replace-current-block') {
+                        setOutputTarget('insert-below')
+                      }
+                    }}
+                    className="rounded-2xl border px-3 py-2 text-xs outline-none"
+                    style={{
+                      borderColor: 'var(--border)',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <option value="">{t('ai.connection.noneOption')}</option>
+                    {oracleProviderConfig.structuredStores
+                      .filter((store) => store.enabled)
+                      .map((store) => (
+                        <option key={store.id} value={store.id}>
+                          {store.label || store.id}
+                        </option>
                       ))}
-                    </div>
-                  </div>
+                  </select>
+                </label>
+              )}
 
-                  {composer.knowledgeSelection.kind === 'oracle-structured-store' &&
-                    composer.knowledgeSelection.mode === 'agent-answer' && (
-                      <label className="flex flex-col gap-1">
-                        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                          {t('ai.knowledge.executionAgent')}
-                        </span>
-                        <select
-                          value={composer.hostedAgentProfileId ?? selectedStructuredStore?.executionAgentProfileId ?? ''}
-                          onChange={(event) => setHostedAgentProfileId(event.target.value || null)}
-                          data-ai-hosted-agent-select="true"
-                          className="rounded-2xl border px-3 py-2 text-xs outline-none"
-                          style={{
-                            borderColor: 'var(--border)',
-                            background: 'var(--bg-primary)',
-                            color: 'var(--text-primary)',
-                          }}
-                        >
-                          <option value="">{t('ai.connection.noneOption')}</option>
-                          {oracleProviderConfig.hostedAgentProfiles.map((profile) => (
-                            <option key={profile.id} value={profile.id}>
-                              {profile.label || profile.id}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-                </div>
+              {knowledgeType === 'agent' && (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {t('ai.knowledge.executionAgent')}
+                  </span>
+                  <select
+                    value={composer.hostedAgentProfileId ?? ''}
+                    onChange={(event) => {
+                      setKnowledgeSelection({ kind: 'none' })
+                      setExecutionTargetKind('oracle-hosted-agent')
+                      setInvocationCapability('structured-execution')
+                      setHostedAgentProfileId(event.target.value || null)
+                    }}
+                    data-ai-agent-profile-select="true"
+                    className="rounded-2xl border px-3 py-2 text-xs outline-none"
+                    style={{
+                      borderColor: 'var(--border)',
+                      background: 'var(--bg-primary)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <option value="">{t('ai.connection.noneOption')}</option>
+                    {oracleProviderConfig.hostedAgentProfiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.label || profile.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               )}
             </section>
           )}
@@ -1926,6 +1929,18 @@ export default function AIComposer() {
               <span style={{ color: 'var(--text-primary)' }}>{t(`ai.outputTarget.${composer.outputTarget}`)}</span>
             </div>
           </div>
+
+          {showResultPanel && hasRetrievalDetails && !composer.errorMessage && !workspaceExecution && (
+            <AIRetrievalDisclosure
+              expanded={retrievalPanelOpen}
+              onToggle={() => setRetrievalPanelOpen((value) => !value)}
+              retrievalExecuted={composer.retrievalExecuted}
+              query={composer.retrievalQuery}
+              results={composer.retrievalResults}
+              totalResultCount={composer.retrievalResultCount}
+              typography={composerContentTypography}
+            />
+          )}
 
           {/* Result panel */}
           {showResultPanel && (
@@ -2213,6 +2228,225 @@ export default function AIComposer() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function AIRetrievalDisclosure({
+  expanded,
+  onToggle,
+  retrievalExecuted,
+  query,
+  results,
+  totalResultCount,
+  typography,
+}: {
+  expanded: boolean
+  onToggle: () => void
+  retrievalExecuted: boolean
+  query: string | null
+  results: AIRetrievalResultPreview[]
+  totalResultCount: number | null
+  typography: AIComposerContentTypography
+}) {
+  const { t } = useTranslation()
+  const visibleResultCount = results.length
+  const summaryCount = totalResultCount ?? visibleResultCount
+  const showResultsList = visibleResultCount > 0
+  const summaryLabel =
+    totalResultCount === null && visibleResultCount === 0
+      ? t('ai.retrieval.summaryUnavailable')
+      : t('ai.retrieval.summary', { count: summaryCount })
+
+  return (
+    <div
+      data-ai-retrieval-panel="true"
+      className="min-w-0 overflow-hidden rounded-2xl border"
+      style={{
+        borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--border))',
+        background: 'color-mix(in srgb, var(--bg-secondary) 84%, var(--bg-primary))',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        data-ai-retrieval-toggle="true"
+        className="group flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors"
+        style={{
+          background: expanded
+            ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))'
+            : 'color-mix(in srgb, var(--accent) 4%, var(--bg-primary))',
+          color: 'var(--text-primary)',
+        }}
+      >
+        <span
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--accent) 24%, var(--border))',
+            background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+            color: 'var(--accent)',
+          }}
+        >
+          <AppIcon name="search" size={18} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div
+            className="text-sm font-semibold"
+            style={{ ...typography.text, color: 'var(--text-primary)' }}
+          >
+            {t('ai.retrieval.title')}
+          </div>
+          <div className="mt-1 text-xs" style={{ ...typography.meta, color: 'var(--text-secondary)' }}>
+            {summaryLabel}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {query ? (
+            <span
+              className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--border))',
+                background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              {t('ai.retrieval.query')}
+            </span>
+          ) : null}
+          <span
+            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--border) 76%, transparent)',
+              background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {t('ai.retrieval.resultsCount', { count: summaryCount })}
+          </span>
+          <span
+            className="flex h-9 w-9 items-center justify-center rounded-full border transition-transform"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--accent) 20%, var(--border))',
+              background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
+              color: 'var(--text-secondary)',
+              transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            }}
+            aria-hidden="true"
+          >
+            <AppIcon name="chevronRight" size={16} />
+          </span>
+        </div>
+      </button>
+      {expanded ? (
+        <div
+          data-ai-retrieval-body="true"
+          className="grid gap-3 border-t px-4 py-4"
+          style={{ borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)' }}
+        >
+          {query ? (
+            <section
+              data-ai-retrieval-query="true"
+              className="rounded-xl border px-3 py-3"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--accent) 18%, var(--border))',
+                background: 'color-mix(in srgb, var(--accent) 6%, var(--bg-primary))',
+              }}
+            >
+              <div
+                className="text-[11px] font-semibold uppercase tracking-[0.16em]"
+                style={{ ...typography.meta, color: 'var(--text-muted)' }}
+              >
+                {t('ai.retrieval.query')}
+              </div>
+              <pre
+                className="mt-2 whitespace-pre-wrap break-words"
+                style={{
+                  ...typography.code,
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono, JetBrains Mono, monospace)',
+                  margin: 0,
+                }}
+              >
+                {query}
+              </pre>
+            </section>
+          ) : retrievalExecuted ? (
+            <section
+              data-ai-retrieval-query="true"
+              className="rounded-xl border px-3 py-3"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--accent) 18%, var(--border))',
+                background: 'color-mix(in srgb, var(--accent) 6%, var(--bg-primary))',
+              }}
+            >
+              <div
+                className="text-[11px] font-semibold uppercase tracking-[0.16em]"
+                style={{ ...typography.meta, color: 'var(--text-muted)' }}
+              >
+                {t('ai.retrieval.query')}
+              </div>
+              <p className="mt-2 text-sm" style={{ ...typography.text, color: 'var(--text-muted)', margin: 0 }}>
+                {t('ai.retrieval.noQuery')}
+              </p>
+            </section>
+          ) : null}
+
+          <section data-ai-retrieval-results="true" className="grid gap-2">
+            <div
+              className="flex items-center justify-between gap-3"
+              style={{ ...typography.meta, color: 'var(--text-muted)' }}
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">
+                {t('ai.retrieval.results')}
+              </span>
+              <span>{t('ai.retrieval.resultsCount', { count: summaryCount })}</span>
+            </div>
+            {showResultsList ? (
+              results.map((result, index) => (
+                <article
+                  key={`${result.title}-${result.detail ?? index}`}
+                  data-ai-retrieval-result={index}
+                  className="rounded-xl border px-3 py-3"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
+                    background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
+                  }}
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold" style={typography.text}>
+                      {result.title}
+                    </div>
+                    {result.detail ? (
+                      <div className="mt-1 text-xs" style={{ ...typography.meta, color: 'var(--text-muted)' }}>
+                        {result.detail}
+                      </div>
+                    ) : null}
+                    {result.snippet ? (
+                      <p className="mt-2 text-sm" style={{ ...typography.text, color: 'var(--text-secondary)', margin: 0 }}>
+                        {result.snippet}
+                      </p>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div
+                className="rounded-xl border px-3 py-3 text-sm"
+                style={{
+                  ...typography.text,
+                  borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
+                  background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                {t('ai.retrieval.noResults')}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
     </div>
   )
 }

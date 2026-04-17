@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   clearAIHostedAgentClientSecret,
@@ -46,10 +46,6 @@ export default function AISettingsSection() {
   const canShowOracleSections = aiProviderKind === 'oci-responses'
   const connectionReady = isAIProviderConnectionReady(aiProviderState)
   const hostedAgentSecretStatus = aiProviderState?.hasHostedAgentClientSecretById ?? {}
-  const hostedAgentOptions = useMemo(
-    () => aiHostedAgentProfiles.map((profile) => ({ value: profile.id, label: profile.label || profile.id })),
-    [aiHostedAgentProfiles]
-  )
 
   useEffect(() => {
     if (!isAIDesktopAvailable()) return
@@ -124,7 +120,11 @@ export default function AISettingsSection() {
               model: aiModel,
               project: aiProject,
               unstructuredStores: aiUnstructuredStores,
-              structuredStores: aiStructuredStores,
+              structuredStores: aiStructuredStores.map((store) => ({
+                ...store,
+                defaultMode: 'sql-draft',
+                executionAgentProfileId: null,
+              })),
               hostedAgentProfiles: aiHostedAgentProfiles,
             }
 
@@ -349,7 +349,6 @@ export default function AISettingsSection() {
             aiStructuredStores,
             updateStructuredStore,
             setAiStructuredStores,
-            hostedAgentOptions,
           })}
           {renderHostedAgentSection({
             t,
@@ -507,7 +506,6 @@ function renderStructuredSection({
   aiStructuredStores,
   updateStructuredStore,
   setAiStructuredStores,
-  hostedAgentOptions,
 }: {
   t: ReturnType<typeof useTranslation>['t']
   aiStructuredStores: AIOracleStructuredStoreRegistration[]
@@ -516,7 +514,6 @@ function renderStructuredSection({
     updater: (store: AIOracleStructuredStoreRegistration) => AIOracleStructuredStoreRegistration
   ) => void
   setAiStructuredStores: Dispatch<SetStateAction<AIOracleStructuredStoreRegistration[]>>
-  hostedAgentOptions: Array<{ value: string; label: string }>
 }) {
   return (
     <StoreSection
@@ -576,42 +573,6 @@ function renderStructuredSection({
               className="rounded-lg border px-3 py-2 text-xs outline-none"
               style={inputStyle}
             />
-          </FormField>
-          <FormField label={t('ai.connection.defaultMode')}>
-            <select
-              value={store.defaultMode}
-              onChange={(event) =>
-                updateStructuredStore(store.id, (current) => ({
-                  ...current,
-                  defaultMode: event.target.value === 'agent-answer' ? 'agent-answer' : 'sql-draft',
-                }))
-              }
-              className="rounded-lg border px-3 py-2 text-xs outline-none"
-              style={inputStyle}
-            >
-              <option value="sql-draft">{t('ai.knowledge.structuredAction.sqlDraft')}</option>
-              <option value="agent-answer">{t('ai.knowledge.structuredAction.agentAnswer')}</option>
-            </select>
-          </FormField>
-          <FormField label={t('ai.connection.executionAgentProfile')}>
-            <select
-              value={store.executionAgentProfileId ?? ''}
-              onChange={(event) =>
-                updateStructuredStore(store.id, (current) => ({
-                  ...current,
-                  executionAgentProfileId: event.target.value || null,
-                }))
-              }
-              className="rounded-lg border px-3 py-2 text-xs outline-none"
-              style={inputStyle}
-            >
-              <option value="">{t('ai.connection.noneOption')}</option>
-              {hostedAgentOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
           </FormField>
           <label className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
             <input

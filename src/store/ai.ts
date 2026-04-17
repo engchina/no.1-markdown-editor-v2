@@ -31,6 +31,7 @@ import type {
   AIOutputTarget,
   AIOracleStructuredStoreMode,
   AIProvenanceMark,
+  AIRetrievalResultPreview,
   AIRequestState,
   AIScope,
   AIWorkspaceExecutionHistoryRecord,
@@ -65,6 +66,10 @@ interface AIStoreState {
   setExplanationText: (explanationText: string) => void
   setWarningText: (warningText: string | null) => void
   setSourceLabel: (sourceLabel: string | null) => void
+  setRetrievalExecuted: (retrievalExecuted: boolean) => void
+  setRetrievalQuery: (retrievalQuery: string | null) => void
+  setRetrievalResults: (retrievalResults: AIRetrievalResultPreview[]) => void
+  setRetrievalResultCount: (retrievalResultCount: number | null) => void
   setDiffBaseText: (diffBaseText: string | null) => void
   setThreadId: (threadId: string | null) => void
   setSourceSnapshot: (sourceSnapshot: AIApplySnapshot | null) => void
@@ -793,6 +798,10 @@ export function createInitialAIComposerState(): AIComposerState {
     explanationText: '',
     warningText: null,
     sourceLabel: null,
+    retrievalExecuted: false,
+    retrievalQuery: null,
+    retrievalResults: [],
+    retrievalResultCount: null,
     diffBaseText: null,
     threadId: null,
     startedAt: null,
@@ -848,6 +857,14 @@ export const useAIStore = create<AIStoreState>()(
         set((state) => ({ composer: { ...state.composer, warningText } })),
       setSourceLabel: (sourceLabel) =>
         set((state) => ({ composer: { ...state.composer, sourceLabel } })),
+      setRetrievalExecuted: (retrievalExecuted) =>
+        set((state) => ({ composer: { ...state.composer, retrievalExecuted } })),
+      setRetrievalQuery: (retrievalQuery) =>
+        set((state) => ({ composer: { ...state.composer, retrievalQuery } })),
+      setRetrievalResults: (retrievalResults) =>
+        set((state) => ({ composer: { ...state.composer, retrievalResults } })),
+      setRetrievalResultCount: (retrievalResultCount) =>
+        set((state) => ({ composer: { ...state.composer, retrievalResultCount } })),
       setDiffBaseText: (diffBaseText) => set((state) => ({ composer: { ...state.composer, diffBaseText } })),
       setThreadId: (threadId) => set((state) => ({ composer: { ...state.composer, threadId } })),
       setSourceSnapshot: (sourceSnapshot) => set((state) => ({ composer: { ...state.composer, sourceSnapshot } })),
@@ -871,6 +888,10 @@ export const useAIStore = create<AIStoreState>()(
             explanationText: '',
             warningText: null,
             sourceLabel: null,
+            retrievalExecuted: false,
+            retrievalQuery: null,
+            retrievalResults: [],
+            retrievalResultCount: null,
           },
         })),
       finishRequest: () =>
@@ -899,6 +920,10 @@ export const useAIStore = create<AIStoreState>()(
             explanationText: '',
             warningText: null,
             sourceLabel: null,
+            retrievalExecuted: false,
+            retrievalQuery: null,
+            retrievalResults: [],
+            retrievalResultCount: null,
             diffBaseText: null,
             errorMessage: null,
             startedAt: null,

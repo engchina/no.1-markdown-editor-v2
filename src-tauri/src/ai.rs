@@ -149,6 +149,16 @@ pub struct AiRunCompletionRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct AiRetrievalResultPreview {
+    pub title: String,
+    #[serde(default)]
+    pub detail: Option<String>,
+    #[serde(default)]
+    pub snippet: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct AiRunCompletionResponse {
     pub text: String,
     pub finish_reason: Option<String>,
@@ -159,6 +169,14 @@ pub struct AiRunCompletionResponse {
     pub explanation_text: Option<String>,
     pub warning_text: Option<String>,
     pub source_label: Option<String>,
+    #[serde(default)]
+    pub retrieval_executed: bool,
+    #[serde(default)]
+    pub retrieval_query: Option<String>,
+    #[serde(default)]
+    pub retrieval_results: Vec<AiRetrievalResultPreview>,
+    #[serde(default)]
+    pub retrieval_result_count: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -171,6 +189,8 @@ struct AiFileSearchCallObservation {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct AiFileSearchObservation {
     calls_by_id: HashMap<String, AiFileSearchCallObservation>,
+    ordered_queries: Vec<String>,
+    result_previews: Vec<AiRetrievalResultPreview>,
 }
 
 impl AiFileSearchObservation {
@@ -193,15 +213,16 @@ impl AiFileSearchObservation {
     }
 
     fn first_query(&self) -> Option<String> {
-        let mut queries = self
-            .calls_by_id
-            .values()
-            .flat_map(|call| call.queries.iter().cloned())
-            .filter(|query| !query.trim().is_empty())
-            .collect::<Vec<_>>();
-        queries.sort();
-        queries.dedup();
-        queries.into_iter().next()
+        self.ordered_queries.first().cloned().or_else(|| {
+            self.calls_by_id
+                .values()
+                .flat_map(|call| call.queries.iter().cloned())
+                .find(|query| !query.trim().is_empty())
+        })
+    }
+
+    fn result_previews(&self) -> Vec<AiRetrievalResultPreview> {
+        self.result_previews.clone()
     }
 }
 
@@ -533,6 +554,10 @@ async fn run_oci_nl2sql_draft_completion(
         explanation_text,
         warning_text,
         source_label: Some(store.label.clone()),
+        retrieval_executed: false,
+        retrieval_query: None,
+        retrieval_results: vec![],
+        retrieval_result_count: None,
     })
 }
 
@@ -638,6 +663,10 @@ async fn run_hosted_agent_completion<R: Runtime>(
         explanation_text: Some("Returned by the configured Oracle hosted agent.".to_string()),
         warning_text: None,
         source_label: Some(profile.label.clone()),
+        retrieval_executed: false,
+        retrieval_query: None,
+        retrieval_results: vec![],
+        retrieval_result_count: None,
     })
 }
 
@@ -1439,10 +1468,11 @@ fn finalize_document_store_response(
         );
     }
 
-    response.text =
-        format_document_store_vector_search_response_text(&response.text, query.as_deref());
-
     response.source_label = source_label.clone();
+    response.retrieval_executed = true;
+    response.retrieval_query = query.clone();
+    response.retrieval_results = observation.result_previews();
+    response.retrieval_result_count = result_count;
     response.explanation_text = Some(build_document_store_grounding_explanation(
         source_label.as_deref(),
         query.as_deref(),
@@ -1450,77 +1480,6 @@ fn finalize_document_store_response(
     ));
 
     ensure_ai_response_contains_text(response)
-}
-
-fn format_document_store_vector_search_response_text(text: &str, query: Option<&str>) -> String {
-    let trimmed_text = text.trim();
-    let Some(query) = query.map(str::trim).filter(|value| !value.is_empty()) else {
-        return trimmed_text.to_string();
-    };
-
-    let query_line = json!({ "query": query }).to_string();
-    let normalized_rest =
-        strip_document_store_query_prefix(trimmed_text).trim_start_matches(['\r', '\n']);
-
-    if normalized_rest.is_empty() {
-        query_line
-    } else {
-        format!("{query_line}\n{normalized_rest}")
-    }
-}
-
-fn strip_document_store_query_prefix(text: &str) -> &str {
-    let Some(prefix_end) = find_leading_json_object_end(text) else {
-        return text;
-    };
-
-    let candidate = &text[..prefix_end];
-    match serde_json::from_str::<Value>(candidate) {
-        Ok(Value::Object(map)) if map.get("query").and_then(Value::as_str).is_some() => {
-            &text[prefix_end..]
-        }
-        _ => text,
-    }
-}
-
-fn find_leading_json_object_end(text: &str) -> Option<usize> {
-    let mut depth = 0usize;
-    let mut in_string = false;
-    let mut escaped = false;
-
-    for (index, character) in text.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-
-        if in_string {
-            match character {
-                '\\' => escaped = true,
-                '"' => in_string = false,
-                _ => {}
-            }
-            continue;
-        }
-
-        match character {
-            '"' => in_string = true,
-            '{' => depth += 1,
-            '}' => {
-                if depth == 0 {
-                    return None;
-                }
-
-                depth -= 1;
-                if depth == 0 {
-                    return Some(index + character.len_utf8());
-                }
-            }
-            _ => {}
-        }
-    }
-
-    None
 }
 
 fn build_document_store_grounding_explanation(
@@ -1732,6 +1691,10 @@ fn extract_ai_completion_response(response_json: Value) -> Result<AiRunCompletio
         explanation_text: None,
         warning_text: None,
         source_label: None,
+        retrieval_executed: false,
+        retrieval_query: None,
+        retrieval_results: vec![],
+        retrieval_result_count: None,
     })
 }
 
@@ -1807,6 +1770,10 @@ async fn read_ai_streaming_completion_response<R: Runtime>(
             explanation_text: None,
             warning_text: None,
             source_label: None,
+            retrieval_executed: false,
+            retrieval_query: None,
+            retrieval_results: vec![],
+            retrieval_result_count: None,
         },
         file_search_observation,
     ))
@@ -1951,14 +1918,23 @@ fn collect_ai_file_search_observation(
                 }
                 for query in queries {
                     if !entry.queries.iter().any(|existing| existing == &query) {
-                        entry.queries.push(query);
+                        entry.queries.push(query.clone());
+                    }
+                    if !observation
+                        .ordered_queries
+                        .iter()
+                        .any(|existing| existing == &query)
+                    {
+                        observation.ordered_queries.push(query.clone());
                     }
                 }
 
                 if let Some(results) = map.get("results") {
                     entry.result_count = Some(resolve_ai_file_search_result_count(results));
+                    collect_ai_file_search_result_previews(results, observation);
                 } else if let Some(results) = map.get("search_results") {
                     entry.result_count = Some(resolve_ai_file_search_result_count(results));
+                    collect_ai_file_search_result_previews(results, observation);
                 }
             }
 
@@ -1972,6 +1948,119 @@ fn collect_ai_file_search_observation(
 
 fn resolve_ai_file_search_result_count(results: &Value) -> usize {
     results.as_array().map(|items| items.len()).unwrap_or(0)
+}
+
+fn collect_ai_file_search_result_previews(
+    results: &Value,
+    observation: &mut AiFileSearchObservation,
+) {
+    let Some(items) = results.as_array() else {
+        return;
+    };
+
+    for (index, item) in items.iter().enumerate() {
+        let Some(preview) = extract_ai_file_search_result_preview(item, index) else {
+            continue;
+        };
+
+        if !observation
+            .result_previews
+            .iter()
+            .any(|existing| existing == &preview)
+        {
+            observation.result_previews.push(preview);
+        }
+    }
+}
+
+fn extract_ai_file_search_result_preview(
+    value: &Value,
+    index: usize,
+) -> Option<AiRetrievalResultPreview> {
+    let map = value.as_object()?;
+    let title = read_trimmed_json_string_field(
+        map,
+        &[
+            "filename",
+            "file_name",
+            "title",
+            "document_name",
+            "path",
+            "source",
+            "id",
+        ],
+    )
+    .map(str::to_string)
+    .unwrap_or_else(|| format!("Result {}", index + 1));
+    let detail = read_trimmed_json_string_field(
+        map,
+        &["path", "document_path", "source", "document_id", "id"],
+    )
+    .filter(|detail| *detail != title)
+    .map(str::to_string);
+    let snippet = extract_ai_file_search_result_snippet(map);
+
+    if title.trim().is_empty() && detail.is_none() && snippet.is_none() {
+        return None;
+    }
+
+    Some(AiRetrievalResultPreview {
+        title,
+        detail,
+        snippet,
+    })
+}
+
+fn extract_ai_file_search_result_snippet(map: &serde_json::Map<String, Value>) -> Option<String> {
+    let direct_snippet = read_trimmed_json_string_field(
+        map,
+        &[
+            "text",
+            "snippet",
+            "excerpt",
+            "summary",
+            "chunk_text",
+            "page_content",
+        ],
+    )
+    .map(str::to_string)
+    .or_else(|| map.get("content").and_then(extract_content_text));
+
+    direct_snippet
+        .map(|value| truncate_ai_preview_text(&value, 220))
+        .filter(|value| !value.is_empty())
+}
+
+fn read_trimmed_json_string_field<'a>(
+    map: &'a serde_json::Map<String, Value>,
+    keys: &[&str],
+) -> Option<&'a str> {
+    for key in keys {
+        let value = map
+            .get(*key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if value.is_some() {
+            return value;
+        }
+    }
+
+    None
+}
+
+fn truncate_ai_preview_text(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let truncated = trimmed.chars().take(max_chars).collect::<String>();
+    if trimmed.chars().count() <= max_chars {
+        truncated
+    } else {
+        format!("{truncated}...")
+    }
 }
 
 fn collect_ai_sse_data(event: &str) -> String {
@@ -2217,6 +2306,7 @@ mod tests {
     use super::AiOracleUnstructuredStoreRegistration;
     use super::AiProviderConfig;
     use super::AiRequestMessage;
+    use super::AiRetrievalResultPreview;
     use super::AiRunCompletionRequest;
     use super::AiRunCompletionResponse;
     use super::AI_PROVIDER_PROJECT_HEADER;
@@ -2283,6 +2373,10 @@ mod tests {
             explanation_text: None,
             warning_text: None,
             source_label: None,
+            retrieval_executed: false,
+            retrieval_query: None,
+            retrieval_results: vec![],
+            retrieval_result_count: None,
         }
     }
 
@@ -2628,8 +2722,8 @@ mod tests {
                             "status": "completed",
                             "queries": ["oracle ai vector search"],
                             "results": [
-                                { "filename": "whats-new.md" },
-                                { "filename": "release-notes.md" }
+                                { "filename": "whats-new.md", "text": "Vector search now supports richer passage retrieval." },
+                                { "filename": "release-notes.md", "text": "Release notes highlight ranking improvements." }
                             ]
                         },
                         {
@@ -2660,6 +2754,12 @@ mod tests {
                 .and_then(|call| call.status.as_deref()),
             Some("completed")
         );
+        assert_eq!(observation.result_previews.len(), 2);
+        assert_eq!(observation.result_previews[0].title, "whats-new.md");
+        assert_eq!(
+            observation.result_previews[0].snippet.as_deref(),
+            Some("Vector search now supports richer passage retrieval.")
+        );
     }
 
     #[test]
@@ -2675,6 +2775,8 @@ mod tests {
                     result_count: Some(0),
                 },
             )]),
+            ordered_queries: vec!["oracle ai vector search".to_string()],
+            result_previews: vec![],
         };
 
         let finalized = finalize_document_store_response(
@@ -2685,11 +2787,14 @@ mod tests {
         )
         .expect("finalize document-store response");
 
-        assert!(finalized
-            .text
-            .starts_with("{\"query\":\"oracle ai vector search\"}\n"));
         assert!(finalized.text.contains("関連情報を見つけられませんでした"));
         assert_eq!(finalized.source_label.as_deref(), Some("Product Docs"));
+        assert_eq!(
+            finalized.retrieval_query.as_deref(),
+            Some("oracle ai vector search")
+        );
+        assert_eq!(finalized.retrieval_result_count, Some(0));
+        assert!(finalized.retrieval_results.is_empty());
         assert_eq!(
             finalized.warning_text.as_deref(),
             Some(
@@ -2704,7 +2809,7 @@ mod tests {
     }
 
     #[test]
-    fn finalize_document_store_response_prefixes_retrieval_query_with_newline() {
+    fn finalize_document_store_response_exposes_retrieval_query_and_results() {
         let request = sample_unstructured_request("メイのあねはだれですか？");
         let response = sample_stream_response("メイの姉はサツキです。");
         let observation = AiFileSearchObservation {
@@ -2716,6 +2821,14 @@ mod tests {
                     result_count: Some(1),
                 },
             )]),
+            ordered_queries: vec!["Who is Mei's sister?".to_string()],
+            result_previews: vec![AiRetrievalResultPreview {
+                title: "totoro-character-guide.md".to_string(),
+                detail: Some("references/totoro-character-guide.md".to_string()),
+                snippet: Some(
+                    "Satsuki is Mei's older sister and acts as her guardian.".to_string(),
+                ),
+            }],
         };
 
         let finalized = finalize_document_store_response(
@@ -2726,39 +2839,16 @@ mod tests {
         )
         .expect("finalize document-store response");
 
+        assert_eq!(finalized.text, "メイの姉はサツキです。");
         assert_eq!(
-            finalized.text,
-            "{\"query\":\"Who is Mei's sister?\"}\nメイの姉はサツキです。"
+            finalized.retrieval_query.as_deref(),
+            Some("Who is Mei's sister?")
         );
-    }
-
-    #[test]
-    fn finalize_document_store_response_normalizes_existing_query_prefix_separator() {
-        let request = sample_unstructured_request("メイのあねはだれですか？");
-        let response =
-            sample_stream_response("{\"query\":\"Who is Mei's sister?\"}メイの姉はサツキです。");
-        let observation = AiFileSearchObservation {
-            calls_by_id: HashMap::from([(
-                "fs_1".to_string(),
-                AiFileSearchCallObservation {
-                    status: Some("completed".to_string()),
-                    queries: vec!["Who is Mei's sister?".to_string()],
-                    result_count: Some(1),
-                },
-            )]),
-        };
-
-        let finalized = finalize_document_store_response(
-            response,
-            &request,
-            Some("Product Docs".to_string()),
-            &observation,
-        )
-        .expect("finalize document-store response");
-
+        assert_eq!(finalized.retrieval_result_count, Some(1));
+        assert_eq!(finalized.retrieval_results.len(), 1);
         assert_eq!(
-            finalized.text,
-            "{\"query\":\"Who is Mei's sister?\"}\nメイの姉はサツキです。"
+            finalized.retrieval_results[0].title,
+            "totoro-character-guide.md"
         );
     }
 
@@ -2776,6 +2866,8 @@ mod tests {
                     result_count: Some(1),
                 },
             )]),
+            ordered_queries: vec!["Who is Mei's sister?".to_string()],
+            result_previews: vec![],
         };
 
         let finalized = finalize_document_store_response(
@@ -2786,9 +2878,11 @@ mod tests {
         )
         .expect("finalize document-store response");
 
+        assert_eq!(finalized.text, "Mei's sister is Satsuki.");
         assert_eq!(
-            finalized.text,
-            "{\"query\":\"Who is Mei's sister?\"}\nMei's sister is Satsuki."
+            finalized.retrieval_query.as_deref(),
+            Some("Who is Mei's sister?")
         );
+        assert_eq!(finalized.retrieval_result_count, Some(1));
     }
 }

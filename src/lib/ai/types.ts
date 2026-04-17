@@ -42,7 +42,7 @@ export type AIInvocationCapability =
   | 'rag-unstructured'
   | 'nl2sql-draft'
   | 'structured-execution'
-export type AIKnowledgeType = 'none' | 'docs' | 'data'
+export type AIKnowledgeType = 'none' | 'docs' | 'data' | 'agent'
 export type AIOracleStructuredStoreMode = 'sql-draft' | 'agent-answer'
 export type AIHostedAgentTransport = 'http-json' | 'sse'
 export type AIHostedAgentSupportedContract = 'chat-text' | 'structured-data-answer'
@@ -219,6 +219,16 @@ export interface AIRunCompletionResponse {
   explanationText: string | null
   warningText: string | null
   sourceLabel: string | null
+  retrievalExecuted: boolean
+  retrievalQuery: string | null
+  retrievalResults: AIRetrievalResultPreview[]
+  retrievalResultCount: number | null
+}
+
+export interface AIRetrievalResultPreview {
+  title: string
+  detail: string | null
+  snippet: string | null
 }
 
 export interface AIProviderState {
@@ -261,6 +271,10 @@ export interface AIComposerState {
   explanationText: string
   warningText: string | null
   sourceLabel: string | null
+  retrievalExecuted: boolean
+  retrievalQuery: string | null
+  retrievalResults: AIRetrievalResultPreview[]
+  retrievalResultCount: number | null
   diffBaseText: string | null
   threadId: string | null
   startedAt: number | null

@@ -289,6 +289,18 @@
       "empty": "结果会显示在这里。",
       "noDiff": "只有替换现有内容时才会显示差异预览。"
     },
+    "retrieval": {
+      "title": "Query 与搜索结果",
+      "summary": "共检索到 {{count}} 条结果",
+      "summaryUnavailable": "可查看检索元数据",
+      "query": "Query",
+      "results": "搜索结果",
+      "resultsCount": "{{count}} 条",
+      "show": "展开",
+      "hide": "收起",
+      "noQuery": "provider 没有返回实际执行的检索 query。",
+      "noResults": "provider 没有返回搜索结果预览。"
+    },
     "requestState": {
       "idle": "空闲",
       "streaming": "生成中",
@@ -380,7 +392,7 @@
       "missingTitle": "AI 设置尚未完成",
       "missingMessage": "运行 AI 操作前，请先填写兼容的 Base URL、模型和 API Key。",
       "hostedAgentMissingTitle": "Hosted Agent 设置未完成",
-      "hostedAgentMissingMessage": "执行结构化数据回答前，请先选择 Agent Profile 并保存对应密钥。",
+      "hostedAgentMissingMessage": "运行 Agent 前，请先选择 Agent Profile 并保存对应密钥。",
       "baseUrl": "Base URL",
       "model": "模型",
       "project": "Project",
@@ -436,7 +448,8 @@
       "type": {
         "none": "无",
         "docs": "文档",
-        "data": "数据"
+        "data": "数据",
+        "agent": "Agent"
       },
       "structuredAction": {
         "sqlDraft": "SQL 草稿",

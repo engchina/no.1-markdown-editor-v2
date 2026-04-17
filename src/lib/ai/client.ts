@@ -231,6 +231,13 @@ function runBrowserMockCompletion(
 
 function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCompletionResponse, 'requestId'> {
   const prompt = request.prompt.toLowerCase()
+  const noRetrieval = {
+    retrievalExecuted: false,
+    retrievalQuery: null,
+    retrievalResults: [],
+    retrievalResultCount: null,
+  }
+
   if (prompt.includes('[ai-history-ranking]')) {
     return {
       text: buildBrowserMockHistoryRerankText(request.prompt),
@@ -241,6 +248,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: null,
       warningText: null,
       sourceLabel: null,
+      ...noRetrieval,
     }
   }
 
@@ -260,6 +268,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: 'Drafted from the selected semantic store using the current natural-language request.',
       warningText: 'Review table names and predicates before running this SQL against production data.',
       sourceLabel: 'Analytics Schema',
+      ...noRetrieval,
     }
   }
 
@@ -273,6 +282,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: 'Returned by the configured Oracle hosted agent profile.',
       warningText: null,
       sourceLabel: 'Analytics Agent',
+      ...noRetrieval,
     }
   }
 
@@ -309,6 +319,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: null,
       warningText: null,
       sourceLabel: null,
+      ...noRetrieval,
     }
   }
 
@@ -322,6 +333,21 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: 'Generated with file search over the selected unstructured store.',
       warningText: null,
       sourceLabel: 'Product Docs',
+      retrievalExecuted: true,
+      retrievalQuery: request.prompt.trim() || 'vector search query',
+      retrievalResults: [
+        {
+          title: 'mei-family-notes.md',
+          detail: 'references/mei-family-notes.md',
+          snippet: 'Satsuki is Mei\'s older sister and usually looks after her.',
+        },
+        {
+          title: 'totoro-character-guide.md',
+          detail: 'references/totoro-character-guide.md',
+          snippet: 'The character guide identifies Mei as the younger sister in the family.',
+        },
+      ],
+      retrievalResultCount: 2,
     }
   }
 
@@ -335,6 +361,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: null,
       warningText: null,
       sourceLabel: null,
+      ...noRetrieval,
     }
   }
   if (prompt.includes('continue')) {
@@ -347,6 +374,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: null,
       warningText: null,
       sourceLabel: null,
+      ...noRetrieval,
     }
   }
   if (prompt.includes('summarize')) {
@@ -359,6 +387,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
       explanationText: null,
       warningText: null,
       sourceLabel: null,
+      ...noRetrieval,
     }
   }
 
@@ -371,6 +400,7 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
     explanationText: null,
     warningText: null,
     sourceLabel: null,
+    ...noRetrieval,
   }
 }
 
