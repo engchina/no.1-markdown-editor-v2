@@ -22,3 +22,13 @@ test('renderInlineMarkdownFragment preserves inline html breaks for table cells'
 
   assert.match(html, /Line 1<br\s*\/?>Line 2/u)
 })
+
+test('renderInlineMarkdownFragment can expose visible break markers for table-cell WYSIWYG rendering', () => {
+  const html = renderInlineMarkdownFragment('Line 1<br />Line 2<br /><br />', {
+    tableLineBreakMode: 'placeholder',
+  })
+
+  assert.doesNotMatch(html, /<br\s*\/?>/u)
+  assert.match(html, /Line 1<span class="cm-wysiwyg-table__line-break-marker">&lt;br \/&gt;<\/span>Line 2/u)
+  assert.equal((html.match(/cm-wysiwyg-table__line-break-marker/gu) ?? []).length, 3)
+})

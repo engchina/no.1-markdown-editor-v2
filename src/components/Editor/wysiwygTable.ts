@@ -18,6 +18,7 @@ export type WysiwygTableCellSelectionBehavior = 'preserve' | 'start' | 'end'
 export type WysiwygTableKeyCommand =
   | 'arrow-up'
   | 'arrow-down'
+  | 'backspace'
   | 'enter'
   | 'tab'
   | 'shift-tab'
@@ -44,6 +45,9 @@ export type WysiwygTableKeyAction =
   | {
     kind: 'insert-inline-break'
     insertText: '<br />'
+  }
+  | {
+    kind: 'noop'
   }
   | {
     kind: 'exit-table'
@@ -222,6 +226,12 @@ export function resolveTableKeyAction(
         ? { kind: 'focus-cell', location: nextLocation, selectionBehavior: 'preserve' }
         : null
     }
+    case 'backspace': {
+      const nextLocation = resolveAdjacentTableCellLocation(table, location, 'previous')
+      return nextLocation
+        ? { kind: 'focus-cell', location: nextLocation, selectionBehavior: 'end' }
+        : { kind: 'noop' }
+    }
     case 'arrow-down': {
       const nextLocation = resolveAdjacentTableCellLocation(table, location, 'down')
       return nextLocation
@@ -292,26 +302,51 @@ export function isActiveTableCellLocation(
   )
 }
 
+const MARKDOWN_TABLE_BOUNDARY_SPACE_ENTITY = '&nbsp;'
+const markdownTableSpaceEntityPattern = /^(?:&nbsp;|&#160;|&#xa0;)/iu
+
+interface MarkdownTableCellEscapeToken {
+  displayText: '|' | ' '
+  rawLength: number
+}
+
 export function decodeMarkdownTableCellText(text: string): string {
   let output = ''
 
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]
-    const next = text[index + 1]
-    if (char === '\\' && next === '|') {
-      output += '|'
-      index += 1
+  for (let index = 0; index < text.length;) {
+    const escape = readMarkdownTableCellEscape(text, index)
+    if (escape) {
+      output += escape.displayText
+      index += escape.rawLength
       continue
     }
 
-    output += char
+    output += text[index]
+    index += 1
   }
 
   return output
 }
 
 export function encodeMarkdownTableCellText(value: string): string {
-  return value.replace(/\|/g, '\\|')
+  const text = String(value ?? '')
+  const leadingSpaces = countLeadingMarkdownTableBoundarySpaces(text)
+  const trailingSpaces = countTrailingMarkdownTableBoundarySpaces(text)
+  let output = ''
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (char === '|') {
+      output += '\\|'
+      continue
+    }
+
+    const isBoundarySpace = char === ' ' &&
+      (index < leadingSpaces || index >= text.length - trailingSpaces)
+    output += isBoundarySpace ? MARKDOWN_TABLE_BOUNDARY_SPACE_ENTITY : char
+  }
+
+  return output
 }
 
 export function resolveDecodedTableCellOffset(rawText: string, rawOffset: number): number {
@@ -320,8 +355,9 @@ export function resolveDecodedTableCellOffset(rawText: string, rawOffset: number
   let displayIndex = 0
 
   while (rawIndex < cappedOffset) {
-    if (rawText[rawIndex] === '\\' && rawText[rawIndex + 1] === '|' && rawIndex + 2 <= cappedOffset) {
-      rawIndex += 2
+    const escape = readMarkdownTableCellEscape(rawText, rawIndex)
+    if (escape) {
+      rawIndex += Math.min(escape.rawLength, cappedOffset - rawIndex)
       displayIndex += 1
       continue
     }
@@ -335,10 +371,55 @@ export function resolveDecodedTableCellOffset(rawText: string, rawOffset: number
 
 export function resolveEncodedTableCellOffset(displayText: string, displayOffset: number): number {
   const cappedOffset = Math.max(0, Math.min(displayOffset, displayText.length))
-  return encodeMarkdownTableCellText(displayText.slice(0, cappedOffset)).length
+  const leadingSpaces = countLeadingMarkdownTableBoundarySpaces(displayText)
+  const trailingSpaces = countTrailingMarkdownTableBoundarySpaces(displayText)
+  let rawOffset = 0
+
+  for (let index = 0; index < cappedOffset; index += 1) {
+    const char = displayText[index]
+    if (char === '|') {
+      rawOffset += 2
+      continue
+    }
+
+    const isBoundarySpace = char === ' ' &&
+      (index < leadingSpaces || index >= displayText.length - trailingSpaces)
+    rawOffset += isBoundarySpace ? MARKDOWN_TABLE_BOUNDARY_SPACE_ENTITY.length : 1
+  }
+
+  return rawOffset
 }
 
 function buildEmptyMarkdownTableBodyRow(columnCount: number): string {
   if (columnCount < 1) return ''
   return `| ${Array.from({ length: columnCount }, () => '').join(' | ')} |`
+}
+
+function readMarkdownTableCellEscape(text: string, index: number): MarkdownTableCellEscapeToken | null {
+  if (text[index] === '\\' && text[index + 1] === '|') {
+    return { displayText: '|', rawLength: 2 }
+  }
+
+  const match = text.slice(index).match(markdownTableSpaceEntityPattern)
+  if (!match) return null
+  return {
+    displayText: ' ',
+    rawLength: match[0].length,
+  }
+}
+
+function countLeadingMarkdownTableBoundarySpaces(text: string): number {
+  let count = 0
+  while (count < text.length && text[count] === ' ') {
+    count += 1
+  }
+  return count
+}
+
+function countTrailingMarkdownTableBoundarySpaces(text: string): number {
+  let count = 0
+  while (count < text.length && text[text.length - count - 1] === ' ') {
+    count += 1
+  }
+  return count
 }

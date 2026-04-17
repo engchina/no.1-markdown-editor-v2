@@ -23,6 +23,19 @@ const TABLE_KEYBOARD_MARKDOWN = [
   '| gamma | delta |',
   'after table',
 ].join('\n')
+const TABLE_BACKSPACE_MARKDOWN = [
+  '| Left | Right |',
+  '| --- | ---: |',
+  '| alpha |  |',
+  '| gamma | delta |',
+  'after table',
+].join('\n')
+const TABLE_FIRST_CELL_BACKSPACE_MARKDOWN = [
+  '|  | Right |',
+  '| --- | ---: |',
+  '| alpha | beta |',
+  'after table',
+].join('\n')
 const ORDINARY_INSERTION = ' ordinary smoke'
 const PASTE_INSERTION = ' paste smoke'
 const AI_INSERTION = ' ai smoke'
@@ -924,6 +937,52 @@ async function runWysiwygTableKeyboardScenario(page, diagnostics) {
   diagnostics.wysiwygTableTabNavigation = await readEditorSnapshot(page)
 
   await resetEditor(page, {
+    content: TABLE_BACKSPACE_MARKDOWN,
+    name: 'wysiwyg-table-backspace.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table Backspace rendered table'
+  )
+
+  await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 1 })
+  await page.keyboard.press('Backspace')
+  await waitForActiveTableInputState(page, {
+    section: 'body',
+    rowIndex: 0,
+    columnIndex: 0,
+    value: 'alpha',
+    selectionStart: 5,
+    selectionEnd: 5,
+  }, 'WYSIWYG table Backspace empty-cell navigation')
+  diagnostics.wysiwygTableBackspaceNavigation = await readEditorSnapshot(page)
+  assert.equal(diagnostics.wysiwygTableBackspaceNavigation?.docText, TABLE_BACKSPACE_MARKDOWN)
+
+  await resetEditor(page, {
+    content: TABLE_FIRST_CELL_BACKSPACE_MARKDOWN,
+    name: 'wysiwyg-table-backspace-first-cell.md',
+    wysiwygMode: true,
+  })
+  await waitForCondition(
+    async () => (await readEditorSnapshot(page))?.hasWysiwygTable === true,
+    'WYSIWYG table first-cell Backspace rendered table'
+  )
+
+  await activateTableCell(page, { section: 'head', rowIndex: 0, columnIndex: 0 })
+  await page.keyboard.press('Backspace')
+  await waitForActiveTableInputState(page, {
+    section: 'head',
+    rowIndex: 0,
+    columnIndex: 0,
+    value: '',
+    selectionStart: 0,
+    selectionEnd: 0,
+  }, 'WYSIWYG table Backspace first-cell noop')
+  diagnostics.wysiwygTableBackspaceFirstCell = await readEditorSnapshot(page)
+  assert.equal(diagnostics.wysiwygTableBackspaceFirstCell?.docText, TABLE_FIRST_CELL_BACKSPACE_MARKDOWN)
+
+  await resetEditor(page, {
     content: TABLE_KEYBOARD_MARKDOWN,
     name: 'wysiwyg-table-tab-insert-row.md',
     wysiwygMode: true,
@@ -1057,7 +1116,11 @@ async function runWysiwygTableKeyboardScenario(page, diagnostics) {
   await activateTableCell(page, { section: 'body', rowIndex: 0, columnIndex: 1 })
   const renderedHtml = await readRenderedTableCellHtml(page, { section: 'body', rowIndex: 0, columnIndex: 0 })
   diagnostics.wysiwygTableShiftEnterRenderedHtml = renderedHtml
-  assert.match(renderedHtml ?? '', /alpha<br\s*\/?>/u, 'WYSIWYG table Shift+Enter should render a visible line break')
+  assert.match(
+    renderedHtml ?? '',
+    /alpha<span class="cm-wysiwyg-table__line-break-marker">&lt;br \/&gt;<\/span>/u,
+    'WYSIWYG table Shift+Enter should render a visible line-break placeholder'
+  )
 }
 
 async function main() {

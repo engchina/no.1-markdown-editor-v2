@@ -705,6 +705,13 @@ a:focus-visible {
   text-align: left;
 }
 
+.markdown-preview th:empty::before,
+.markdown-preview td:empty::before {
+  content: '\00a0';
+  display: block;
+  visibility: hidden;
+}
+
 .markdown-preview th[align="left"],
 .markdown-preview td[align="left"] {
   text-align: left;

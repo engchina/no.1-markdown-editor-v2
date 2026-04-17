@@ -12,6 +12,11 @@ import { rehypeHighlightMarkers } from '../../lib/rehypeHighlightMarkers.ts'
 import { rehypeSuperscriptMarkers } from '../../lib/rehypeSuperscriptMarkers.ts'
 
 const inlineMarkdownCache = new Map<string, string>()
+const inlineMarkdownWithTableBreakMarkersCache = new Map<string, string>()
+
+interface RenderInlineMarkdownFragmentOptions {
+  tableLineBreakMode?: 'render' | 'placeholder'
+}
 
 const inlineMarkdownProcessor = unified()
   .use(remarkParse)
@@ -25,19 +30,35 @@ const inlineMarkdownProcessor = unified()
   .use(rehypeKatex)
   .use(rehypeStringify)
 
-export function renderInlineMarkdownFragment(markdown: string): string {
+export function renderInlineMarkdownFragment(
+  markdown: string,
+  options: RenderInlineMarkdownFragmentOptions = {}
+): string {
   const source = String(markdown ?? '')
-  const cached = inlineMarkdownCache.get(source)
+  const cache = options.tableLineBreakMode === 'placeholder'
+    ? inlineMarkdownWithTableBreakMarkersCache
+    : inlineMarkdownCache
+  const cached = cache.get(source)
   if (cached !== undefined) return cached
 
   const rendered = String(inlineMarkdownProcessor.processSync(source))
   const normalized = stripSingleParagraphWrapper(rendered)
-  inlineMarkdownCache.set(source, normalized)
-  return normalized
+  const finalized = options.tableLineBreakMode === 'placeholder'
+    ? replaceInlineBreaksWithTableMarkers(normalized)
+    : normalized
+  cache.set(source, finalized)
+  return finalized
 }
 
 function stripSingleParagraphWrapper(html: string): string {
   const trimmed = html.trim()
   const match = trimmed.match(/^<p>([\s\S]*)<\/p>$/u)
   return match ? match[1] : trimmed
+}
+
+function replaceInlineBreaksWithTableMarkers(html: string): string {
+  return html.replace(
+    /<br\s*\/?>/gu,
+    '<span class="cm-wysiwyg-table__line-break-marker">&lt;br /&gt;</span>'
+  )
 }

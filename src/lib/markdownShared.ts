@@ -151,6 +151,7 @@ export function buildStandaloneHtml(
     blockquote > * + * { margin-top: var(--md-quote-space); }
     table { border-collapse: collapse; width: 100%; margin: 0; }
     th, td { border: 1px solid #e5e7eb; padding: 8px 16px; text-align: left; }
+    th:empty::before, td:empty::before { content: '\\00a0'; display: block; visibility: hidden; }
     th[align="left"], td[align="left"] { text-align: left; }
     th[align="center"], td[align="center"] { text-align: center; }
     th[align="right"], td[align="right"] { text-align: right; }

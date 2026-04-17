@@ -24,6 +24,7 @@ test('preview styles explicitly honor left, center, and right table alignment at
   assert.match(css, /\.markdown-preview th\[align="left"\],[\s\S]*text-align:\s*left;/)
   assert.match(css, /\.markdown-preview th\[align="center"\],[\s\S]*text-align:\s*center;/)
   assert.match(css, /\.markdown-preview th\[align="right"\],[\s\S]*text-align:\s*right;/)
+  assert.match(css, /\.markdown-preview th:empty::before,[\s\S]*content:\s*'\\00a0';[\s\S]*display:\s*block;[\s\S]*visibility:\s*hidden;/)
 })
 
 test('standalone exports keep explicit table alignment rules', () => {
@@ -32,4 +33,5 @@ test('standalone exports keep explicit table alignment rules', () => {
   assert.match(html, /th\[align="left"\], td\[align="left"\] \{ text-align: left; \}/)
   assert.match(html, /th\[align="center"\], td\[align="center"\] \{ text-align: center; \}/)
   assert.match(html, /th\[align="right"\], td\[align="right"\] \{ text-align: right; \}/)
+  assert.match(html, /th:empty::before, td:empty::before \{ content: '\\00a0'; display: block; visibility: hidden; \}/)
 })

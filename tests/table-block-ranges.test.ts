@@ -72,6 +72,23 @@ test('collectMarkdownTableBlocks keeps escaped pipes inside a single cell', () =
   assert.equal(tables[0].rows[0].cells[1].text, 'left \\| right')
 })
 
+test('collectMarkdownTableBlocks preserves entity-encoded boundary spaces inside editable cells', () => {
+  const markdown = [
+    '| Header | Notes |',
+    '| --- | --- |',
+    '| alpha | &nbsp;beta&nbsp; |',
+  ].join('\n')
+
+  const tables = collectMarkdownTableBlocks(markdown)
+  const cell = tables[0]?.rows[0]?.cells[1]
+
+  assert.equal(tables.length, 1)
+  assert.ok(cell)
+  assert.equal(cell.text, '&nbsp;beta&nbsp;')
+  assert.equal(cell.editAnchor, markdown.indexOf('&nbsp;beta&nbsp;'))
+  assert.equal(cell.editHead, markdown.indexOf('&nbsp;beta&nbsp;') + '&nbsp;beta&nbsp;'.length)
+})
+
 test('collectMarkdownTableBlocks preserves fully empty body rows so WYSIWYG table row insertion stays editable', () => {
   const markdown = [
     '| Left | Right |',

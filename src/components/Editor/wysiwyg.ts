@@ -355,7 +355,7 @@ function syncTableCellDom(
     return
   }
 
-  const rendered = renderInlineMarkdownFragment(cell.text)
+  const rendered = renderInlineMarkdownFragment(cell.text, { tableLineBreakMode: 'placeholder' })
   if (element.innerHTML !== rendered) {
     element.innerHTML = rendered
   }
@@ -1605,6 +1605,15 @@ function resolveTableKeyCommand(event: KeyboardEvent): WysiwygTableKeyCommand | 
   return 'enter'
 }
 
+function isPlainBackspaceForEmptyTableCell(event: KeyboardEvent, input: HTMLInputElement): boolean {
+  return event.key === 'Backspace' &&
+    input.value.length === 0 &&
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey
+}
+
 function focusTableCellFromKeyboardAction(
   view: EditorView,
   input: HTMLInputElement,
@@ -1740,6 +1749,8 @@ function applyTableKeyCommand(
       return insertTableBodyRowBelow(view, input, resolved, action.plan)
     case 'insert-inline-break':
       return insertInlineBreakInTableCell(view, input, resolved, action.insertText)
+    case 'noop':
+      return true
     case 'exit-table':
       return exitTableFromKeyboardAction(view, input, resolved)
   }
@@ -1760,6 +1771,10 @@ function handleTableInputKeydown(
   if (matchesWysiwygRedoShortcut(event)) {
     dispatchWysiwygHistory('redo')
     return true
+  }
+
+  if (isPlainBackspaceForEmptyTableCell(event, input)) {
+    return applyTableKeyCommand(view, input, 'backspace')
   }
 
   const command = resolveTableKeyCommand(event)
@@ -2025,6 +2040,23 @@ export const wysiwygTheme = EditorView.baseTheme({
     fontFamily: 'var(--font-preview, Inter, system-ui, sans-serif)',
     fontSize: 'inherit',
     fontWeight: '400',
+  },
+  '.cm-wysiwyg-table__head-cell:empty::before, .cm-wysiwyg-table__cell:empty::before': {
+    content: '"\\00a0"',
+    display: 'block',
+    visibility: 'hidden',
+  },
+  '.cm-wysiwyg-table__line-break-marker': {
+    display: 'block',
+    whiteSpace: 'nowrap',
+    color: 'color-mix(in srgb, var(--text-muted) 72%, var(--bg-primary))',
+    fontFamily: 'var(--font-mono, monospace)',
+    fontSize: '0.92em',
+    fontWeight: '500',
+    lineHeight: '1.6',
+    letterSpacing: '0.01em',
+    pointerEvents: 'none',
+    userSelect: 'none',
   },
   '.cm-wysiwyg-table__cell--active': {
     backgroundColor: 'color-mix(in srgb, var(--accent) 7%, var(--bg-primary))',
