@@ -33,6 +33,7 @@ import { findInlineMathRanges } from './wysiwygInlineMath.ts'
 import { renderInlineMarkdownFragment } from './wysiwygInlineMarkdown.ts'
 import { findInlineStrikethroughRanges } from './wysiwygStrikethrough.ts'
 import { findInlineSuperscriptRanges } from './wysiwygSuperscript.ts'
+import { isThematicBreakLine } from './thematicBreak.ts'
 import {
   findInlineFootnoteRanges,
   findBlockFootnoteRanges,
@@ -947,7 +948,7 @@ export function buildWysiwygDecorations(
       }
 
       // ── Horizontal rule ───────────────────────────────────────────────
-      if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(text)) {
+      if (isThematicBreakLine(text)) {
         if (!onLine) {
           queueDecoration(
             decorations,

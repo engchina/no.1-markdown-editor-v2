@@ -1,5 +1,6 @@
 import { collectInlineCodeRanges, findContainingTextRange } from './wysiwygInlineCode.ts'
 import { hasOddTrailingBackslashes } from './wysiwygInlineLiterals.ts'
+import { isThematicBreakLine } from './thematicBreak.ts'
 
 export interface InlineItalicRange {
   from: number
@@ -13,6 +14,8 @@ const UNDERSCORE_ITALIC_PATTERN =
   /(?<![\p{Letter}\p{Number}_])(_)(?![_\s])(.+?)(?<!\s)(_)(?![\p{Letter}\p{Number}_])/gu
 
 export function findInlineItalicRanges(text: string): InlineItalicRange[] {
+  if (isThematicBreakLine(text)) return []
+
   const ranges: InlineItalicRange[] = []
   const excludedRanges = collectInlineCodeRanges(text)
 

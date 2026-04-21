@@ -46,3 +46,9 @@ test('findInlineItalicRanges still supports outer emphasis that contains inline 
 test('findInlineItalicRanges keeps escaped asterisks literal', () => {
   assert.deepEqual(findInlineItalicRanges(String.raw`\*this text is surrounded by literal asterisks\*`), [])
 })
+
+test('findInlineItalicRanges keeps thematic breaks out of italic rendering', () => {
+  assert.deepEqual(findInlineItalicRanges('***'), [])
+  assert.deepEqual(findInlineItalicRanges('* * *'), [])
+  assert.deepEqual(findInlineItalicRanges('  * * *'), [])
+})

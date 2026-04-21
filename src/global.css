@@ -338,6 +338,8 @@ a:focus-visible {
 .cm-editor {
   height: 100%;
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   font-size: inherit;
   line-height: 1.8;
   background-color: transparent !important;
