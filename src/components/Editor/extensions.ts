@@ -9,6 +9,8 @@ import {
   rectangularSelection,
   crosshairCursor,
   placeholder as placeholderExtension,
+  tooltips,
+  type ViewUpdate,
 } from '@codemirror/view'
 import { EditorState, Extension } from '@codemirror/state'
 import { history, defaultKeymap, historyKeymap, indentWithTab } from '@codemirror/commands'
@@ -100,7 +102,7 @@ export const markdownHighlight = [
 export function buildCoreExtensions(options: {
   onChange: (content: string) => void
   onCursorChange: (line: number, col: number) => void
-  onSelectionChange?: (view: EditorView) => void
+  onSelectionChange?: (view: EditorView, update: ViewUpdate) => void
 }): Extension[] {
   return [
     history(),
@@ -113,6 +115,7 @@ export function buildCoreExtensions(options: {
     markdownHighlight,
     indentOnInput(),
     bracketMatching(),
+    tooltips({ position: 'fixed' }),
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap,
@@ -129,7 +132,7 @@ export function buildCoreExtensions(options: {
         options.onCursorChange(line.number, selection - line.from + 1)
       }
       if (update.selectionSet || update.docChanged) {
-        options.onSelectionChange?.(update.view)
+        options.onSelectionChange?.(update.view, update)
       }
     }),
     lightTheme,

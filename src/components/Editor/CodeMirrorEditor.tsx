@@ -142,6 +142,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   const searchCompartmentRef = useRef(new Compartment())
   const autocompleteCompartmentRef = useRef(new Compartment())
   const wysiwygCompartmentRef = useRef(new Compartment())
+  const footnoteHoverCompartmentRef = useRef(new Compartment())
 
   const lineNumbers = useEditorStore((state) => state.lineNumbers)
   const wordWrap = useEditorStore((state) => state.wordWrap)
@@ -160,6 +161,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchSupport, setSearchSupport] = useState<SearchSupport | null>(null)
   const [markdownLanguageExtensions, setMarkdownLanguageExtensions] = useState<Extension[]>([])
+  const [footnoteHoverExtension, setFootnoteHoverExtension] = useState<Extension[]>([])
   const [autocompleteExtensions, setAutocompleteExtensions] = useState<Extension[]>([])
   const [wysiwygExtensions, setWysiwygExtensions] = useState<Extension[]>([])
   const [selectionBubble, setSelectionBubble] = useState<{ top: number; left: number } | null>(null)
@@ -330,9 +332,9 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   )
 
   const syncCursorBottomGap = useCallback(
-    (viewOverride?: EditorView | null) => {
+    (viewOverride?: EditorView | null, isPointerEvent?: boolean) => {
       const view = viewOverride ?? viewRef.current
-      if (!view || !view.hasFocus || typewriterModeRef.current) return
+      if (!view || !view.hasFocus || typewriterModeRef.current || isPointerEvent) return
       keepEditorCursorBottomGap(view)
     },
     []
@@ -461,16 +463,27 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     }
 
     let cancelled = false
-    import('./wysiwygFootnoteHover').then(({ wysiwygFootnoteHoverTooltip }) => {
-      void import('./wysiwyg').then(({ wysiwygPlugin, wysiwygTheme, wysiwygTableDecorations }) => {
-        if (!cancelled) setWysiwygExtensions([wysiwygTableDecorations, wysiwygPlugin, wysiwygTheme, wysiwygFootnoteHoverTooltip])
-      })
+    void import('./wysiwyg').then(({ wysiwygPlugin, wysiwygTheme, wysiwygTableDecorations }) => {
+      if (!cancelled) setWysiwygExtensions([wysiwygTableDecorations, wysiwygPlugin, wysiwygTheme])
     })
 
     return () => {
       cancelled = true
     }
   }, [wysiwygMode])
+
+  useEffect(() => {
+    let cancelled = false
+    import('./wysiwygFootnoteHover').then(({ wysiwygFootnoteHoverTooltip }) => {
+      if (!cancelled) setFootnoteHoverExtension([wysiwygFootnoteHoverTooltip])
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+
 
   useEffect(() => {
     const container = containerRef.current
@@ -487,10 +500,11 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
           if (!isUpdatingRef.current) onChangeRef.current(nextContent)
         },
         onCursorChange: handleCursorChange,
-        onSelectionChange: (view) => {
+        onSelectionChange: (view, update) => {
           syncGhostTextState(view)
           syncProvenanceState(view)
-          syncCursorBottomGap(view)
+          const isPointerEvent = update?.transactions.some((tr) => tr.isUserEvent('select.pointer'))
+          syncCursorBottomGap(view, isPointerEvent)
           scheduleSelectionBubbleUpdate(view)
           scheduleTableExitFocusRestore(view)
         },
@@ -536,6 +550,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       ...createAIGhostTextExtensions(),
       ...createAIProvenanceExtensions(),
       wysiwygCompartmentRef.current.of(wysiwygExtensions),
+      footnoteHoverCompartmentRef.current.of(footnoteHoverExtension),
     ]
 
     const state =
@@ -619,6 +634,10 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   useEffect(() => {
     reconfigure(wysiwygCompartmentRef.current, wysiwygExtensions)
   }, [reconfigure, wysiwygExtensions])
+
+  useEffect(() => {
+    reconfigure(footnoteHoverCompartmentRef.current, footnoteHoverExtension)
+  }, [reconfigure, footnoteHoverExtension])
 
   useEffect(() => {
     const view = viewRef.current

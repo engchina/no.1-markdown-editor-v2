@@ -83,10 +83,13 @@ test('wysiwyg footnote support wires hover tooltip and presentation styles into 
 
   assert.match(editorSource, /import\('\.\/wysiwygFootnoteHover'\)/u)
   assert.match(editorSource, /wysiwygFootnoteHoverTooltip/u)
+  assert.match(editorSource, /const footnoteHoverCompartmentRef = useRef\(new Compartment\(\)\)/u)
   assert.match(
     editorSource,
-    /setWysiwygExtensions\(\[wysiwygTableDecorations, wysiwygPlugin, wysiwygTheme, wysiwygFootnoteHoverTooltip\]\)/u,
+    /setFootnoteHoverExtension\(\[wysiwygFootnoteHoverTooltip\]\)/u,
   )
+  assert.match(editorSource, /footnoteHoverCompartmentRef\.current\.of\(footnoteHoverExtension\)/u)
+  assert.match(editorSource, /reconfigure\(footnoteHoverCompartmentRef\.current, footnoteHoverExtension\)/u)
 
   assert.match(css, /\.cm-wysiwyg-footnote-ref\s*\{/u)
   assert.match(css, /\.cm-wysiwyg-footnote-def-active\s*\{/u)

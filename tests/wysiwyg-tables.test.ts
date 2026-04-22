@@ -395,5 +395,8 @@ test('CodeMirrorEditor restores editor focus when a blank-line selection lands i
   const source = await readFile(new URL('../src/components/Editor/CodeMirrorEditor.tsx', import.meta.url), 'utf8')
 
   assert.match(source, /const scheduleTableExitFocusRestore = useCallback\(\(viewOverride\?: EditorView \| null\) => \{[\s\S]*?collectMarkdownTableBlocks\(view\.state\.doc\.toString\(\)\)[\s\S]*?isBlankLineBelowTableSelection\(view\.state\.doc, tables, selection\.head\)[\s\S]*?view\.focus\(\)/u)
-  assert.match(source, /onSelectionChange: \(view\) => \{[\s\S]*?scheduleTableExitFocusRestore\(view\)/u)
+  assert.match(
+    source,
+    /onSelectionChange: \(view, update\) => \{[\s\S]*?const isPointerEvent = update\?\.transactions\.some\(\(tr\) => tr\.isUserEvent\('select\.pointer'\)\)[\s\S]*?syncCursorBottomGap\(view, isPointerEvent\)[\s\S]*?scheduleTableExitFocusRestore\(view\)/u
+  )
 })
