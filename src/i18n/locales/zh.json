@@ -146,7 +146,13 @@
     "lines": "第 {{line}} 行，第 {{col}} 列",
     "encoding": "UTF-8",
     "language": "Markdown",
-    "saving": "正在保存..."
+    "saving": "正在保存...",
+    "exportingHtml": "正在导出 HTML...",
+    "exportingPdf": "正在导出 PDF...",
+    "exportingMarkdown": "正在导出 Markdown...",
+    "exportHtmlDone": "HTML 已导出",
+    "exportPdfDone": "PDF 已导出",
+    "exportMarkdownDone": "Markdown 已导出"
   },
   "search": {
     "find": "查找",
@@ -705,7 +711,7 @@
     "findReplace": "查找和替换",
     "checkForUpdates": "检查更新",
     "exportHtml": "导出为 HTML",
-    "exportPdf": "打印 / 保存为 PDF",
+    "exportPdf": "导出为 PDF",
     "exportMarkdown": "导出 Markdown",
     "copyPreviewAsHtml": "复制预览为 HTML",
     "aiAsk": "AI：提问",
@@ -856,6 +862,9 @@
     "aiHistoryProviderErrorTitle": "无法通过 provider 重排 AI 历史",
     "aiHistoryProviderErrorMessage": "{{reason}}",
     "fileTreeMoveErrorTitle": "无法移动项目",
+    "exportPdfErrorTitle": "PDF 导出失败",
+    "exportPdfErrorMessage": "原生 PDF 导出未能完成。{{reason}}",
+    "exportPdfErrorReasonFallback": "没有更多错误细节。",
     "copyHtmlSuccessTitle": "HTML 已复制",
     "copyHtmlSuccessMessage": "渲染后的 HTML 已复制到剪贴板。",
     "dismissLabel": "关闭通知"

@@ -658,6 +658,29 @@ test('buildStandaloneHtml can inline KaTeX styles for offline exports', () => {
   assert.doesNotMatch(html, /cdn\.jsdelivr/)
 })
 
+test('buildStandaloneHtml falls back to Untitled for empty titles', () => {
+  const html = buildStandaloneHtml('   ', '<p>Body</p>')
+
+  assert.match(html, /<title>Untitled<\/title>/)
+})
+
+test('buildStandaloneHtml ships @page rules and print-safe overrides for PDF export', () => {
+  const html = buildStandaloneHtml('Print', '<p>Body</p>')
+
+  assert.match(html, /@page \{ size: A4; margin: 18mm 16mm; \}/)
+  assert.match(html, /@media print \{[\s\S]*break-inside: avoid/)
+})
+
+test('buildStandaloneHtml inlines highlight.js token colors for exported code blocks', () => {
+  const html = buildStandaloneHtml(
+    'Code',
+    '<pre><code class="hljs"><span class="hljs-keyword">const</span></code></pre>'
+  )
+
+  assert.match(html, /\.hljs-keyword[^}]*#f97316/)
+  assert.match(html, /\.hljs \{ color: inherit; background: transparent; \}/)
+})
+
 test('getInlineKatexCss replaces KaTeX font urls with data urls', async () => {
   const css = await getInlineKatexCss()
 

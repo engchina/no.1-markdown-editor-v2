@@ -78,7 +78,8 @@ export function buildStandaloneHtml(
     inlineKatexCss?: string
   } = {}
 ): string {
-  const safeTitle = escapeHtml(title)
+  const normalizedTitle = (title ?? '').toString().trim() || 'Untitled'
+  const safeTitle = escapeHtml(normalizedTitle)
   const includesMath = bodyHtml.includes('class="katex"')
   const katexCssBlock = options.inlineKatexCss
     ? `<style data-katex-inline="true">\n${options.inlineKatexCss}\n</style>`
@@ -155,6 +156,17 @@ export function buildStandaloneHtml(
       overflow-x: auto;
     }
     pre code { background: none; padding: 0; color: inherit; }
+    .hljs { color: inherit; background: transparent; }
+    .hljs-comment, .hljs-quote { color: #94a3b8; font-style: italic; }
+    .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-name, .hljs-tag { color: #f97316; }
+    .hljs-string, .hljs-attr, .hljs-template-tag, .hljs-template-variable { color: #4ade80; }
+    .hljs-number, .hljs-symbol, .hljs-bullet, .hljs-variable, .hljs-variable.constant_ { color: #38bdf8; }
+    .hljs-title, .hljs-title.class_, .hljs-title.function_ { color: #c084fc; }
+    .hljs-meta, .hljs-built_in, .hljs-type { color: #facc15; }
+    .hljs-section, .hljs-addition { color: #4ade80; }
+    .hljs-deletion { color: #f87171; }
+    .hljs-emphasis { font-style: italic; }
+    .hljs-strong { font-weight: 700; }
     blockquote {
       padding: var(--md-quote-pad-block) var(--md-quote-pad-inline-end) var(--md-quote-pad-block) var(--md-quote-pad-inline-start);
       color: #4b5563;
@@ -204,8 +216,19 @@ export function buildStandaloneHtml(
       + :is(p, h1, h2, h3, h4, h5, h6, blockquote, ul, ol, pre, table, hr, img, .front-matter) {
       margin-top: var(--md-block-space);
     }
+    @page { size: A4; margin: 18mm 16mm; }
     @media print {
-      body { max-width: 100%; padding: 0; }
+      html, body { background: #fff; }
+      body {
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        font-size: 12pt;
+        line-height: 1.6;
+      }
+      a { color: inherit; text-decoration: underline; }
+      pre, blockquote, table, img { break-inside: avoid; page-break-inside: avoid; }
+      h1, h2, h3, h4, h5, h6 { break-after: avoid; page-break-after: avoid; }
     }
   </style>
 </head>

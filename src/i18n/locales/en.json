@@ -147,7 +147,13 @@
     "lines": "Line {{line}}, Col {{col}}",
     "encoding": "UTF-8",
     "language": "Markdown",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "exportingHtml": "Exporting HTML...",
+    "exportingPdf": "Exporting PDF...",
+    "exportingMarkdown": "Exporting Markdown...",
+    "exportHtmlDone": "HTML exported",
+    "exportPdfDone": "PDF exported",
+    "exportMarkdownDone": "Markdown exported"
   },
   "search": {
     "find": "Find",
@@ -710,7 +716,7 @@
     "findReplace": "Find & Replace",
     "checkForUpdates": "Check for Updates",
     "exportHtml": "Export as HTML",
-    "exportPdf": "Print / Save as PDF",
+    "exportPdf": "Export as PDF",
     "exportMarkdown": "Export Markdown",
     "copyPreviewAsHtml": "Copy Preview as HTML",
     "aiAsk": "AI: Ask",
@@ -862,6 +868,9 @@
     "aiHistoryProviderErrorTitle": "Couldn't rank AI history with the provider",
     "aiHistoryProviderErrorMessage": "{{reason}}",
     "fileTreeMoveErrorTitle": "Couldn't move item",
+    "exportPdfErrorTitle": "PDF export failed",
+    "exportPdfErrorMessage": "The native PDF export could not finish. {{reason}}",
+    "exportPdfErrorReasonFallback": "No additional error details were available.",
     "copyHtmlSuccessTitle": "HTML copied",
     "copyHtmlSuccessMessage": "The rendered HTML is now on the clipboard.",
     "dismissLabel": "Dismiss notification"

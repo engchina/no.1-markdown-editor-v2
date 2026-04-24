@@ -1,10 +1,19 @@
 import { useCallback } from 'react'
+import i18n from '../i18n'
 import { useActiveTab } from '../store/editor'
+import { useExportStatusStore, type ExportActivityKind } from '../store/exportStatus'
 import { buildRichClipboardPayload, writeClipboardPayload } from '../lib/clipboardHtml'
 import { ensureFsPathAccess } from '../lib/fsAccess'
 import { pushErrorNotice, pushSuccessNotice } from '../lib/notices'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+function sanitizeBaseName(name: string): string {
+  const trimmed = (name ?? '').toString().trim()
+  const withoutExt = trimmed.replace(/\.(md|markdown|mdx)$/i, '')
+  const sanitized = withoutExt.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
+  return sanitized || 'Untitled'
+}
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob)
@@ -21,6 +30,59 @@ function downloadBlob(blob: Blob, fileName: string) {
   }, 1000)
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim()
+  }
+
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    const message = (error as { message: string }).message.trim()
+    if (message) return message
+  }
+
+  if (error && typeof error === 'object') {
+    try {
+      const serialized = JSON.stringify(error)
+      if (serialized && serialized !== '{}') return serialized
+    } catch {
+      // ignore serialization errors and fall through to String(...)
+    }
+  }
+
+  const text = String(error ?? '').trim()
+  return text === '[object Object]' ? '' : text
+}
+
+async function waitForPrintableAssets(frameDocument: Document) {
+  const fontsReady =
+    (frameDocument as Document & { fonts?: { ready?: Promise<unknown> } }).fonts?.ready ??
+    Promise.resolve()
+
+  const images = Array.from(frameDocument.images)
+  const imagesReady = images.map((img) => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const done = () => {
+        img.removeEventListener('load', done)
+        img.removeEventListener('error', done)
+        resolve()
+      }
+      img.addEventListener('load', done, { once: true })
+      img.addEventListener('error', done, { once: true })
+    })
+  })
+
+  await Promise.race([
+    Promise.all([fontsReady, ...imagesReady]),
+    new Promise((resolve) => setTimeout(resolve, 4000)),
+  ])
+}
+
 function printHtmlDocument(html: string) {
   const frame = document.createElement('iframe')
   frame.style.position = 'fixed'
@@ -35,18 +97,23 @@ function printHtmlDocument(html: string) {
     if (frame.parentNode) frame.parentNode.removeChild(frame)
   }
 
-  frame.onload = () => {
-    setTimeout(() => {
-      const printWindow = frame.contentWindow
-      if (!printWindow) {
-        cleanup()
-        return
-      }
+  frame.onload = async () => {
+    const printWindow = frame.contentWindow
+    const frameDocument = frame.contentDocument
+    if (!printWindow || !frameDocument) {
+      cleanup()
+      return
+    }
 
-      printWindow.focus()
-      printWindow.print()
-      setTimeout(cleanup, 1000)
-    }, 300)
+    try {
+      await waitForPrintableAssets(frameDocument)
+    } catch {
+      // ignore and continue — fall back to best-effort print
+    }
+
+    printWindow.focus()
+    printWindow.print()
+    setTimeout(cleanup, 1000)
   }
 
   const frameDocument = frame.contentDocument
@@ -60,13 +127,23 @@ function printHtmlDocument(html: string) {
   frameDocument.close()
 }
 
-async function buildExportHtml(markdown: string, title: string, mermaidTheme: 'default' | 'dark' = 'default') {
+async function buildExportHtml(
+  markdown: string,
+  title: string,
+  documentPath: string | null,
+  mermaidTheme: 'default' | 'dark' = 'default'
+) {
   const { buildStandaloneHtml, containsLikelyMath, renderMarkdown } = await import('../lib/markdown')
 
   let bodyHtml = await renderMarkdown(markdown)
   if (bodyHtml.includes('language-mermaid')) {
     const { renderMermaidInHtml } = await import('../lib/mermaid')
     bodyHtml = await renderMermaidInHtml(bodyHtml, mermaidTheme)
+  }
+
+  if (bodyHtml.includes('<img')) {
+    const { inlineLocalImagesForExport } = await import('../lib/exportLocalImages')
+    bodyHtml = await inlineLocalImagesForExport(bodyHtml, { documentPath })
   }
 
   const inlineKatexCss =
@@ -80,6 +157,23 @@ async function buildExportHtml(markdown: string, title: string, mermaidTheme: 'd
   }
 }
 
+async function runWithExportStatus<T>(
+  kind: ExportActivityKind,
+  task: () => Promise<T> | T
+): Promise<T> {
+  const { startExport, finishExportSuccess, clearExportStatus } = useExportStatusStore.getState()
+  startExport(kind)
+
+  try {
+    const result = await task()
+    finishExportSuccess(kind)
+    return result
+  } catch (error) {
+    clearExportStatus()
+    throw error
+  }
+}
+
 export function useExport() {
   const activeTab = useActiveTab()
 
@@ -87,8 +181,9 @@ export function useExport() {
     if (!activeTab) return
 
     try {
-      const fileName = activeTab.name.replace(/\.(md|markdown|mdx)$/i, '') + '.html'
-      const { fullHtml } = await buildExportHtml(activeTab.content, activeTab.name, 'default')
+      const baseName = sanitizeBaseName(activeTab.name)
+      const fileName = `${baseName}.html`
+      const { fullHtml } = await buildExportHtml(activeTab.content, baseName, activeTab.path, 'default')
       if (isTauri) {
         const { save } = await import('@tauri-apps/plugin-dialog')
         const { writeTextFile } = await import('@tauri-apps/plugin-fs')
@@ -97,24 +192,28 @@ export function useExport() {
           defaultPath: fileName,
         })
         if (!path) return
-        await ensureFsPathAccess(path)
-        await writeTextFile(path, fullHtml)
+        await runWithExportStatus('html', async () => {
+          await ensureFsPathAccess(path)
+          await writeTextFile(path, fullHtml)
+        })
         return
       }
 
-      const anchor = document.createElement('a')
-      anchor.style.display = 'none'
-      document.body.appendChild(anchor)
+      await runWithExportStatus('html', async () => {
+        const anchor = document.createElement('a')
+        anchor.style.display = 'none'
+        document.body.appendChild(anchor)
 
-      const url = URL.createObjectURL(new Blob([fullHtml], { type: 'text/html' }))
-      anchor.href = url
-      anchor.download = fileName
-      anchor.click()
+        const url = URL.createObjectURL(new Blob([fullHtml], { type: 'text/html' }))
+        anchor.href = url
+        anchor.download = fileName
+        anchor.click()
 
-      setTimeout(() => {
-        URL.revokeObjectURL(url)
-        document.body.removeChild(anchor)
-      }, 1000)
+        setTimeout(() => {
+          URL.revokeObjectURL(url)
+          document.body.removeChild(anchor)
+        }, 1000)
+      })
     } catch (error) {
       console.error('Export HTML error:', error)
       pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')
@@ -125,7 +224,35 @@ export function useExport() {
     if (!activeTab) return
 
     try {
-      const { fullHtml } = await buildExportHtml(activeTab.content, activeTab.name, 'default')
+      const baseName = sanitizeBaseName(activeTab.name)
+      const { fullHtml } = await buildExportHtml(activeTab.content, baseName, activeTab.path, 'default')
+
+      if (isTauri) {
+        const { save } = await import('@tauri-apps/plugin-dialog')
+        const { invoke } = await import('@tauri-apps/api/core')
+        const targetPath = await save({
+          filters: [{ name: 'PDF', extensions: ['pdf'] }],
+          defaultPath: `${baseName}.pdf`,
+        })
+        if (!targetPath) return
+
+        try {
+          await runWithExportStatus('pdf', async () => {
+            await ensureFsPathAccess(targetPath)
+            await invoke('export_pdf_to_file', { html: fullHtml, outputPath: targetPath })
+          })
+          return
+        } catch (nativeError) {
+          const reason = getErrorMessage(nativeError) || i18n.t('notices.exportPdfErrorReasonFallback')
+          console.error('Silent PDF export failed:', nativeError)
+          pushErrorNotice('notices.exportPdfErrorTitle', 'notices.exportPdfErrorMessage', {
+            values: { reason },
+            timeoutMs: 12_000,
+          })
+          return
+        }
+      }
+
       printHtmlDocument(fullHtml)
     } catch (error) {
       console.error('Export PDF error:', error)
@@ -137,7 +264,7 @@ export function useExport() {
     if (!activeTab) return
 
     try {
-      const fileName = activeTab.name.endsWith('.md') ? activeTab.name : `${activeTab.name}.md`
+      const fileName = `${sanitizeBaseName(activeTab.name)}.md`
       if (isTauri) {
         const { save } = await import('@tauri-apps/plugin-dialog')
         const { writeTextFile } = await import('@tauri-apps/plugin-fs')
@@ -146,12 +273,16 @@ export function useExport() {
           defaultPath: fileName,
         })
         if (!path) return
-        await ensureFsPathAccess(path)
-        await writeTextFile(path, activeTab.content)
+        await runWithExportStatus('markdown', async () => {
+          await ensureFsPathAccess(path)
+          await writeTextFile(path, activeTab.content)
+        })
         return
       }
 
-      downloadBlob(new Blob([activeTab.content], { type: 'text/markdown' }), fileName)
+      await runWithExportStatus('markdown', async () => {
+        downloadBlob(new Blob([activeTab.content], { type: 'text/markdown' }), fileName)
+      })
     } catch (error) {
       console.error('Export Markdown error:', error)
       pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')

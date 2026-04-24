@@ -146,7 +146,13 @@
     "lines": "{{line}}行 {{col}}列",
     "encoding": "UTF-8",
     "language": "Markdown",
-    "saving": "保存中..."
+    "saving": "保存中...",
+    "exportingHtml": "HTML を書き出し中...",
+    "exportingPdf": "PDF を書き出し中...",
+    "exportingMarkdown": "Markdown を書き出し中...",
+    "exportHtmlDone": "HTML を書き出しました",
+    "exportPdfDone": "PDF を書き出しました",
+    "exportMarkdownDone": "Markdown を書き出しました"
   },
   "search": {
     "find": "検索",
@@ -705,7 +711,7 @@
     "findReplace": "検索と置換",
     "checkForUpdates": "アップデートを確認",
     "exportHtml": "HTML として書き出し",
-    "exportPdf": "PDF として印刷・保存",
+    "exportPdf": "PDF として書き出し",
     "exportMarkdown": "Markdown を書き出し",
     "copyPreviewAsHtml": "プレビューを HTML としてコピー",
     "aiAsk": "AI: 質問",
@@ -856,6 +862,9 @@
     "aiHistoryProviderErrorTitle": "provider で AI 履歴を再ランクできませんでした",
     "aiHistoryProviderErrorMessage": "{{reason}}",
     "fileTreeMoveErrorTitle": "項目を移動できませんでした",
+    "exportPdfErrorTitle": "PDF の書き出しに失敗しました",
+    "exportPdfErrorMessage": "ネイティブ PDF 書き出しを完了できませんでした。{{reason}}",
+    "exportPdfErrorReasonFallback": "追加のエラー詳細はありませんでした。",
     "copyHtmlSuccessTitle": "HTML をコピーしました",
     "copyHtmlSuccessMessage": "レンダリング済み HTML をクリップボードにコピーしました。",
     "dismissLabel": "通知を閉じる"

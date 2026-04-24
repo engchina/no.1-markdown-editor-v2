@@ -1,4 +1,5 @@
 mod ai;
+mod pdf_export;
 mod update;
 
 use base64::Engine as _;
@@ -256,6 +257,10 @@ fn is_allowed_editor_navigation(url: &reqwest::Url) -> bool {
     }
 }
 
+fn is_pdf_export_webview_label(label: &str) -> bool {
+    label.starts_with(pdf_export::PDF_WEBVIEW_LABEL_PREFIX)
+}
+
 fn is_editor_loopback_host(host: Option<&str>) -> bool {
     host.is_some_and(|host| {
         matches!(host, "localhost" | "127.0.0.1" | "::1") || host.ends_with(".localhost")
@@ -369,7 +374,14 @@ pub fn run() {
         .manage(ai_oauth_token_cache)
         .plugin(
             tauri::plugin::Builder::<tauri::Wry>::new("editor-navigation-guard")
-                .on_navigation(|_, url| is_allowed_editor_navigation(url))
+                .on_navigation(|webview, url| {
+                    if is_pdf_export_webview_label(webview.label()) {
+                        // Hidden webviews created for silent PDF export are allowed to
+                        // load the local `file://` source html we stage for them.
+                        return true;
+                    }
+                    is_allowed_editor_navigation(url)
+                })
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
@@ -393,6 +405,7 @@ pub fn run() {
             take_pending_open_paths,
             fetch_remote_image_data_url,
             fetch_local_image_data_url,
+            pdf_export::export_pdf_to_file,
             update::check_for_app_update
         ])
         .setup(|_app| {

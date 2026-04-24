@@ -1,6 +1,6 @@
 [package]
 name = "no1-markdown-editor"
-version = "0.17.6"
+version = "0.17.7"
 description = "No.1 Markdown Editor — Free Forever"
 authors = []
 edition = "2021"
@@ -29,6 +29,21 @@ tokio = { version = "1", features = ["rt", "sync"] }
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = "2"
+
+[target."cfg(windows)".dependencies]
+webview2-com = "0.37"
+windows = { version = "0.61", features = ["Win32_Foundation"] }
+
+[target."cfg(target_os = \"macos\")".dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKNavigation", "WKPDFConfiguration", "block2"] }
+block2 = "0.6"
+
+[target."cfg(target_os = \"linux\")".dependencies]
+webkit2gtk = "2.0"
+gtk = "0.18"
+glib = "0.18"
 
 [profile.release]
 panic = "abort"
