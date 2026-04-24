@@ -27,6 +27,7 @@ fn expected_html_file_url(html_path: &Path) -> Result<reqwest::Url, String> {
         .map_err(|_| "Failed to build file URL for PDF source".to_string())
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn output_file_uri(output_path: &Path) -> Result<String, String> {
     reqwest::Url::from_file_path(output_path)
         .map(|url| url.to_string())

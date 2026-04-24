@@ -55,8 +55,11 @@ test('AIComposer separates the form scroller from the bounded result panel', asy
   assert.match(composer, /className="min-h-0 flex-1 overflow-y-auto px-4 py-3"/)
 })
 
-test('AIComposer keeps AI connection setup in Settings and removes inline provider editing controls', async () => {
-  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+test('AIComposer keeps AI connection setup in a dedicated AI setup panel and removes inline provider editing controls', async () => {
+  const [composer, toolbar] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/Toolbar/Toolbar.tsx', import.meta.url), 'utf8'),
+  ])
 
   assert.match(composer, /data-ai-setup-hint="true"/)
   assert.doesNotMatch(composer, /setConnectionOpen\(/)
@@ -66,6 +69,7 @@ test('AIComposer keeps AI connection setup in Settings and removes inline provid
   assert.doesNotMatch(composer, /saveAIProviderConfig\(/)
   assert.doesNotMatch(composer, /storeAIProviderApiKey\(/)
   assert.doesNotMatch(composer, /clearAIProviderApiKey\(/)
+  assert.match(toolbar, /data-toolbar-action="ai-setup"/)
 })
 
 test('AIComposer strips legacy inline retrieval query prefixes from the final answer and stores retrieval metadata separately', async () => {
@@ -230,6 +234,7 @@ test('CodeMirrorEditor and AIComposer wire provenance markers into AI apply and 
 test('ThemePanel removes privacy copy and editable AI default preference controls from the settings panel', async () => {
   const panel = await readFile(new URL('../src/components/ThemePanel/ThemePanel.tsx', import.meta.url), 'utf8')
 
+  assert.doesNotMatch(panel, /AISettingsSection/)
   assert.doesNotMatch(panel, /t\('ai\.connection\.privacyNote'\)/)
   assert.doesNotMatch(panel, /setAiDefaultWriteTarget\(/)
   assert.doesNotMatch(panel, /setAiDefaultSelectedTextRole\(/)

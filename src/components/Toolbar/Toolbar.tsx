@@ -8,6 +8,7 @@ import { useAnchoredOverlayStyle } from '../../hooks/useAnchoredOverlayStyle'
 import { useExport } from '../../hooks/useExport'
 import { formatPrimaryShortcut } from '../../lib/platform'
 import type { FormatAction } from '../Editor/formatCommands'
+import AISetupPanel from '../AI/AISetupPanel'
 import ThemePanel from '../ThemePanel/ThemePanel'
 import AboutPanel from '../Updates/AboutPanel'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
@@ -238,11 +239,13 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
   const { newFile, openFile, saveFile, saveFileAs } = useFileOps()
   const [showExport, setShowExport] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [showAISetup, setShowAISetup] = useState(false)
   const [showTheme, setShowTheme] = useState(false)
   const [showHeadings, setShowHeadings] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
   const exportButtonRef = useRef<HTMLButtonElement | null>(null)
   const aboutButtonRef = useRef<HTMLButtonElement | null>(null)
+  const aiSetupButtonRef = useRef<HTMLButtonElement | null>(null)
   const themeButtonRef = useRef<HTMLButtonElement | null>(null)
   const headingButtonRef = useRef<HTMLButtonElement | null>(null)
   const moreActionsButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -482,6 +485,7 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           buttonRef={themeButtonRef}
           onClick={() => {
             setShowTheme((open) => !open)
+            setShowAISetup(false)
             setShowAbout(false)
           }}
           active={showTheme}
@@ -495,11 +499,30 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
 
       <div className="relative">
         <ToolbarBtn
+          title={t('toolbar.aiSetup')}
+          buttonRef={aiSetupButtonRef}
+          onClick={() => {
+            setShowAISetup((open) => !open)
+            setShowTheme(false)
+            setShowAbout(false)
+          }}
+          active={showAISetup}
+        >
+          <span data-toolbar-action="ai-setup" className="contents">
+          <AppIcon name="sparkles" size={16} />
+          </span>
+        </ToolbarBtn>
+        {showAISetup && <AISetupPanel onClose={() => setShowAISetup(false)} triggerRef={aiSetupButtonRef} />}
+      </div>
+
+      <div className="relative">
+        <ToolbarBtn
           title={t('toolbar.about')}
           buttonRef={aboutButtonRef}
           onClick={() => {
             setShowAbout((open) => !open)
             setShowTheme(false)
+            setShowAISetup(false)
           }}
           active={showAbout}
         >

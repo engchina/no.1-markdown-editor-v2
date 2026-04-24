@@ -12,7 +12,6 @@ import {
 import { THEMES, applyTheme, getThemeById } from '../../themes'
 import { useAnchoredOverlayStyle } from '../../hooks/useAnchoredOverlayStyle'
 import { useEditorStore } from '../../store/editor'
-import AISettingsSection from './AISettingsSection'
 
 interface Props {
   onClose: () => void
@@ -350,8 +349,6 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
             </div>
           </div>
         </div>
-
-        <AISettingsSection />
       </div>
     </div>,
     document.body

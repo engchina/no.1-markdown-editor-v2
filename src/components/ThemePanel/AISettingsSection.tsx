@@ -247,24 +247,29 @@ export default function AISettingsSection() {
   }
 
   return (
-    <form data-ai-settings="true" className="space-y-3" onSubmit={handleSubmit} autoComplete="off">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-          {t('ai.connection.title')}
-        </p>
-        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-          {connectionReady ? t('ai.connection.ready') : t('ai.connection.notReady')}
-        </span>
-      </div>
+    <form data-ai-settings="true" className="space-y-5" onSubmit={handleSubmit}>
+      <fieldset className="min-w-0 space-y-3">
+        <legend className="sr-only">{t('ai.connection.title')}</legend>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+            {t('ai.connection.title')}
+          </p>
+          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {connectionReady ? t('ai.connection.ready') : t('ai.connection.notReady')}
+          </span>
+        </div>
 
-      <div className="space-y-3 rounded-2xl border px-3 py-3" style={{ borderColor: 'var(--border)' }}>
         <FormField label={t('ai.connection.baseUrl')}>
           <input
+            type="url"
+            inputMode="url"
+            autoComplete="url"
             value={aiBaseUrl}
             onChange={(event) => setAiBaseUrl(event.target.value)}
-            className="rounded-lg border px-3 py-2 text-xs outline-none"
+            className={`${technicalInputClassName} rounded-lg border px-3 py-2 text-xs outline-none`}
             style={inputStyle}
             placeholder="https://.../openai/v1"
+            spellCheck={false}
           />
         </FormField>
 
@@ -292,19 +297,34 @@ export default function AISettingsSection() {
         </FormField>
 
         <FormField label={t('ai.connection.apiKey')}>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={aiApiKey}
-            onChange={(event) => setAiApiKey(event.target.value)}
-            className="rounded-lg border px-3 py-2 text-xs outline-none"
-            style={inputStyle}
-            placeholder={
-              aiProviderState?.hasApiKey ? t('ai.connection.apiKeyStored') : t('ai.connection.apiKeyPlaceholder')
-            }
-          />
+          <div className="flex gap-2">
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={aiApiKey}
+              onChange={(event) => setAiApiKey(event.target.value)}
+              className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs outline-none"
+              style={inputStyle}
+              placeholder={
+                aiProviderState?.hasApiKey ? t('ai.connection.apiKeyStored') : t('ai.connection.apiKeyPlaceholder')
+              }
+            />
+            <button
+              type="button"
+              onClick={() => void clearDirectApiKey()}
+              className="rounded-lg border px-3 py-2 text-xs transition-colors"
+              style={{
+                borderColor: 'var(--border)',
+                color: 'var(--text-secondary)',
+                background: 'transparent',
+              }}
+              disabled={aiLoading || !aiProviderState?.hasApiKey}
+            >
+              {t('ai.connection.clearKey')}
+            </button>
+          </div>
         </FormField>
-      </div>
+      </fieldset>
 
       {renderUnstructuredSection({
         t,
@@ -343,7 +363,7 @@ export default function AISettingsSection() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex">
         <button
           type="submit"
           className="rounded-lg px-3 py-2 text-xs font-medium transition-colors"
@@ -351,19 +371,6 @@ export default function AISettingsSection() {
           disabled={aiLoading}
         >
           {t('ai.connection.save')}
-        </button>
-        <button
-          type="button"
-          onClick={() => void clearDirectApiKey()}
-          className="rounded-lg border px-3 py-2 text-xs transition-colors"
-          style={{
-            borderColor: 'var(--border)',
-            color: 'var(--text-secondary)',
-            background: 'transparent',
-          }}
-          disabled={aiLoading || !aiProviderState?.hasApiKey}
-        >
-          {t('ai.connection.clearKey')}
         </button>
       </div>
     </form>
@@ -418,16 +425,6 @@ function renderUnstructuredSection({
               value={store.vectorStoreId}
               onChange={(event) =>
                 updateUnstructuredStore(store.id, (current) => ({ ...current, vectorStoreId: event.target.value }))
-              }
-              className="rounded-lg border px-3 py-2 text-xs outline-none"
-              style={inputStyle}
-            />
-          </FormField>
-          <FormField label={t('ai.connection.description')}>
-            <input
-              value={store.description}
-              onChange={(event) =>
-                updateUnstructuredStore(store.id, (current) => ({ ...current, description: event.target.value }))
               }
               className="rounded-lg border px-3 py-2 text-xs outline-none"
               style={inputStyle}
@@ -524,16 +521,6 @@ function renderStructuredSection({
               value={store.vectorStoreId ?? ''}
               onChange={(event) =>
                 updateStructuredStore(store.id, (current) => ({ ...current, vectorStoreId: event.target.value }))
-              }
-              className="rounded-lg border px-3 py-2 text-xs outline-none"
-              style={inputStyle}
-            />
-          </FormField>
-          <FormField label={t('ai.connection.description')}>
-            <input
-              value={store.description}
-              onChange={(event) =>
-                updateStructuredStore(store.id, (current) => ({ ...current, description: event.target.value }))
               }
               className="rounded-lg border px-3 py-2 text-xs outline-none"
               style={inputStyle}
@@ -667,6 +654,9 @@ function renderHostedAgentSection({
             </FormField>
             <FormField label={t('ai.connection.domainUrl')}>
               <input
+                type="url"
+                inputMode="url"
+                autoComplete="url"
                 value={profile.domainUrl}
                 onChange={(event) =>
                   updateHostedAgentProfile(profile.id, (current) => ({ ...current, domainUrl: event.target.value }))
@@ -688,6 +678,38 @@ function renderHostedAgentSection({
                 spellCheck={false}
                 title={profile.clientId}
               />
+            </FormField>
+            <FormField label={t('ai.connection.clientSecret')}>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={aiHostedAgentSecrets[profile.id] ?? ''}
+                  onChange={(event) =>
+                    setAiHostedAgentSecrets((current) => ({ ...current, [profile.id]: event.target.value }))
+                  }
+                  className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-xs outline-none"
+                  style={inputStyle}
+                  placeholder={
+                    hostedAgentSecretStatus[profile.id]
+                      ? t('ai.connection.apiKeyStored')
+                      : t('ai.connection.apiKeyPlaceholder')
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => void clearHostedAgentSecret(profile.id)}
+                  className="rounded-lg border px-3 py-2 text-xs transition-colors"
+                  style={{
+                    borderColor: 'var(--border)',
+                    color: 'var(--text-secondary)',
+                    background: 'transparent',
+                  }}
+                  disabled={aiLoading || !hostedAgentSecretStatus[profile.id]}
+                >
+                  {t('ai.connection.clearClientSecret')}
+                </button>
+              </div>
             </FormField>
             <FormField label={t('ai.connection.scope')}>
               <input
@@ -744,38 +766,6 @@ function renderHostedAgentSection({
                 ))}
               </div>
             </FormField>
-            <FormField label={t('ai.connection.clientSecret')}>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={aiHostedAgentSecrets[profile.id] ?? ''}
-                  onChange={(event) =>
-                    setAiHostedAgentSecrets((current) => ({ ...current, [profile.id]: event.target.value }))
-                  }
-                  className="flex-1 rounded-lg border px-3 py-2 text-xs outline-none"
-                  style={inputStyle}
-                  placeholder={
-                    hostedAgentSecretStatus[profile.id]
-                      ? t('ai.connection.apiKeyStored')
-                      : t('ai.connection.apiKeyPlaceholder')
-                  }
-                />
-                <button
-                  type="button"
-                  onClick={() => void clearHostedAgentSecret(profile.id)}
-                  className="rounded-lg border px-3 py-2 text-xs transition-colors"
-                  style={{
-                    borderColor: 'var(--border)',
-                    color: 'var(--text-secondary)',
-                    background: 'transparent',
-                  }}
-                  disabled={aiLoading || !hostedAgentSecretStatus[profile.id]}
-                >
-                  {t('ai.connection.clearKey')}
-                </button>
-              </div>
-            </FormField>
           </div>
         )
       })}
@@ -795,11 +785,12 @@ function StoreSection({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-2 rounded-2xl border px-3 py-3" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+    <fieldset className="min-w-0 space-y-3">
+      <legend className="sr-only">{title}</legend>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
           {title}
-        </div>
+        </p>
         <button
           type="button"
           onClick={onAdd}
@@ -810,7 +801,7 @@ function StoreSection({
         </button>
       </div>
       <div className="grid gap-3">{children}</div>
-    </section>
+    </fieldset>
   )
 }
 

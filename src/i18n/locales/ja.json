@@ -54,6 +54,7 @@
     "commandPalette": "コマンドパレット",
     "export": "エクスポート",
     "about": "このアプリについて",
+    "aiSetup": "AI",
     "appearance": "設定",
     "headings": "見出し",
     "structure": "文書構造",
@@ -281,6 +282,9 @@
     "cancel": "キャンセル"
   },
   "ai": {
+    "setup": {
+      "title": "AI設定"
+    },
     "title": "AI Composer",
     "promptLabel": "プロンプト",
     "promptPlaceholder": "{{first}}、{{second}}、{{third}}、または{{fourth}}...",
@@ -426,8 +430,9 @@
       "desktopOnly": "AI プロバイダーの秘密情報は現在デスクトップ版でのみ設定できます。",
       "apiKeyStored": "安全に保存済みです。置き換える場合のみ新しいキーを入力してください。",
       "apiKeyPlaceholder": "API キーを貼り付け",
-      "save": "接続を保存",
+      "save": "保存",
       "clearKey": "API キーを削除",
+      "clearClientSecret": "Client Secret を削除",
       "label": "ラベル",
       "description": "説明",
       "enabled": "有効",

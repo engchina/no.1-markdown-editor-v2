@@ -11,17 +11,24 @@ test('App mounts the update dialog and triggers the automatic update check on st
   assert.match(app, /<UpdateAvailableDialog \/>/)
 })
 
-test('toolbar mounts a dedicated About panel and theme settings no longer include update controls', async () => {
+test('toolbar mounts dedicated AI and About panels while theme settings stay editor-only', async () => {
   const toolbar = await readFile(new URL('../src/components/Toolbar/Toolbar.tsx', import.meta.url), 'utf8')
   const panel = await readFile(new URL('../src/components/ThemePanel/ThemePanel.tsx', import.meta.url), 'utf8')
+  const aiPanel = await readFile(new URL('../src/components/AI/AISetupPanel.tsx', import.meta.url), 'utf8')
   const aboutPanel = await readFile(new URL('../src/components/Updates/AboutPanel.tsx', import.meta.url), 'utf8')
   const updateSection = await readFile(new URL('../src/components/Updates/UpdateSettingsSection.tsx', import.meta.url), 'utf8')
 
+  assert.match(toolbar, /import AISetupPanel from '\.\.\/AI\/AISetupPanel'/)
   assert.match(toolbar, /import AboutPanel from '\.\.\/Updates\/AboutPanel'/)
+  assert.match(toolbar, /data-toolbar-action="ai-setup"/)
   assert.match(toolbar, /data-toolbar-action="about"/)
+  assert.match(toolbar, /<AISetupPanel onClose=\{\(\) => setShowAISetup\(false\)\} triggerRef=\{aiSetupButtonRef\} \/>/)
   assert.match(toolbar, /<AboutPanel onClose=\{\(\) => setShowAbout\(false\)\} triggerRef=\{aboutButtonRef\} \/>/)
+  assert.ok(!panel.includes('AISettingsSection'))
   assert.ok(!panel.includes('UpdateSettingsSection'))
 
+  assert.match(aiPanel, /data-ai-setup-panel="true"/)
+  assert.match(aiPanel, /<AISettingsSection \/>/)
   assert.match(aboutPanel, /data-about-panel="true"/)
   assert.match(aboutPanel, /<UpdateSettingsSection showSectionLabel=\{false\} \/>/)
   assert.match(updateSection, /data-update-settings="true"/)
@@ -40,6 +47,7 @@ test('toolbar right-side utility controls follow the approved order', async () =
   const commandPaletteIndex = toolbar.indexOf('data-toolbar-action="command-palette"')
   const languageIndex = toolbar.indexOf('data-language-select="true"')
   const settingsIndex = toolbar.indexOf('data-toolbar-action="settings"')
+  const aiSetupIndex = toolbar.indexOf('data-toolbar-action="ai-setup"')
   const aboutIndex = toolbar.indexOf('data-toolbar-action="about"')
 
   assert.notEqual(focusIndex, -1)
@@ -47,13 +55,46 @@ test('toolbar right-side utility controls follow the approved order', async () =
   assert.notEqual(commandPaletteIndex, -1)
   assert.notEqual(languageIndex, -1)
   assert.notEqual(settingsIndex, -1)
+  assert.notEqual(aiSetupIndex, -1)
   assert.notEqual(aboutIndex, -1)
 
   assert.ok(focusIndex < sourceIndex)
   assert.ok(sourceIndex < commandPaletteIndex)
   assert.ok(commandPaletteIndex < languageIndex)
   assert.ok(languageIndex < settingsIndex)
-  assert.ok(settingsIndex < aboutIndex)
+  assert.ok(settingsIndex < aiSetupIndex)
+  assert.ok(aiSetupIndex < aboutIndex)
+})
+
+function getNestedValue(locale: Record<string, unknown>, key: string): unknown {
+  return key.split('.').reduce<unknown>((current, segment) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined
+    return (current as Record<string, unknown>)[segment]
+  }, locale)
+}
+
+test('toolbar AI entry and setup panel locale copy exist across en, ja, and zh', async () => {
+  const [enRaw, jaRaw, zhRaw] = await Promise.all([
+    readFile(new URL('../src/i18n/locales/en.json', import.meta.url), 'utf8'),
+    readFile(new URL('../src/i18n/locales/ja.json', import.meta.url), 'utf8'),
+    readFile(new URL('../src/i18n/locales/zh.json', import.meta.url), 'utf8'),
+  ])
+
+  const locales = [JSON.parse(enRaw), JSON.parse(jaRaw), JSON.parse(zhRaw)] as Array<Record<string, unknown>>
+  const keys = ['toolbar.aiSetup', 'ai.setup.title']
+
+  for (const locale of locales) {
+    for (const key of keys) {
+      assert.equal(typeof getNestedValue(locale, key), 'string', key)
+    }
+  }
+
+  assert.equal(getNestedValue(locales[0], 'ai.connection.save'), 'Save')
+  assert.equal(getNestedValue(locales[1], 'ai.connection.save'), '保存')
+  assert.equal(getNestedValue(locales[2], 'ai.connection.save'), '保存')
+  assert.equal(getNestedValue(locales[0], 'ai.connection.clearClientSecret'), 'Clear Client Secret')
+  assert.equal(getNestedValue(locales[1], 'ai.connection.clearClientSecret'), 'Client Secret を削除')
+  assert.equal(getNestedValue(locales[2], 'ai.connection.clearClientSecret'), '清除 Client Secret')
 })
 
 test('Command palette exposes the check-for-updates action', async () => {

@@ -54,6 +54,7 @@
     "commandPalette": "Command Palette",
     "export": "Export",
     "about": "About",
+    "aiSetup": "AI",
     "appearance": "Settings",
     "headings": "Headings",
     "structure": "Structure",
@@ -286,6 +287,9 @@
     "cancel": "Cancel"
   },
   "ai": {
+    "setup": {
+      "title": "AI Setup"
+    },
     "title": "AI Composer",
     "promptLabel": "Prompt",
     "promptPlaceholder": "{{first}}, {{second}}, {{third}}, or {{fourth}}...",
@@ -431,8 +435,9 @@
       "desktopOnly": "AI provider secrets can only be configured in the desktop app right now.",
       "apiKeyStored": "Stored securely. Enter a new key to replace it.",
       "apiKeyPlaceholder": "Paste API key",
-      "save": "Save Connection",
+      "save": "Save",
       "clearKey": "Clear API Key",
+      "clearClientSecret": "Clear Client Secret",
       "label": "Label",
       "description": "Description",
       "enabled": "Enabled",

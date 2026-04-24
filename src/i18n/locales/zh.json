@@ -54,6 +54,7 @@
     "commandPalette": "命令面板",
     "export": "导出",
     "about": "关于",
+    "aiSetup": "AI",
     "appearance": "设置",
     "headings": "标题层级",
     "structure": "文档结构",
@@ -281,6 +282,9 @@
     "cancel": "取消"
   },
   "ai": {
+    "setup": {
+      "title": "AI 设置"
+    },
     "title": "AI Composer",
     "promptLabel": "提示词",
     "promptPlaceholder": "{{first}}、{{second}}、{{third}}或{{fourth}}...",
@@ -426,8 +430,9 @@
       "desktopOnly": "目前只有桌面版可以配置 AI provider 的密钥信息。",
       "apiKeyStored": "已安全保存。只有要替换时才需要重新输入。",
       "apiKeyPlaceholder": "粘贴 API Key",
-      "save": "保存连接",
+      "save": "保存",
       "clearKey": "清除 API Key",
+      "clearClientSecret": "清除 Client Secret",
       "label": "名称",
       "description": "说明",
       "enabled": "启用",

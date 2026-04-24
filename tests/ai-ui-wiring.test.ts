@@ -63,18 +63,22 @@ test('MarkdownPreview useMemo deps omit the i18n t function to avoid redundant H
   assert.match(source, /\[i18n\.language\]\s*\)\s*\n\s*const getMermaidTheme/)
 })
 
-test('ThemePanel keeps AI connection settings but removes editable AI preference controls', async () => {
-  const [panel, section] = await Promise.all([
+test('AI setup panel owns AI connection settings while ThemePanel stays editor-only', async () => {
+  const [themePanel, aiPanel, section] = await Promise.all([
     readFile(new URL('../src/components/ThemePanel/ThemePanel.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AISetupPanel.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/ThemePanel/AISettingsSection.tsx', import.meta.url), 'utf8'),
   ])
 
-  assert.match(panel, /import AISettingsSection from '\.\/AISettingsSection'/)
-  assert.match(panel, /<AISettingsSection \/>/)
+  assert.doesNotMatch(themePanel, /AISettingsSection/)
+  assert.match(aiPanel, /data-ai-setup-panel="true"/)
+  assert.match(aiPanel, /t\('ai\.setup\.title'\)/)
+  assert.match(aiPanel, /<AISettingsSection \/>/)
   assert.match(section, /t\('ai\.connection\.baseUrl'\)/)
   assert.match(section, /t\('ai\.connection\.model'\)/)
   assert.match(section, /t\('ai\.connection\.apiKey'\)/)
   assert.match(section, /structuredStores: aiStructuredStores\.map\(\(store\) => \(\{[\s\S]*defaultMode: 'sql-draft',[\s\S]*executionAgentProfileId: null,[\s\S]*\}\)\)/)
+  assert.doesNotMatch(section, /t\('ai\.connection\.description'\)/)
   assert.doesNotMatch(section, /t\('ai\.connection\.defaultMode'\)/)
   assert.doesNotMatch(section, /t\('ai\.connection\.executionAgentProfile'\)/)
   assert.doesNotMatch(section, /t\('ai\.preferences\.defaultWriteTarget'\)/)
@@ -85,14 +89,24 @@ test('ThemePanel keeps AI connection settings but removes editable AI preference
   assert.doesNotMatch(section, /t\('ai\.preferences\.historyProviderBudget'\)/)
 })
 
-test('AI settings wrap secret inputs in a submit form so password fields keep proper semantics', async () => {
+test('AI settings keep secret inputs in a submit form while matching the Settings panel section style', async () => {
   const section = await readFile(new URL('../src/components/ThemePanel/AISettingsSection.tsx', import.meta.url), 'utf8')
 
   assert.match(section, /function handleSubmit\(event: FormEvent<HTMLFormElement>\)/)
   assert.match(section, /event\.preventDefault\(\)\s*\n\s*void saveAiConnection\(\)/)
-  assert.match(section, /<form data-ai-settings="true" className="space-y-3" onSubmit=\{handleSubmit\} autoComplete="off">/)
+  assert.match(section, /<form data-ai-settings="true" className="space-y-5" onSubmit=\{handleSubmit\}>/)
+  assert.doesNotMatch(section, /autoComplete="off"/)
+  assert.match(section, /<legend className="sr-only">\{t\('ai\.connection\.title'\)\}<\/legend>/)
+  assert.match(section, /<legend className="sr-only">\{title\}<\/legend>/)
+  assert.match(section, /<p className="text-xs font-medium" style=\{\{ color: 'var\(--text-muted\)' \}\}>\s*\{t\('ai\.connection\.title'\)\}/)
+  assert.match(section, /type="url"\s*\n\s*inputMode="url"\s*\n\s*autoComplete="url"\s*\n\s*value=\{aiBaseUrl\}/)
+  assert.match(section, /type="url"\s*\n\s*inputMode="url"\s*\n\s*autoComplete="url"\s*\n\s*value=\{profile\.domainUrl\}/)
+  assert.match(section, /<FormField label=\{t\('ai\.connection\.apiKey'\)\}>[\s\S]*<div className="flex gap-2">[\s\S]*type="password"[\s\S]*min-w-0 flex-1[\s\S]*onClick=\{\(\) => void clearDirectApiKey\(\)\}[\s\S]*\{t\('ai\.connection\.clearKey'\)\}/)
+  assert.match(section, /<FormField label=\{t\('ai\.connection\.clientSecret'\)\}>[\s\S]*<div className="flex gap-2">[\s\S]*type="password"[\s\S]*min-w-0 flex-1[\s\S]*onClick=\{\(\) => void clearHostedAgentSecret\(profile\.id\)\}[\s\S]*\{t\('ai\.connection\.clearClientSecret'\)\}/)
+  assert.match(section, /t\('ai\.connection\.clientId'\)[\s\S]*t\('ai\.connection\.clientSecret'\)[\s\S]*t\('ai\.connection\.scope'\)/)
   assert.match(section, /type="password"\s*\n\s*autoComplete="new-password"/)
   assert.match(section, /type="submit"\s*\n\s*className="rounded-lg px-3 py-2 text-xs font-medium transition-colors"/)
+  assert.doesNotMatch(section, /<div className="flex flex-wrap gap-2">[\s\S]*clearDirectApiKey/)
 })
 
 test('AI settings surface resolved hosted-agent URLs and notify the composer when provider state changes', async () => {

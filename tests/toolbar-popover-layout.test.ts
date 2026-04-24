@@ -27,6 +27,16 @@ test('theme panel is anchored in a portal instead of the toolbar DOM subtree', a
   assert.match(panel, /useAnchoredOverlayStyle\(triggerRef, \{ align: 'right', width: 420, zoom \}\)/)
 })
 
+test('AI setup panel is anchored in a portal instead of the toolbar DOM subtree', async () => {
+  const panel = await readFile(new URL('../src/components/AI/AISetupPanel.tsx', import.meta.url), 'utf8')
+
+  assert.match(panel, /import \{ createPortal \} from 'react-dom'/)
+  assert.match(panel, /useAnchoredOverlayStyle/)
+  assert.match(panel, /return createPortal\(/)
+  assert.match(panel, /useEditorStore\(\(state\) => state\.zoom\)/)
+  assert.match(panel, /useAnchoredOverlayStyle\(triggerRef, \{ align: 'right', width: 420, zoom \}\)/)
+})
+
 test('about panel is anchored in a portal instead of the toolbar DOM subtree', async () => {
   const panel = await readFile(new URL('../src/components/Updates/AboutPanel.tsx', import.meta.url), 'utf8')
 

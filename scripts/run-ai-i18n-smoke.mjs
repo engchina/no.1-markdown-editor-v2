@@ -263,7 +263,13 @@ async function main() {
         `AI composer to close for locale ${locale.code}`
       )
 
-      await page.locator('[data-toolbar-action="appearance"]').click()
+      await page.locator('[data-toolbar-action="ai-setup"]').click()
+      await expectText(page, '[data-ai-setup-panel="true"]', locale.connectionLabel)
+      await waitForNoHorizontalOverflow(page, '[data-ai-setup-panel="true"]')
+      await page.mouse.click(1200, 900)
+
+      await page.locator('[data-toolbar-action="settings"]').click()
+      await expectNoText(page, '[data-theme-panel="true"]', locale.connectionLabel)
       await expectNoText(page, 'body', locale.hiddenWriteTargetLabel)
       await expectNoText(page, 'body', locale.hiddenRoleLabel)
       await waitForNoHorizontalOverflow(page, '[data-theme-panel="true"]')
