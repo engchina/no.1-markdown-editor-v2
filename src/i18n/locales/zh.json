@@ -253,6 +253,15 @@
     "showInvisibleCharacters": "显示不可见字符",
     "typewriterMode": "打字机模式",
     "showInvisibleCharactersHint": "在源码模式下显示 Tab、行尾空格和特殊空白。Markdown 硬换行用到的行尾空格会更容易识别。",
+    "spellcheck": "拼写检查",
+    "spellcheckModes": {
+      "document-language": "文档语言",
+      "system": "系统",
+      "off": "关闭"
+    },
+    "spellcheckHintDocumentLanguage": "推荐。保持拼写检查开启，并在文档明确是英文、日文或中文时同步设置编辑器语言。",
+    "spellcheckHintSystem": "使用系统拼写检查，但不强制指定文档语言。",
+    "spellcheckHintOff": "关闭源码编辑器和 WYSIWYG 表格输入中的拼写检查。",
     "previewOptions": "预览选项",
     "previewLineBreaks": "预览换行方式",
     "previewLineBreakModes": {
@@ -715,6 +724,7 @@
     "findInDocument": "在文档中查找",
     "findReplace": "查找和替换",
     "checkForUpdates": "检查更新",
+    "openSidebarSurface": "打开侧边栏：{{name}}",
     "exportHtml": "导出为 HTML",
     "exportPdf": "导出为 PDF",
     "exportMarkdown": "导出 Markdown",
@@ -870,6 +880,12 @@
     "exportPdfErrorTitle": "PDF 导出失败",
     "exportPdfErrorMessage": "原生 PDF 导出未能完成。{{reason}}",
     "exportPdfErrorReasonFallback": "没有更多错误细节。",
+    "assetPathPropagationSuccessTitle": "资源引用已更新",
+    "assetPathPropagationSuccessMessage": "资源移动后，已在 {{documents}} 个文档中更新 {{references}} 处引用。",
+    "assetPathPropagationPartialTitle": "仍有部分资源引用需要手动修复",
+    "assetPathPropagationPartialMessage": "已在 {{documents}} 个文档中更新 {{references}} 处引用，但还有 {{failed}} 个文档需要手动修复。",
+    "assetPathPropagationFailedTitle": "无法更新资源引用",
+    "assetPathPropagationFailedMessage": "资源移动后，编辑器无法安全改写受影响的文档。",
     "copyHtmlSuccessTitle": "HTML 已复制",
     "copyHtmlSuccessMessage": "渲染后的 HTML 已复制到剪贴板。",
     "dismissLabel": "关闭通知"

@@ -115,6 +115,28 @@ test('renderMarkdown preserves explicit hard breaks from Markdown and br tags', 
   assert.match(htmlHardBreakHtml, /<p>Line 1<br\s*\/?>\s*Line 2<\/p>/)
 })
 
+test('renderMarkdown renders angle-bracket URLs and emails in preview and worker output', async () => {
+  const markdown = 'For example <i@typora.io> and <https://example.com>'
+  const html = await renderMarkdown(markdown)
+  const workerHtml = await renderMarkdownInWorker(markdown)
+
+  assert.match(html, /<a href="mailto:i@typora\.io">i@typora\.io<\/a>/)
+  assert.match(html, /<a href="https:\/\/example\.com">https:\/\/example\.com<\/a>/)
+  assert.match(workerHtml, /<a href="mailto:i@typora\.io">i@typora\.io<\/a>/)
+  assert.match(workerHtml, /<a href="https:\/\/example\.com">https:\/\/example\.com<\/a>/)
+})
+
+test('renderMarkdown renders GFM autolink literals in preview and worker output', async () => {
+  const markdown = 'Contact i@typora.io or www.google.com'
+  const html = await renderMarkdown(markdown)
+  const workerHtml = await renderMarkdownInWorker(markdown)
+
+  assert.match(html, /<a href="mailto:i@typora\.io">i@typora\.io<\/a>/)
+  assert.match(html, /<a href="http:\/\/www\.google\.com">www\.google\.com<\/a>/)
+  assert.match(workerHtml, /<a href="mailto:i@typora\.io">i@typora\.io<\/a>/)
+  assert.match(workerHtml, /<a href="http:\/\/www\.google\.com">www\.google\.com<\/a>/)
+})
+
 test('renderMarkdown keeps preview heading ids aligned with outline ids for non-Latin and symbol-only titles', async () => {
   const markdown = [
     '# デ',
@@ -251,7 +273,8 @@ test('renderMarkdown keeps superscript markers out of code and inline math while
   assert.match(mixedHtml, /2<sup>10<\/sup>/)
   assert.match(mixedHtml, /x<sup><em>2<\/em><\/sup>/)
   assert.match(mixedHtml, /y<sup><strong>3<\/strong><\/sup>/)
-  assert.match(workerMathHtml, /<p>Inline \$a\^2\$ and 2<sup>10<\/sup><\/p>/)
+  assert.match(workerMathHtml, /class="katex"/)
+  assert.match(workerMathHtml, /2<sup>10<\/sup>/)
 })
 
 test('renderMarkdown keeps subscript markers out of code and inline math while preserving nested inline formatting', async () => {
@@ -268,7 +291,8 @@ test('renderMarkdown keeps subscript markers out of code and inline math while p
   assert.match(mixedHtml, /H<sub>2<\/sub>O/)
   assert.match(mixedHtml, /x<sub><em>2<\/em><\/sub>/)
   assert.match(mixedHtml, /y<sub><strong>3<\/strong><\/sub>/)
-  assert.match(workerMathHtml, /<p>Inline \$H~2~O\$ and H<sub>2<\/sub>O<\/p>/)
+  assert.match(workerMathHtml, /class="katex"/)
+  assert.match(workerMathHtml, /H<sub>2<\/sub>O/)
 })
 
 test('renderMarkdown preserves footnotes while rendering superscript in surrounding text and footnote content', async () => {
@@ -704,11 +728,49 @@ test('renderMarkdown keeps inline code literals around math markers instead of r
   assert.doesNotMatch(html, /class="katex"/)
 })
 
-test('renderMarkdownInWorker keeps the worker-safe path free of KaTeX rendering', async () => {
+test('renderMarkdown can load Shiki on demand for fenced code blocks', async () => {
+  const html = await renderMarkdown('```ts\nconst answer = 42\n```', 'shiki')
+
+  assert.match(html, /class="shiki/)
+  assert.match(html, /answer/)
+})
+
+test('renderMarkdown falls back to highlight.js for fenced languages outside the curated Shiki bundle', async () => {
+  const html = await renderMarkdown('```cpp\nint main() { return 0; }\n```', 'shiki')
+
+  assert.match(html, /class="hljs/)
+  assert.match(html, /language-cpp/)
+  assert.doesNotMatch(html, /class="shiki/)
+})
+
+test('renderMarkdownInWorker renders KaTeX when the markdown body contains math', async () => {
   const html = await renderMarkdownInWorker('Inline $E=mc^2$')
 
-  assert.match(html, /\$E=mc\^2\$/)
-  assert.doesNotMatch(html, /class="katex"/)
+  assert.match(html, /class="katex"/)
+})
+
+test('renderMarkdownInWorker keeps math rendering compatible with sanitized raw html', async () => {
+  const html = await renderMarkdownInWorker('Inline $E=mc^2$ and <span>safe</span><script>bad()</script>')
+
+  assert.match(html, /class="katex"/)
+  assert.match(html, /<span>safe<\/span>/)
+  assert.doesNotMatch(html, /<script/i)
+  assert.doesNotMatch(html, /bad\(\)/)
+})
+
+test('renderMarkdownInWorker can load Shiki on demand for fenced code blocks', async () => {
+  const html = await renderMarkdownInWorker('```js\nconsole.log("worker")\n```', 'shiki')
+
+  assert.match(html, /class="shiki/)
+  assert.match(html, /console/)
+})
+
+test('renderMarkdownInWorker falls back to highlight.js for fenced languages outside the curated Shiki bundle', async () => {
+  const html = await renderMarkdownInWorker('```cpp\nint worker() { return 0; }\n```', 'shiki')
+
+  assert.match(html, /class="hljs/)
+  assert.match(html, /language-cpp/)
+  assert.doesNotMatch(html, /class="shiki/)
 })
 
 test('renderMarkdownInWorker preserves Windows absolute markdown image sources by normalizing them to file urls', async () => {

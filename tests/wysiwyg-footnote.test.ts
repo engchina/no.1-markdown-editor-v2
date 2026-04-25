@@ -78,10 +78,11 @@ test('collectFootnoteIndices assigns stable display numbers from first reference
 })
 
 test('wysiwyg footnote support wires hover tooltip and presentation styles into the editor', async () => {
-  const [editorSource, wysiwygSource, footnoteSource, css] = await Promise.all([
+  const [editorSource, wysiwygSource, footnoteSource, hoverSource, css] = await Promise.all([
     readFile(new URL('../src/components/Editor/CodeMirrorEditor.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/Editor/wysiwyg.ts', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/Editor/wysiwygFootnote.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/Editor/wysiwygFootnoteHover.ts', import.meta.url), 'utf8'),
     readFile(new URL('../src/global.css', import.meta.url), 'utf8'),
   ])
 
@@ -105,6 +106,8 @@ test('wysiwyg footnote support wires hover tooltip and presentation styles into 
   assert.match(wysiwygSource, /findBlockFootnoteRanges\(view\.state\.doc\.toString\(\)\)\.find\(\(range\) => range\.label === label\)/u)
   assert.match(wysiwygSource, /closest\('\.cm-wysiwyg-footnote-ref, \.cm-wysiwyg-footnote-def'\)/u)
   assert.match(wysiwygSource, /isPlainFootnoteWidgetActivationKey\(event\)/u)
+  assert.match(hoverSource, /collectReferenceDefinitionMarkdown\(stripFrontMatter\(fullText\)\.body\)/u)
+  assert.match(hoverSource, /renderInlineMarkdownFragment\(footnoteContent, \{ referenceDefinitionsMarkdown \}\)/u)
 
   assert.match(css, /\.cm-wysiwyg-footnote-ref\s*\{/u)
   assert.match(css, /\.cm-wysiwyg-footnote-def-active\s*\{/u)

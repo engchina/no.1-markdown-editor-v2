@@ -57,4 +57,6 @@ test('markdown enter continuation is still enabled in the editor language setup'
   const source = await readFile(new URL('../src/components/Editor/optionalFeatures.ts', import.meta.url), 'utf8')
 
   assert.match(source, /markdown\(\{\s*[\s\S]*addKeymap: true,[\s\S]*\}\)/u)
+  assert.match(source, /codeLanguages: resolveMarkdownCodeLanguage/u)
+  assert.doesNotMatch(source, /import\('@codemirror\/language-data'\)/u)
 })

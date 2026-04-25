@@ -12,6 +12,10 @@ import type { Language } from '../i18n'
 import { formatPrimaryShortcut } from '../lib/platform'
 import { runManualUpdateCheck } from '../lib/updateActions'
 import {
+  SIDEBAR_SURFACE_META,
+  getSidebarSurfaceCommandId,
+} from '../lib/sidebarSurfaces'
+import {
   dispatchEditorHistory,
   getEditorRedoShortcutLabel,
   getEditorUndoShortcutLabel,
@@ -60,6 +64,16 @@ export function useCommands(): Command[] {
       category: 'file' as const,
       action: () => {
         void openRecent(file)
+        },
+      }))
+
+    const sidebarSurfaceCommands: Command[] = SIDEBAR_SURFACE_META.map((surface) => ({
+      id: getSidebarSurfaceCommandId(surface.id),
+      label: t('commands.openSidebarSurface', { name: t(surface.titleKey) }),
+      category: 'view',
+      action: () => {
+        store.setSidebarOpen(true)
+        store.setSidebarTab(surface.id)
       },
     }))
 
@@ -163,6 +177,7 @@ export function useCommands(): Command[] {
         shortcut: sidebarShortcut,
         action: () => store.setSidebarOpen(!store.sidebarOpen),
       },
+      ...sidebarSurfaceCommands,
       {
         id: 'view.lineNumbers',
         label: store.lineNumbers ? t('commands.hideLineNumbers') : t('commands.showLineNumbers'),

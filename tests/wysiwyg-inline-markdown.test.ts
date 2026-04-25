@@ -10,6 +10,45 @@ test('renderInlineMarkdownFragment renders inline markdown suitable for table ce
   assert.match(html, /class="katex"/)
 })
 
+test('renderInlineMarkdownFragment renders autolink urls and emails for WYSIWYG inline fragments', () => {
+  const html = renderInlineMarkdownFragment('Contact <i@typora.io> and www.google.com')
+
+  assert.match(html, /<a href="mailto:i@typora\.io">i@typora\.io<\/a>/)
+  assert.match(html, /<a href="http:\/\/www\.google\.com">www\.google\.com<\/a>/)
+})
+
+test('renderInlineMarkdownFragment preserves linked images and mixed link labels', () => {
+  const html = renderInlineMarkdownFragment('[![img](https://example.com/logo.png)Oracle](https://example.com/org)')
+
+  assert.match(html, /<a href="https:\/\/example\.com\/org">/u)
+  assert.match(html, /<img src="https:\/\/example\.com\/logo\.png" alt="img">/u)
+  assert.match(html, /Oracle<\/a>/u)
+})
+
+test('renderInlineMarkdownFragment resolves reference-style links when definitions are provided', () => {
+  const html = renderInlineMarkdownFragment('This is [an example][id] reference-style link.', {
+    referenceDefinitionsMarkdown: '[id]: http://example.com/ "Optional Title Here"',
+  })
+
+  assert.match(
+    html,
+    /This is <a href="http:\/\/example\.com\/" title="Optional Title Here">an example<\/a> reference-style link\./u
+  )
+})
+
+test('renderInlineMarkdownFragment resolves reference-style linked media when definitions are provided', () => {
+  const html = renderInlineMarkdownFragment('[![img][logo]Oracle][org]', {
+    referenceDefinitionsMarkdown: [
+      '[logo]: https://example.com/logo.png',
+      '[org]: https://example.com/org',
+    ].join('\n'),
+  })
+
+  assert.match(html, /<a href="https:\/\/example\.com\/org">/u)
+  assert.match(html, /<img src="https:\/\/example\.com\/logo\.png" alt="img">/u)
+  assert.match(html, /Oracle<\/a>/u)
+})
+
 test('renderInlineMarkdownFragment keeps code spans literal instead of rendering math inside them', () => {
   const html = renderInlineMarkdownFragment('Use `$E=mc^2$` literally')
 
@@ -27,6 +66,14 @@ test('renderInlineMarkdownFragment preserves inline html breaks for table cells'
   const html = renderInlineMarkdownFragment('Line 1<br />Line 2')
 
   assert.match(html, /Line 1<br\s*\/?>Line 2/u)
+})
+
+test('renderInlineMarkdownFragment strips dangerous inline html while keeping safe text content', () => {
+  const html = renderInlineMarkdownFragment('Safe <span>inline</span><script>bad()</script> text')
+
+  assert.match(html, /Safe inline text/u)
+  assert.doesNotMatch(html, /<script/i)
+  assert.doesNotMatch(html, /bad\(\)/)
 })
 
 test('renderInlineMarkdownFragment preserves markdown hard breaks from backslashes and trailing spaces', () => {

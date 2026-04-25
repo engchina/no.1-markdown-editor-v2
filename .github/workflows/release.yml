@@ -56,32 +56,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Verify release version matches tag
+      - name: Validate release metadata
+        shell: bash
+        run: node scripts/validate-release.mjs "${GITHUB_REF_NAME#v}" --require-changelog
+
+      - name: Build release body from repository docs
+        id: release_notes
         shell: bash
         run: |
-          node - <<'EOF'
-          const fs = require('fs');
-
-          const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
-          const tauriVersion = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8')).version;
-          const cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
-          const cargoMatch = cargo.match(/^version\s*=\s*"([^"]+)"/m);
-          const tagVersion = (process.env.GITHUB_REF_NAME || '').replace(/^v/, '');
-
-          if (!cargoMatch) {
-            console.error('Unable to read version from src-tauri/Cargo.toml.');
-            process.exit(1);
-          }
-
-          const cargoVersion = cargoMatch[1];
-
-          if (!tagVersion || packageVersion !== tagVersion || tauriVersion !== tagVersion || cargoVersion !== tagVersion) {
-            console.error(
-              `Tag and app versions must match. tag=${tagVersion} package=${packageVersion} tauri=${tauriVersion} cargo=${cargoVersion}`
-            );
-            process.exit(1);
-          }
-          EOF
+          node scripts/build-release-body.mjs "${GITHUB_REF_NAME#v}" > release-body.md
+          {
+            echo 'body<<EOF'
+            cat release-body.md
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build app and upload release assets
         uses: tauri-apps/tauri-action@action-v0.6.2
@@ -90,7 +78,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "No.1 Markdown Editor ${{ github.ref_name }}"
-          releaseBody: "See the assets to download this version and install."
+          releaseBody: ${{ steps.release_notes.outputs.body }}
           generateReleaseNotes: true
           releaseDraft: false
           prerelease: false

@@ -1,6 +1,10 @@
-import { ensureFsPathAccess } from './fsAccess.ts'
-import { isSupportedDocumentName } from './fileTypes.ts'
 import { findDocumentMatches, type DocumentSearchMatch } from './search.ts'
+import {
+  getWorkspaceIndexDocumentContent,
+  getWorkspaceIndexSnapshot,
+  type WorkspaceIndexDocument,
+  type WorkspaceIndexSnapshot,
+} from './workspaceIndex/index.ts'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -27,11 +31,17 @@ export interface WorkspaceDocumentReference {
   path: string | null
   tabId: string | null
   source: 'tab' | 'workspace'
-  content: string
+  content: string | null
   score: number
   matchKind: WorkspaceDocumentMatchKind
   confidence: WorkspaceDocumentConfidence
   ambiguous: boolean
+}
+
+export interface WorkspaceSearchRuntime {
+  workspaceEnabled: boolean
+  getSnapshot: (rootPath: string) => Promise<WorkspaceIndexSnapshot>
+  getDocumentContent: (rootPath: string, documentPath: string) => Promise<string | null>
 }
 
 interface WorkspaceDocumentCandidate {
@@ -46,27 +56,46 @@ interface WorkspaceDocumentCandidate {
   ambiguous?: boolean
 }
 
+const defaultWorkspaceSearchRuntime: WorkspaceSearchRuntime = {
+  workspaceEnabled: isTauri,
+  getSnapshot: getWorkspaceIndexSnapshot,
+  getDocumentContent: getWorkspaceIndexDocumentContent,
+}
+
 export async function buildWorkspaceSearchResults({
   query,
   tabs,
   rootPath,
   limit,
+  runtime = defaultWorkspaceSearchRuntime,
 }: {
   query: string
   tabs: WorkspaceSearchableTab[]
   rootPath: string | null
   limit: number
+  runtime?: WorkspaceSearchRuntime
 }): Promise<WorkspaceSearchResult[]> {
   const results = searchOpenTabs(tabs, query, limit)
-  if (!isTauri || !rootPath || results.length >= limit) return results
+  if (!runtime.workspaceEnabled || !rootPath || results.length >= limit) return results
 
   const openTabPaths = new Set(
     tabs
-      .map((tab) => tab.path)
+      .map((tab) => normalizeWorkspacePath(tab.path))
       .filter((path): path is string => typeof path === 'string' && path.length > 0)
   )
 
-  const workspaceResults = await searchWorkspaceFiles(rootPath, query, limit - results.length, openTabPaths)
+  const snapshot = await runtime.getSnapshot(rootPath)
+  const workspaceResults = await searchWorkspaceIndexDocuments(
+    snapshot.documents,
+    query,
+    limit - results.length,
+    openTabPaths,
+    {
+      rootPath,
+      runtime,
+    }
+  )
+
   return [...results, ...workspaceResults].slice(0, limit)
 }
 
@@ -100,16 +129,22 @@ export async function findWorkspaceDocumentReference({
   query,
   tabs,
   rootPath,
+  includeContent = false,
+  runtime = defaultWorkspaceSearchRuntime,
 }: {
   query: string
   tabs: WorkspaceSearchableTab[]
   rootPath: string | null
+  includeContent?: boolean
+  runtime?: WorkspaceSearchRuntime
 }): Promise<WorkspaceDocumentReference | null> {
   const references = await findWorkspaceDocumentReferences({
     query,
     tabs,
     rootPath,
     limit: 1,
+    includeContent,
+    runtime,
   })
 
   return references[0] ?? null
@@ -121,12 +156,16 @@ export async function findWorkspaceDocumentReferences({
   rootPath,
   limit,
   excludePaths = [],
+  includeContent = false,
+  runtime = defaultWorkspaceSearchRuntime,
 }: {
   query: string
   tabs: WorkspaceSearchableTab[]
   rootPath: string | null
   limit: number
   excludePaths?: string[]
+  includeContent?: boolean
+  runtime?: WorkspaceSearchRuntime
 }): Promise<WorkspaceDocumentReference[]> {
   const normalizedQuery = normalizeLookupValue(query)
   if (!normalizedQuery || limit <= 0) return []
@@ -134,13 +173,13 @@ export async function findWorkspaceDocumentReferences({
   const excluded = new Set(excludePaths.map(normalizeLookupValue))
   const openTabPaths = new Set(
     tabs
-      .map((tab) => tab.path)
+      .map((tab) => normalizeWorkspacePath(tab.path))
       .filter((path): path is string => typeof path === 'string' && path.length > 0)
   )
   const openCandidates = findOpenTabDocumentCandidates(tabs, normalizedQuery, excluded)
   const workspaceCandidates =
-    isTauri && rootPath
-      ? await findWorkspaceDocumentCandidates(rootPath, normalizedQuery, openTabPaths, excluded, limit * 4)
+    runtime.workspaceEnabled && rootPath
+      ? await findWorkspaceIndexDocumentCandidates(rootPath, normalizedQuery, openTabPaths, excluded, limit * 4, runtime)
       : []
 
   const mergedCandidates = annotateWorkspaceDocumentCandidates(
@@ -157,7 +196,7 @@ export async function findWorkspaceDocumentReferences({
           path: candidate.path,
           tabId: candidate.tabId,
           source: candidate.source,
-          content: candidate.content ?? '',
+          content: includeContent ? candidate.content ?? null : null,
           score: candidate.score,
           matchKind: candidate.matchKind,
           confidence: candidate.confidence ?? 'low',
@@ -165,16 +204,10 @@ export async function findWorkspaceDocumentReferences({
         } satisfies WorkspaceDocumentReference
       }
 
-      if (!candidate.path) return null
-
-      const [{ readTextFile }] = await Promise.all([import('@tauri-apps/plugin-fs')])
-      let content = ''
-      try {
-        content = await readTextFile(candidate.path)
-      } catch {
-        content = ''
-      }
-      if (!content) return null
+      if (!candidate.path || !rootPath) return null
+      const content = includeContent
+        ? await runtime.getDocumentContent(rootPath, candidate.path)
+        : null
 
       return {
         name: candidate.name,
@@ -198,69 +231,40 @@ export async function findWorkspaceDocumentReferences({
   return resolvedReferences
 }
 
-async function searchWorkspaceFiles(
-  rootPath: string,
+async function searchWorkspaceIndexDocuments(
+  documents: readonly WorkspaceIndexDocument[],
   query: string,
   limit: number,
-  excludedPaths: Set<string>
+  excludedPaths: Set<string>,
+  options: {
+    rootPath: string
+    runtime: WorkspaceSearchRuntime
+  }
 ): Promise<WorkspaceSearchResult[]> {
   if (limit <= 0) return []
 
-  await ensureFsPathAccess(rootPath, { kind: 'dir', recursive: true })
-
-  const [{ readDir, readTextFile }, { join }] = await Promise.all([
-    import('@tauri-apps/plugin-fs'),
-    import('@tauri-apps/api/path'),
-  ])
-
   const results: WorkspaceSearchResult[] = []
-  const queue = [rootPath]
 
-  while (queue.length > 0 && results.length < limit) {
-    const currentDir = queue.shift()
-    if (!currentDir) break
+  for (const document of documents) {
+    const normalizedPath = normalizeWorkspacePath(document.path)
+    if (excludedPaths.has(normalizedPath)) continue
 
-    let entries: Awaited<ReturnType<typeof readDir>>
-    try {
-      entries = await readDir(currentDir)
-    } catch {
-      continue
+    const content = await options.runtime.getDocumentContent(options.rootPath, document.path)
+    if (!content) continue
+
+    const matches = findDocumentMatches(content, query, limit - results.length)
+    for (const match of matches) {
+      results.push({
+        ...match,
+        id: `workspace:${document.path}:${match.line}:${match.column}`,
+        name: document.name,
+        path: document.path,
+        tabId: null,
+        source: 'workspace',
+      })
     }
 
-    for (const entry of entries) {
-      if (!entry.name || entry.name.startsWith('.')) continue
-
-      const childPath = await join(currentDir, entry.name)
-      if (entry.isDirectory) {
-        queue.push(childPath)
-        continue
-      }
-
-      if (!entry.isFile || !isSupportedDocumentName(entry.name) || excludedPaths.has(childPath)) {
-        continue
-      }
-
-      let content = ''
-      try {
-        content = await readTextFile(childPath)
-      } catch {
-        continue
-      }
-
-      const matches = findDocumentMatches(content, query, limit - results.length)
-      for (const match of matches) {
-        results.push({
-          ...match,
-          id: `workspace:${childPath}:${match.line}:${match.column}`,
-          name: entry.name,
-          path: childPath,
-          tabId: null,
-          source: 'workspace',
-        })
-      }
-
-      if (results.length >= limit) break
-    }
+    if (results.length >= limit) break
   }
 
   return results
@@ -294,64 +298,36 @@ function findOpenTabDocumentCandidates(
   return candidates
 }
 
-async function findWorkspaceDocumentCandidates(
+async function findWorkspaceIndexDocumentCandidates(
   rootPath: string,
   normalizedQuery: string,
   excludedOpenTabPaths: Set<string>,
   excluded: Set<string>,
-  limit: number
+  limit: number,
+  runtime: WorkspaceSearchRuntime
 ): Promise<WorkspaceDocumentCandidate[]> {
   if (limit <= 0) return []
-
-  await ensureFsPathAccess(rootPath, { kind: 'dir', recursive: true })
-
-  const [{ readDir }, { join }] = await Promise.all([
-    import('@tauri-apps/plugin-fs'),
-    import('@tauri-apps/api/path'),
-  ])
-
-  const queue = [rootPath]
+  const snapshot = await runtime.getSnapshot(rootPath)
   const candidates: WorkspaceDocumentCandidate[] = []
 
-  while (queue.length > 0) {
-    const currentDir = queue.shift()
-    if (!currentDir) break
+  for (const document of snapshot.documents) {
+    const normalizedPath = normalizeWorkspacePath(document.path)
+    if (excludedOpenTabPaths.has(normalizedPath)) continue
 
-    let entries: Awaited<ReturnType<typeof readDir>>
-    try {
-      entries = await readDir(currentDir)
-    } catch {
-      continue
-    }
+    const exclusionKey = normalizeLookupValue(document.path)
+    if (excluded.has(exclusionKey)) continue
 
-    for (const entry of entries) {
-      if (!entry.name || entry.name.startsWith('.')) continue
+    const match = scoreDocumentQuery(document.name, document.path, normalizedQuery)
+    if (!match) continue
 
-      const childPath = await join(currentDir, entry.name)
-      if (entry.isDirectory) {
-        queue.push(childPath)
-        continue
-      }
-
-      if (!entry.isFile || !isSupportedDocumentName(entry.name) || excludedOpenTabPaths.has(childPath)) {
-        continue
-      }
-
-      const exclusionKey = normalizeLookupValue(childPath)
-      if (excluded.has(exclusionKey)) continue
-
-      const match = scoreDocumentQuery(entry.name, childPath, normalizedQuery)
-      if (!match) continue
-
-      candidates.push({
-        name: entry.name,
-        path: childPath,
-        tabId: null,
-        source: 'workspace',
-        score: match.score,
-        matchKind: match.matchKind,
-      })
-    }
+    candidates.push({
+      name: document.name,
+      path: document.path,
+      tabId: null,
+      source: 'workspace',
+      score: match.score,
+      matchKind: match.matchKind,
+    })
   }
 
   return mergeWorkspaceDocumentCandidates(candidates).slice(0, limit)
@@ -461,4 +437,10 @@ function normalizeLookupValue(value: string): string {
 
 function stripMarkdownExtension(value: string): string {
   return value.replace(/\.(md|markdown|mdx|txt)$/iu, '')
+}
+
+function normalizeWorkspacePath(path: string): string
+function normalizeWorkspacePath(path: string | null): string | null
+function normalizeWorkspacePath(path: string | null): string | null {
+  return typeof path === 'string' && path.length > 0 ? path.replace(/\\/gu, '/') : null
 }

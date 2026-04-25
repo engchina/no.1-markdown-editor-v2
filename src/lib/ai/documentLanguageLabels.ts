@@ -1,7 +1,7 @@
-import type { AIDocumentLanguage } from './types.ts'
+import type { DocumentLanguage } from '../documentLanguage.ts'
 
 export function getAIDocumentLanguageLabelKey(
-  language: AIDocumentLanguage | string | null | undefined
+  language: DocumentLanguage | string | null | undefined
 ): string | null {
   if (typeof language !== 'string') return null
 

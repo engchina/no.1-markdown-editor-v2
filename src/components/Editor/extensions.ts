@@ -1,17 +1,20 @@
 import {
+  Decoration,
   EditorView,
   keymap,
   lineNumbers,
   highlightActiveLine,
   highlightActiveLineGutter,
   highlightSpecialChars,
-  highlightTrailingWhitespace,
+  MatchDecorator,
+  ViewPlugin,
   drawSelection,
   dropCursor,
   rectangularSelection,
   crosshairCursor,
   placeholder as placeholderExtension,
   tooltips,
+  type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
 import { EditorSelection, EditorState, type Extension } from '@codemirror/state'
@@ -104,6 +107,16 @@ const markdownUnderlineOverride = HighlightStyle.define([
 // Keep ordinary spaces quiet. This mode focuses on Markdown-relevant invisibles:
 // tabs, non-breaking spaces, and line-ending whitespace handled separately below.
 const INVISIBLE_MARKDOWN_SPECIAL_CHARS = /[\t\u00a0]/g
+const trailingSpaceMark = Decoration.mark({ class: 'cm-trailingSpace' })
+const trailingSpaceDecorator = new MatchDecorator({
+  regexp: / +(?=[\t ]*$)/g,
+  // Decorate each trailing space separately so CSS can render exactly one dot per space.
+  decorate(add, from, to) {
+    for (let pos = from; pos < to; pos += 1) {
+      add(pos, pos + 1, trailingSpaceMark)
+    }
+  },
+})
 
 export const markdownHighlight = [
   syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
@@ -243,10 +256,29 @@ export function buildWordWrapExtensions(enabled: boolean): Extension[] {
   return enabled ? [EditorView.lineWrapping] : []
 }
 
+function buildMatchDecoratorExtension(decorator: MatchDecorator): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+
+      constructor(view: EditorView) {
+        this.decorations = decorator.createDeco(view)
+      }
+
+      update(update: ViewUpdate) {
+        this.decorations = decorator.updateDeco(update, this.decorations)
+      }
+    },
+    {
+      decorations: (value): DecorationSet => value.decorations,
+    }
+  )
+}
+
 export function buildInvisibleCharacterExtensions(enabled: boolean): Extension[] {
   return enabled
     ? [
-        highlightTrailingWhitespace(),
+        buildMatchDecoratorExtension(trailingSpaceDecorator),
         highlightSpecialChars({
           addSpecialChars: INVISIBLE_MARKDOWN_SPECIAL_CHARS,
         }),

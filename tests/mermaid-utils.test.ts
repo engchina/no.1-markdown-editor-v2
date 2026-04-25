@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  canUseMermaidCommonLogosIconPack,
   detectMermaidDiagramType,
+  extractMermaidLogosIconNames,
   getMermaidErrorMessage,
   getMermaidRenderErrorMessage,
   getRenderableMermaidSource,
@@ -47,6 +49,30 @@ test('detectMermaidDiagramType recognizes external Mermaid diagram plugins that 
 
 test('detectMermaidDiagramType returns null for Mermaid diagrams without specialized warming needs', () => {
   assert.equal(detectMermaidDiagramType('flowchart LR\n A --> B'), null)
+})
+
+test('extractMermaidLogosIconNames returns unique logos pack icon names from Mermaid source', () => {
+  const source = [
+    'architecture-beta',
+    'service api(logos:aws)[API]',
+    'service worker(logos:nodejs-icon)[Worker]',
+    'service cache(logos:redis)[Cache]',
+    'service again(logos:aws)[Same]',
+  ].join('\n')
+
+  assert.deepEqual(extractMermaidLogosIconNames(source), ['aws', 'nodejs-icon', 'redis'])
+})
+
+test('canUseMermaidCommonLogosIconPack only accepts diagrams whose logos stay inside the curated subset', () => {
+  assert.equal(
+    canUseMermaidCommonLogosIconPack('architecture-beta\nservice api(logos:aws)[API]\nservice cache(logos:redis)[Cache]'),
+    true
+  )
+  assert.equal(
+    canUseMermaidCommonLogosIconPack('architecture-beta\nservice unknown(logos:100tb)[Cold path]'),
+    false
+  )
+  assert.equal(canUseMermaidCommonLogosIconPack('flowchart LR\nA --> B'), false)
 })
 
 test('getRenderableMermaidSource removes official Mermaid placeholder lines copied into the source', () => {

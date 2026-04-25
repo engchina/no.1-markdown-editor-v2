@@ -9,48 +9,49 @@ import { finalizeRenderedMarkdownHtml, sanitizeSchema, stripFrontMatter } from '
 import { rehypeHeadingIds } from './rehypeHeadingIds.ts'
 import { rehypeHighlightMarkers } from './rehypeHighlightMarkers.ts'
 import { rehypeNormalizeImageSources } from './rehypeNormalizeImageSources.ts'
+import {
+  applyMarkdownSyntaxHighlighting,
+  type MarkdownSyntaxHighlightEngine,
+} from './markdownSyntaxHighlight.ts'
 import { rehypeSubscriptMarkers } from './rehypeSubscriptMarkers.ts'
 import { rehypeSuperscriptMarkers } from './rehypeSuperscriptMarkers.ts'
 
-import rehypeHighlight from 'rehype-highlight'
-import rehypeShiki from '@shikijs/rehype'
+const processors: Partial<Record<MarkdownSyntaxHighlightEngine, Promise<any>>> = {}
 
-const processors: Record<string, any> = {}
-
-function getProcessorWithHtml(engine: 'highlightjs' | 'shiki') {
+async function getProcessorWithHtml(engine: MarkdownSyntaxHighlightEngine) {
   if (processors[engine]) return processors[engine]
 
-  let processor: any = unified()
-    .use(remarkParse)
-    .use(remarkGfm, { singleTilde: false })
-    .use(remarkRehype, { allowDangerousHtml: true })
-    .use(rehypeRaw)
-    .use(rehypeSubscriptMarkers)
-    .use(rehypeSuperscriptMarkers)
-    .use(rehypeHighlightMarkers)
-    .use(rehypeNormalizeImageSources)
-    .use(rehypeSanitize, sanitizeSchema)
+  processors[engine] = (async () => {
+    let processor: any = unified()
+      .use(remarkParse)
+      .use(remarkGfm, { singleTilde: false })
+      .use(remarkRehype, { allowDangerousHtml: true })
+      .use(rehypeRaw)
+      .use(rehypeSubscriptMarkers)
+      .use(rehypeSuperscriptMarkers)
+      .use(rehypeHighlightMarkers)
+      .use(rehypeNormalizeImageSources)
+      .use(rehypeSanitize, sanitizeSchema)
 
-  if (engine === 'shiki') {
-    processor = processor.use(rehypeShiki, { 
-      themes: { light: 'github-light', dark: 'github-dark' },
-      fallbackLanguage: 'txt'
-    })
-  } else {
-    processor = processor.use(rehypeHighlight, { ignoreMissing: true })
-  }
+    processor = await applyMarkdownSyntaxHighlighting(processor, engine)
 
-  processor = processor
-    .use(rehypeHeadingIds)
-    .use(rehypeStringify)
+    return processor
+      .use(rehypeHeadingIds)
+      .use(rehypeStringify)
+  })().catch((error) => {
+    delete processors[engine]
+    throw error
+  })
 
-  processors[engine] = processor
-  return processor
+  return processors[engine]
 }
 
-export async function renderMarkdownWithHtml(markdown: string, syntaxHighlightEngine: 'highlightjs' | 'shiki' = 'highlightjs'): Promise<string> {
+export async function renderMarkdownWithHtml(
+  markdown: string,
+  syntaxHighlightEngine: MarkdownSyntaxHighlightEngine = 'highlightjs'
+): Promise<string> {
   const { meta, body } = stripFrontMatter(markdown)
-  const processor = getProcessorWithHtml(syntaxHighlightEngine)
+  const processor = await getProcessorWithHtml(syntaxHighlightEngine)
   const rendered = await processor.process({
     value: body,
     data: { markdownSource: body },

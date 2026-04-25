@@ -39,41 +39,51 @@ test('CodeMirrorEditor resolves AI open defaults from persisted write-target and
 })
 
 test('AIComposer cancel path both increments the local run id and attempts backend cancellation', async () => {
-  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+  const [composer, runtime] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/useAIComposerRuntime.ts', import.meta.url), 'utf8'),
+  ])
 
-  assert.match(composer, /async function handleCancelRequest\(\)/)
-  assert.match(composer, /requestRunIdRef\.current \+= 1/)
-  assert.match(composer, /activeRequestIdRef\.current = null/)
-  assert.match(composer, /await cancelAICompletion\(requestId\)/)
-  assert.match(composer, /pushInfoNotice\('notices\.aiRequestCanceledTitle', 'notices\.aiRequestCanceledMessage'\)/)
+  assert.match(runtime, /const handleCancelRequest = useCallback\(async \(\) =>/)
+  assert.match(runtime, /requestRunIdRef\.current \+= 1/)
+  assert.match(runtime, /activeRequestIdRef\.current = null/)
+  assert.match(runtime, /await cancelAICompletion\(requestId\)/)
+  assert.match(runtime, /pushInfoNotice\('notices\.aiRequestCanceledTitle', 'notices\.aiRequestCanceledMessage'\)/)
+  assert.match(composer, /useAIComposerRuntime\(\{/)
 })
 
 test('AIComposer exposes explicit replace, insert, and new-note result actions while keeping keyboard apply on the preferred target', async () => {
-  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+  const [composer, core] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
+  ])
 
   assert.match(composer, /const defaultInsertTarget: AIInsertTarget =/)
   assert.match(composer, /const preferredResultAction: 'replace' \| 'insert' \| 'new-note' =/)
-  assert.match(composer, /data-ai-action="replace"/)
-  assert.match(composer, /data-ai-action="insert"/)
-  assert.match(composer, /data-ai-action="new-note"/)
+  assert.match(core, /data-ai-action="replace"/)
+  assert.match(core, /data-ai-action="insert"/)
+  assert.match(core, /data-ai-action="new-note"/)
   assert.match(composer, /replaceActionTarget/)
   assert.match(composer, /handleApplyToTarget\(defaultInsertTarget\)/)
   assert.match(composer, /handleApplyToTarget\('new-note'\)/)
-  assert.match(composer, /data-ai-current-output-target="true"/)
+  assert.match(core, /data-ai-current-output-target="true"/)
 })
 
 test('AIComposer rebuilds effective context from the captured snapshot while keeping the suggestion row prompt-only', async () => {
-  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+  const [composer, core] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
+  ])
 
   assert.match(composer, /buildAIComposerContextPacket\(/)
   assert.match(composer, /resolveAIComposerTemplateResolution\(/)
   assert.match(composer, /setScope\(resolution\.scope\)/)
   assert.match(composer, /setOutputTarget\(resolution\.outputTarget\)/)
   assert.match(composer, /hasSlashCommandContext/)
-  assert.match(composer, /data-ai-template-hint="transform-target-required"/)
-  assert.match(composer, /disabled=\{!resolution\.enabled\}/)
-  assert.doesNotMatch(composer, /data-ai-template-target=/)
-  assert.doesNotMatch(composer, /t\('ai\.mode\.target'\)/)
+  assert.match(core, /data-ai-template-hint="transform-target-required"/)
+  assert.match(core, /disabled=\{!resolution\.enabled\}/)
+  assert.doesNotMatch(core, /data-ai-template-target=/)
+  assert.doesNotMatch(core, /t\('ai\.mode\.target'\)/)
   assert.doesNotMatch(composer, /activeTab\?\.name \?\? t\('app\.untitled'\)/)
   assert.doesNotMatch(composer, /t\('ai\.context\.language'\)/)
   assert.doesNotMatch(composer, /formatAIDocumentLanguage\(/)
@@ -97,8 +107,9 @@ test('AIComposer template chips append a trailing newline and place the caret on
 })
 
 test('slash-command AI entry keeps the hidden context explanation while removing the extra title chrome', async () => {
-  const [composer, editor, app, prompt] = await Promise.all([
+  const [composer, core, editor, app, prompt] = await Promise.all([
     readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/Editor/CodeMirrorEditor.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/lib/ai/prompt.ts', import.meta.url), 'utf8'),
@@ -106,13 +117,13 @@ test('slash-command AI entry keeps the hidden context explanation while removing
 
   assert.match(editor, /buildAISlashCommandContext\(snapshot\.docText, snapshot\.anchorOffset\)/)
   assert.match(app, /buildAISlashCommandContext\(fallbackTab\.content, offset\)/)
-  assert.match(composer, /data-ai-slash-context=\{slashCommandContext\.isEmpty \? 'empty' : 'attached'\}/)
+  assert.match(core, /data-ai-slash-context=\{slashCommandContext\.isEmpty \? 'empty' : 'attached'\}/)
   assert.doesNotMatch(composer, /buildAIContextChipModels\(/)
-  assert.match(composer, /t\('ai\.slashContext\.attachedMessage'\)/)
-  assert.match(composer, /t\('ai\.slashContext\.emptyMessage'\)/)
-  assert.match(composer, /className="m-0 truncate whitespace-nowrap"/)
-  assert.doesNotMatch(composer, /t\('ai\.slashContext\.attachedTitle'\)/)
-  assert.doesNotMatch(composer, /t\('ai\.slashContext\.emptyTitle'\)/)
+  assert.match(core, /t\('ai\.slashContext\.attachedMessage'\)/)
+  assert.match(core, /t\('ai\.slashContext\.emptyMessage'\)/)
+  assert.match(core, /className="m-0 truncate whitespace-nowrap"/)
+  assert.doesNotMatch(core, /t\('ai\.slashContext\.attachedTitle'\)/)
+  assert.doesNotMatch(core, /t\('ai\.slashContext\.emptyTitle'\)/)
   assert.match(prompt, /Input source: slash-prefix/)
   assert.match(prompt, /Input role: continuation-context/)
   assert.match(prompt, /<input_content>/)
@@ -120,15 +131,16 @@ test('slash-command AI entry keeps the hidden context explanation while removing
 })
 
 test('AIComposer exposes keyboard shortcuts for run and apply, and the editor regains focus when the composer closes', async () => {
-  const [composer, editor] = await Promise.all([
+  const [composer, core, editor] = await Promise.all([
     readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/Editor/CodeMirrorEditor.tsx', import.meta.url), 'utf8'),
   ])
 
   assert.match(composer, /matchesPrimaryShortcut\(event, \{ key: 'enter', shift: true \}\) && canApplyDraft/)
   assert.match(composer, /matchesPrimaryShortcut\(event, \{ key: 'enter' \}\) && canSubmit/)
-  assert.match(composer, /aria-keyshortcuts="Control\+Enter Meta\+Enter"/)
-  assert.match(composer, /Control\+Shift\+Enter Meta\+Shift\+Enter/)
+  assert.match(core, /aria-keyshortcuts="Control\+Enter Meta\+Enter"/)
+  assert.match(core, /Control\+Shift\+Enter Meta\+Shift\+Enter/)
   assert.match(editor, /const wasComposerOpen = previousAIComposerOpenRef\.current/)
   assert.match(editor, /interface AIComposerRestoreSnapshot \{/)
   assert.match(editor, /const aiComposerRestoreSnapshotRef = useRef<AIComposerRestoreSnapshot \| null>\(null\)/)

@@ -1,3 +1,5 @@
+import type { DocumentLanguage } from '../documentLanguage.ts'
+
 export type AIIntent = 'ask' | 'edit' | 'generate' | 'review'
 export type AIScope = 'selection' | 'current-block' | 'document'
 export type AIOutputTarget =
@@ -8,7 +10,7 @@ export type AIOutputTarget =
   | 'insert-below'
   | 'new-note'
 export type AISelectedTextRole = 'transform-target' | 'reference-only'
-export type AIDocumentLanguage = 'zh' | 'en' | 'ja' | 'mixed'
+export type AIDocumentLanguage = DocumentLanguage
 export type AIRequestState = 'idle' | 'streaming' | 'done' | 'error'
 export type AISessionHistoryStatus = 'streaming' | 'done' | 'error' | 'canceled'
 export type AIWorkspaceExecutionHistoryTaskStatus =

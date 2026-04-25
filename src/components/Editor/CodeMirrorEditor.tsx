@@ -72,6 +72,10 @@ import {
 } from '../../lib/clipboardHtml'
 import { getImageAltText } from '../../lib/fileTypes'
 import {
+  detectDocumentLanguage,
+  resolveDocumentSpellcheckConfig,
+} from '../../lib/documentLanguage.ts'
+import {
   getTauriFilePersistence,
   persistDraftImageFilesAsMarkdown,
   persistImageFilesAsMarkdown,
@@ -100,6 +104,7 @@ import {
   matchesEditorRedoShortcut,
   matchesEditorUndoShortcut,
 } from '../../lib/editorHistory.ts'
+import { EDITOR_RETURN_TO_WRITING_EVENT } from '../../lib/editorFocus.ts'
 import { useAIStore } from '../../store/ai'
 import { useActiveTab, useEditorStore } from '../../store/editor'
 import SearchBar from '../Search/SearchBar'
@@ -150,6 +155,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   const lineNumbers = useEditorStore((state) => state.lineNumbers)
   const wordWrap = useEditorStore((state) => state.wordWrap)
   const showInvisibleCharacters = useEditorStore((state) => state.showInvisibleCharacters)
+  const spellcheckMode = useEditorStore((state) => state.spellcheckMode)
   const fontSize = useEditorStore((state) => state.fontSize)
   const wysiwygMode = useEditorStore((state) => state.wysiwygMode)
   const pendingNavigation = useEditorStore((state) => state.pendingNavigation)
@@ -169,6 +175,8 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   const [autocompleteExtensions, setAutocompleteExtensions] = useState<Extension[]>([])
   const [wysiwygExtensions, setWysiwygExtensions] = useState<Extension[]>([])
   const [selectionBubble, setSelectionBubble] = useState<{ top: number; left: number } | null>(null)
+  const documentLanguage = detectDocumentLanguage(content)
+  const spellcheckConfig = resolveDocumentSpellcheckConfig(documentLanguage, spellcheckMode)
 
   const handleCursorChange = useCallback(
     (line: number, col: number) => {
@@ -591,6 +599,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
 
     const view = new EditorView({ state, parent: container })
     viewRef.current = view
+    applySpellcheckConfigToEditable(view.contentDOM, spellcheckConfig)
     view.focus()
     const cursor = view.state.selection.main.head
     const line = view.state.doc.lineAt(cursor)
@@ -853,6 +862,26 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       searchSupport.closePanel(view)
     }
   }, [searchOpen, searchSupport])
+
+  useEffect(() => {
+    const handleReturnToWriting = () => {
+      const view = viewRef.current
+      if (!view) return
+      view.focus()
+    }
+
+    document.addEventListener(EDITOR_RETURN_TO_WRITING_EVENT, handleReturnToWriting)
+    return () => {
+      document.removeEventListener(EDITOR_RETURN_TO_WRITING_EVENT, handleReturnToWriting)
+    }
+  }, [])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+
+    applySpellcheckConfigToEditable(view.contentDOM, spellcheckConfig)
+  }, [spellcheckConfig.lang, spellcheckConfig.spellcheck])
 
   useEffect(() => {
     if (!pendingNavigation || pendingNavigation.tabId !== activeTab?.id) return
@@ -1670,5 +1699,17 @@ function resolveInsertedProvenanceRange(
   return {
     from: from + leadingTrimmedLength,
     to: from + leadingTrimmedLength + contentLength,
+  }
+}
+
+function applySpellcheckConfigToEditable(
+  element: HTMLElement,
+  config: { spellcheck: boolean; lang: string | null }
+): void {
+  element.spellcheck = config.spellcheck
+  if (config.lang) {
+    element.setAttribute('lang', config.lang)
+  } else {
+    element.removeAttribute('lang')
   }
 }

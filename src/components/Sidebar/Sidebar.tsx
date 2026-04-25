@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useEditorStore, useActiveTab, type SidebarTab } from '../../store/editor'
-import { useRecentFiles } from '../../hooks/useRecentFiles'
-import { useWorkspaceSearch } from '../../hooks/useWorkspaceSearch'
-import { openDesktopDocumentPath } from '../../lib/desktopFileOpen'
-import { extractHeadings, type OutlineHeading as Heading } from '../../lib/outline'
-import AppIcon, { type IconName } from '../Icons/AppIcon'
-import FileTree from './FileTree'
+import { useEditorStore } from '../../store/editor'
+import AppIcon from '../Icons/AppIcon'
+import { SIDEBAR_SURFACES } from './surfaces'
+import { SidebarSectionSurface } from './sidebarShared'
 
 interface Props {
   width: number
@@ -15,343 +11,53 @@ interface Props {
 export default function Sidebar({ width }: Props) {
   const { t } = useTranslation()
   const { sidebarTab, setSidebarTab } = useEditorStore()
-  const activeTab = useActiveTab()
-  const headings = useMemo(
-    () => extractHeadings(activeTab?.content ?? ''),
-    [activeTab?.content]
-  )
-  const tabs: { id: SidebarTab; icon: IconName; title: string }[] = [
-    { id: 'outline', icon: 'outline', title: t('sidebar.outline') },
-    { id: 'files', icon: 'folder', title: t('sidebar.files') },
-    { id: 'recent', icon: 'clock', title: t('menu.recentFiles') },
-    { id: 'search', icon: 'search', title: t('sidebar.search') },
-  ]
+  const activeSurface = SIDEBAR_SURFACES.find((surface) => surface.id === sidebarTab) ?? SIDEBAR_SURFACES[0]
+  const ActivePanel = activeSurface.component
 
   return (
     <div
       className="sidebar-surface flex h-full min-h-0 flex-shrink-0 flex-col"
-      style={{
-        width,
-      }}
+      style={{ width }}
     >
-      {/* Tab Pill Navigation */}
-      <div
-        className="flex flex-shrink-0 items-center px-3 pb-2 pt-3"
-      >
+      <div className="flex flex-shrink-0 items-center px-3 pb-2 pt-3">
         <div
           className="flex w-full items-center p-1 rounded-[14px]"
-          style={{ background: 'color-mix(in srgb, var(--bg-secondary) 92%, transparent)', border: '1px solid color-mix(in srgb, var(--border) 72%, transparent)' }}
-        >
-          {tabs.map(({ id, icon, title }) => (
-            <button
-              key={id}
-              title={title}
-              aria-label={title}
-              data-sidebar-tab={id}
-              onClick={() => setSidebarTab(id)}
-              className="flex-1 h-8 rounded-[10px] flex items-center justify-center text-sm transition-all duration-300 ease-out"
-              style={{
-                color: sidebarTab === id ? 'var(--text-primary)' : 'var(--text-muted)',
-                background: sidebarTab === id ? 'var(--bg-primary)' : 'transparent',
-                boxShadow: sidebarTab === id ? '0 8px 20px -16px rgba(15, 23, 42, 0.32)' : 'none',
-                fontWeight: sidebarTab === id ? 500 : 400,
-              }}
-            >
-              <AppIcon name={icon} size={15} />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="sidebar-surface__scroll flex-1 min-h-0 overflow-y-auto px-3 pb-3">
-        {sidebarTab === 'outline' && (
-          <SidebarSectionSurface>
-            <OutlinePanel headings={headings} />
-          </SidebarSectionSurface>
-        )}
-        {sidebarTab === 'files' && (
-          <SidebarSectionSurface className="p-2">
-            <FileTree />
-          </SidebarSectionSurface>
-        )}
-        {sidebarTab === 'recent' && (
-          <SidebarSectionSurface>
-            <RecentPanel />
-          </SidebarSectionSurface>
-        )}
-        {sidebarTab === 'search' && (
-          <SidebarSectionSurface>
-            <SearchPanel />
-          </SidebarSectionSurface>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function SidebarSectionSurface({
-  children,
-  className = 'px-3 py-3',
-}: {
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <div
-      className={className}
-      style={{
-        background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--border) 78%, transparent)',
-        borderRadius: '20px',
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
-function OutlinePanel({ headings }: { headings: Heading[] }) {
-  const { t } = useTranslation()
-  const [activeId, setActiveId] = useState<string>('')
-  const activeTab = useActiveTab()
-  const viewMode = useEditorStore((state) => state.viewMode)
-  const setPendingNavigation = useEditorStore((state) => state.setPendingNavigation)
-
-  // Listen for scrollspy events from the preview panel
-  useEffect(() => {
-    const handler = (e: Event) => {
-      setActiveId((e as CustomEvent<string>).detail)
-    }
-    document.addEventListener('preview:activeHeading', handler)
-    return () => document.removeEventListener('preview:activeHeading', handler)
-  }, [])
-
-  if (headings.length === 0) {
-    return (
-      <p className="text-xs text-center mt-4" style={{ color: 'var(--text-muted)' }}>
-        {t('sidebar.noOutline')}
-      </p>
-    )
-  }
-  return (
-    <ul className="space-y-0.5">
-      {headings.map((h, i) => {
-        const isActive = activeId === h.id
-        return (
-          <li key={h.id || i}>
-            <button
-              type="button"
-              className="flex w-full items-center rounded-lg px-2 py-1 text-left text-xs transition-colors"
-              style={{
-                paddingLeft: `${(h.level - 1) * 12 + 8}px`,
-                color: isActive ? 'var(--accent)' : h.level === 1 ? 'var(--text-primary)' : h.level === 2 ? 'var(--text-secondary)' : 'var(--text-muted)',
-                fontWeight: h.level <= 2 ? 500 : 400,
-                background: isActive ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'transparent',
-                borderLeft: isActive ? '2px solid var(--accent)' : '2px solid transparent',
-              }}
-              aria-current={isActive ? 'location' : undefined}
-              onClick={() => {
-                setActiveId(h.id)
-
-                if (activeTab && viewMode !== 'preview') {
-                  setPendingNavigation({
-                    tabId: activeTab.id,
-                    line: h.line,
-                    column: 1,
-                    align: 'start',
-                  })
-                }
-
-                const preview = document.querySelector('.markdown-preview')
-                const target = h.id ? document.getElementById(h.id) : null
-                const el = target instanceof HTMLElement && preview?.contains(target) ? target : null
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  el.animate([{ background: 'color-mix(in srgb, var(--accent) 20%, transparent)' }, { background: 'transparent' }], { duration: 1200 })
-                }
-              }}
-            >
-              <span
-                className="mr-1 text-xs"
-                style={{ color: isActive ? 'var(--accent)' : 'var(--text-muted)', minWidth: '20px', fontFamily: 'monospace' }}
-              >
-                {'H' + h.level}
-              </span>
-              <span className="truncate">{h.text}</span>
-            </button>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-
-function SearchPanel() {
-  const { t } = useTranslation()
-  const [query, setQuery] = useState('')
-  const { setActiveTab, setPendingNavigation } = useEditorStore()
-  const { results, searching, rootPath } = useWorkspaceSearch(query)
-  const searchScopeLabel = rootPath ? t('sidebar.searchWorkspace') : t('sidebar.searchOpenTabs')
-  let lastSource: 'tab' | 'workspace' | '' = ''
-
-  return (
-    <div className="flex flex-col gap-2">
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={searchScopeLabel}
-        className="w-full rounded px-2 py-1 text-xs outline-none"
-        style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
-      />
-      {query && (
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {searching
-            ? t('sidebar.searching')
-            : results.length === 0
-              ? t('sidebar.noResults')
-              : t('sidebar.results', { count: results.length })}
-        </p>
-      )}
-      <ul className="space-y-0.5">
-        {results.map((result) => {
-          const showHeader = result.source !== lastSource
-          if (showHeader) lastSource = result.source
-
-          return (
-            <li key={result.id}>
-              {showHeader && (
-                <div
-                  className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.16em]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  {result.source === 'tab' ? t('sidebar.searchSourceTabs') : t('sidebar.searchSourceWorkspace')}
-                </div>
-              )}
-              <button
-                type="button"
-                className="w-full rounded px-2 py-1 text-left text-xs transition-colors"
-                style={{ color: 'var(--text-secondary)' }}
-                onClick={async () => {
-                  if (result.tabId) {
-                    setActiveTab(result.tabId)
-                    setPendingNavigation({ tabId: result.tabId, line: result.line, column: result.column })
-                    return
-                  }
-
-                  if (!result.path) return
-                  const opened = await openDesktopDocumentPath(result.path)
-                  if (!opened) return
-
-                  const tab = useEditorStore.getState().tabs.find((entry) => entry.path === result.path)
-                  if (!tab) return
-
-                  setActiveTab(tab.id)
-                  setPendingNavigation({ tabId: tab.id, line: result.line, column: result.column })
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-              >
-                <div className="mb-0.5 flex items-center gap-1">
-                  <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{result.name}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>:{result.line}</span>
-                </div>
-                <div className="truncate" style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '10px' }}>
-                  {result.path ?? t('palette.unsaved')}
-                </div>
-                <div className="truncate" style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '10px' }}>
-                  {result.text.slice(0, 80)}
-                </div>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </div>
-  )
-}
-
-function RecentPanel() {
-  const { t } = useTranslation()
-  const { recentFiles, openRecent, clearRecent, canReopenRecent } = useRecentFiles()
-
-  function relativeTime(ts: number): string {
-    const diff = Date.now() - ts
-    const secs = Math.floor(diff / 1000)
-    if (secs < 60) return t('sidebar.justNow')
-    const mins = Math.floor(secs / 60)
-    if (mins < 60) return t('sidebar.minutesAgo', { count: mins })
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return t('sidebar.hoursAgo', { count: hrs })
-    const days = Math.floor(hrs / 24)
-    return t('sidebar.daysAgo', { count: days })
-  }
-
-  if (recentFiles.length === 0) {
-    return (
-      <p className="text-xs text-center mt-4" style={{ color: 'var(--text-muted)' }}>
-        {t('sidebar.noRecent')}
-      </p>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between mb-1 px-1">
-        <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{t('sidebar.recentFilesTitle')}</span>
-        <button
-          type="button"
-          className="text-xs transition-colors"
-          style={{ color: 'var(--text-muted)' }}
-          onClick={clearRecent}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-        >
-          {t('sidebar.clear')}
-        </button>
-      </div>
-      {!canReopenRecent && (
-        <div
-          className="mb-2 rounded-xl border px-3 py-2 text-[11px]"
           style={{
-            borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
-            background: 'color-mix(in srgb, var(--bg-secondary) 78%, transparent)',
-            color: 'var(--text-muted)',
+            background: 'color-mix(in srgb, var(--bg-secondary) 92%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--border) 72%, transparent)',
           }}
         >
-          {t('notices.recentFileBrowserMessage')}
+          {SIDEBAR_SURFACES.map((surface) => {
+            const title = t(surface.titleKey)
+            const selected = sidebarTab === surface.id
+
+            return (
+              <button
+                key={surface.id}
+                title={title}
+                aria-label={title}
+                data-sidebar-tab={surface.id}
+                onClick={() => setSidebarTab(surface.id)}
+                className="flex-1 h-8 rounded-[10px] flex items-center justify-center text-sm transition-all duration-300 ease-out"
+                style={{
+                  color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+                  background: selected ? 'var(--bg-primary)' : 'transparent',
+                  boxShadow: selected ? '0 8px 20px -16px rgba(15, 23, 42, 0.32)' : 'none',
+                  fontWeight: selected ? 500 : 400,
+                }}
+              >
+                <AppIcon name={surface.icon} size={15} />
+              </button>
+            )
+          })}
         </div>
-      )}
-      <ul className="space-y-0.5">
-        {recentFiles.map((f, i) => (
-          <li key={i}>
-            <button
-              type="button"
-              className={`group w-full rounded-xl border border-transparent px-3 py-2 text-left text-xs transition-all duration-200 ${canReopenRecent ? 'cursor-pointer' : 'cursor-help'}`}
-              onClick={() => { void openRecent(f) }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg-tertiary)'
-                e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--border) 50%, transparent)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.borderColor = 'transparent'
-              }}
-              title={f.path}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="truncate font-medium" style={{ color: 'var(--text-primary)' }}>{f.name}</span>
-                <span className="flex-shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>{relativeTime(f.openedAt)}</span>
-              </div>
-              <div className="mt-0.5 truncate" style={{ color: 'var(--text-muted)', fontSize: '10px', fontFamily: 'monospace' }}>
-                {f.path}
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
+      </div>
+
+      <div className="sidebar-surface__scroll flex-1 min-h-0 overflow-y-auto px-3 pb-3">
+        <SidebarSectionSurface className={activeSurface.surfaceClassName ?? 'px-3 py-3'}>
+          <ActivePanel />
+        </SidebarSectionSurface>
+      </div>
     </div>
   )
 }

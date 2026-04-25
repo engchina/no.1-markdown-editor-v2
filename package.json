@@ -1,6 +1,6 @@
 {
   "name": "no1-markdown-editor",
-  "version": "0.17.9",
+  "version": "0.17.10",
   "private": true,
   "type": "module",
   "scripts": {
@@ -19,6 +19,10 @@
     "test:copy:smoke": "npm run build && node scripts/run-copy-smoke.mjs",
     "test:paste:smoke": "npm run build && node scripts/run-paste-smoke.mjs",
     "test:source:smoke": "npm run build && node scripts/run-source-interaction-smoke.mjs",
+    "release:prepare": "node scripts/prepare-release.mjs",
+    "release:draft:advance": "node scripts/advance-release-draft.mjs",
+    "release:notes:preview": "node scripts/build-release-body.mjs",
+    "release:validate": "node scripts/validate-release.mjs --require-changelog",
     "tauri": "node scripts/run-tauri.mjs",
     "package:win": ".\\scripts\\package-win.cmd",
     "package:mac": "bash ./scripts/package-mac.sh"

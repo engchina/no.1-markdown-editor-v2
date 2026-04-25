@@ -33,9 +33,11 @@ import {
   type InlineBoldItalicRange,
 } from './wysiwygInlineEmphasis.ts'
 import { collectInlineLiteralEscapeRanges, hasOddTrailingBackslashes } from './wysiwygInlineLiterals.ts'
+import { collectInlineMediaRanges } from './wysiwygInlineMedia.ts'
 import { findInlineMathRanges } from './wysiwygInlineMath.ts'
 import { renderInlineMarkdownFragment } from './wysiwygInlineMarkdown.ts'
 import { collectInlineHardBreakTokens } from './wysiwygHardBreak.ts'
+import { collectReferenceDefinitionMarkdown } from './wysiwygReferenceLinks.ts'
 import { findInlineSubscriptRanges } from './wysiwygSubscript.ts'
 import { findInlineStrikethroughRanges } from './wysiwygStrikethrough.ts'
 import { findInlineSuperscriptRanges } from './wysiwygSuperscript.ts'
@@ -52,7 +54,14 @@ import {
   type WysiwygDecorationView,
 } from './wysiwygCodeBlock.ts'
 import { collectInactiveWysiwygMathBlocks } from './wysiwygMathBlock.ts'
+import { detectDocumentLanguage, resolveDocumentSpellcheckConfig } from '../../lib/documentLanguage.ts'
 import { hasTerminalBlankLine } from '../../lib/editorTerminalBlankLine.ts'
+import { stripFrontMatter, type FrontMatterMeta } from '../../lib/markdownShared.ts'
+import { rewriteRenderedHtmlImageSources } from '../../lib/renderedImageSources.ts'
+import { loadLocalPreviewImage } from '../../lib/previewLocalImage.ts'
+import { rewritePreviewHtmlLocalImages } from '../../lib/previewLocalImages.ts'
+import { loadExternalPreviewImage } from '../../lib/previewRemoteImage.ts'
+import { rewritePreviewHtmlExternalImages } from '../../lib/previewExternalImages.ts'
 import {
   decodeMarkdownTableCellText,
   encodeMarkdownTableCellText,
@@ -77,6 +86,7 @@ import {
 import { convertClipboardToMarkdownTable } from './tablePasteConverter.ts'
 import type { TableAlignment } from './tableBlockRanges.ts'
 import i18n from '../../i18n/index.ts'
+import { useEditorStore } from '../../store/editor'
 
 // ── Widgets ────────────────────────────────────────────────────────────────
 
@@ -84,8 +94,9 @@ class HrWidget extends WidgetType {
   toDOM() {
     const el = document.createElement('div')
     el.className = 'cm-wysiwyg-hr'
-    el.style.cssText =
-      'border: none; border-top: 2px solid var(--border); margin: 0.5em 0; pointer-events: none;'
+    const rule = document.createElement('div')
+    rule.className = 'cm-wysiwyg-hr__rule'
+    el.appendChild(rule)
     return el
   }
   ignoreEvent() { return true }
@@ -166,21 +177,27 @@ class BlockMathWidget extends WidgetType {
 class TableWidget extends WidgetType {
   private readonly table: MarkdownTableBlock
   private readonly activeCell: ActiveWysiwygTableCell | null
+  private readonly spellcheckConfig: WysiwygSpellcheckConfig
 
-  constructor(table: MarkdownTableBlock, activeCell: ActiveWysiwygTableCell | null) {
+  constructor(
+    table: MarkdownTableBlock,
+    activeCell: ActiveWysiwygTableCell | null,
+    spellcheckConfig: WysiwygSpellcheckConfig
+  ) {
     super()
     this.table = table
     this.activeCell = activeCell
+    this.spellcheckConfig = spellcheckConfig
   }
 
   toDOM() {
     const wrapper = document.createElement('div')
-    syncTableWidgetDom(wrapper, this.table, this.activeCell)
+    syncTableWidgetDom(wrapper, this.table, this.activeCell, this.spellcheckConfig)
     return wrapper
   }
 
   updateDOM(dom: HTMLElement) {
-    syncTableWidgetDom(dom, this.table, this.activeCell)
+    syncTableWidgetDom(dom, this.table, this.activeCell, this.spellcheckConfig)
     return true
   }
 
@@ -188,7 +205,9 @@ class TableWidget extends WidgetType {
 
   eq(other: TableWidget) {
     return JSON.stringify(this.table) === JSON.stringify(other.table) &&
-      areActiveTableCellsEqual(this.activeCell, other.activeCell)
+      areActiveTableCellsEqual(this.activeCell, other.activeCell) &&
+      this.spellcheckConfig.spellcheck === other.spellcheckConfig.spellcheck &&
+      this.spellcheckConfig.lang === other.spellcheckConfig.lang
   }
 }
 
@@ -412,7 +431,8 @@ function syncTableColumnWidthColGroup(
 function syncTableWidgetDom(
   wrapper: HTMLElement,
   table: MarkdownTableBlock,
-  activeCell: ActiveWysiwygTableCell | null
+  activeCell: ActiveWysiwygTableCell | null,
+  spellcheckConfig: WysiwygSpellcheckConfig
 ): void {
   wrapper.className = 'cm-wysiwyg-table'
   wrapper.dataset.tableEditStart = String(table.editAnchor)
@@ -451,7 +471,7 @@ function syncTableWidgetDom(
 
   const thead = grid.tHead ?? document.createElement('thead')
   if (!grid.tHead) grid.appendChild(thead)
-  syncTableRowDom(thead, table, 'head', 0, table.header.cells, activeCell)
+  syncTableRowDom(thead, table, 'head', 0, table.header.cells, activeCell, spellcheckConfig)
 
   if (table.rows.length === 0) {
     if (grid.tBodies[0]) {
@@ -469,7 +489,7 @@ function syncTableWidgetDom(
 
   table.rows.forEach((row, rowIndex) => {
     const tr = tbody.rows[rowIndex] ?? tbody.insertRow(rowIndex)
-    syncTableRowDom(tr, table, 'body', rowIndex, row.cells, activeCell)
+    syncTableRowDom(tr, table, 'body', rowIndex, row.cells, activeCell, spellcheckConfig)
   })
 }
 
@@ -479,7 +499,8 @@ function syncTableRowDom(
   section: 'head' | 'body',
   rowIndex: number,
   cells: ReadonlyArray<MarkdownTableBlock['header']['cells'][number]>,
-  activeCell: ActiveWysiwygTableCell | null
+  activeCell: ActiveWysiwygTableCell | null,
+  spellcheckConfig: WysiwygSpellcheckConfig
 ): void {
   const row = rowContainer instanceof HTMLTableRowElement
     ? rowContainer
@@ -519,7 +540,8 @@ function syncTableRowDom(
       cell,
       location,
       resolveTableColumnKind(table, columnIndex),
-      activeCell
+      activeCell,
+      spellcheckConfig
     )
   })
 }
@@ -530,7 +552,8 @@ function syncTableCellDom(
   cell: MarkdownTableBlock['header']['cells'][number],
   location: MarkdownTableCellLocation,
   columnKind: 'text' | 'numeric',
-  activeCell: ActiveWysiwygTableCell | null
+  activeCell: ActiveWysiwygTableCell | null,
+  spellcheckConfig: WysiwygSpellcheckConfig
 ): void {
   const baseClass =
     location.section === 'head'
@@ -554,7 +577,7 @@ function syncTableCellDom(
   }
 
   if (isActive && activeCell) {
-    syncTableEditorInput(element, table, cell, location, activeCell)
+    syncTableEditorInput(element, table, cell, location, activeCell, spellcheckConfig)
     return
   }
 
@@ -569,7 +592,8 @@ function syncTableEditorInput(
   table: MarkdownTableBlock,
   cell: MarkdownTableBlock['header']['cells'][number],
   location: MarkdownTableCellLocation,
-  activeCell: ActiveWysiwygTableCell
+  activeCell: ActiveWysiwygTableCell,
+  spellcheckConfig: WysiwygSpellcheckConfig
 ): void {
   let input = element.firstElementChild as HTMLTextAreaElement | null
   if (!(input instanceof HTMLTextAreaElement) || !input.classList.contains('cm-wysiwyg-table__input')) {
@@ -577,7 +601,6 @@ function syncTableEditorInput(
     input = document.createElement('textarea')
     input.className = 'cm-wysiwyg-table__input'
     input.rows = 1
-    input.spellcheck = false
     input.wrap = 'soft'
     element.appendChild(input)
   }
@@ -594,6 +617,12 @@ function syncTableEditorInput(
   input.dataset.tableRowIndex = String(location.rowIndex)
   input.dataset.tableColumnIndex = String(location.columnIndex)
   input.setAttribute('aria-label', `Edit table cell ${location.rowIndex + 1}:${location.columnIndex + 1}`)
+  input.spellcheck = spellcheckConfig.spellcheck
+  if (spellcheckConfig.lang) {
+    input.setAttribute('lang', spellcheckConfig.lang)
+  } else {
+    input.removeAttribute('lang')
+  }
   ensureTableInputKeydownBinding(input)
   syncTextInputSelection(input, activeCell.selectionStart, activeCell.selectionEnd)
   syncTableInputAutoHeight(input)
@@ -804,6 +833,178 @@ class HardBreakWidget extends WidgetType {
   ignoreEvent() { return true }
 }
 
+interface WysiwygDocumentContext {
+  documentPath: string | null
+  frontMatter: FrontMatterMeta
+  referenceDefinitionsMarkdown: string
+}
+
+class InlineRenderedFragmentWidget extends WidgetType {
+  private readonly markdown: string
+  private readonly editAnchor: number
+  private readonly kind: 'image' | 'linked-media'
+  private readonly context: WysiwygDocumentContext
+
+  constructor(
+    markdown: string,
+    editAnchor: number,
+    kind: 'image' | 'linked-media',
+    context: WysiwygDocumentContext
+  ) {
+    super()
+    this.markdown = markdown
+    this.editAnchor = editAnchor
+    this.kind = kind
+    this.context = context
+  }
+
+  toDOM() {
+    const el = document.createElement('span')
+    syncInlineRenderedFragmentDom(el, this.markdown, this.editAnchor, this.kind, this.context)
+    return el
+  }
+
+  updateDOM(dom: HTMLElement) {
+    syncInlineRenderedFragmentDom(dom, this.markdown, this.editAnchor, this.kind, this.context)
+    return true
+  }
+
+  ignoreEvent() { return false }
+
+  eq(other: InlineRenderedFragmentWidget) {
+    return this.markdown === other.markdown &&
+      this.editAnchor === other.editAnchor &&
+      this.kind === other.kind &&
+      this.context.documentPath === other.context.documentPath &&
+      JSON.stringify(this.context.frontMatter) === JSON.stringify(other.context.frontMatter) &&
+      this.context.referenceDefinitionsMarkdown === other.context.referenceDefinitionsMarkdown
+  }
+}
+
+function resolveWysiwygDocumentContext(markdown: string): WysiwygDocumentContext {
+  const store = useEditorStore.getState()
+  const activeTab = (!store.activeTabId && store.tabs.length > 0
+    ? store.tabs[0]
+    : store.tabs.find((tab) => tab.id === store.activeTabId) ?? store.tabs[0]) ?? null
+  const { meta, body } = stripFrontMatter(markdown)
+
+  return {
+    documentPath: activeTab?.path ?? null,
+    frontMatter: meta,
+    referenceDefinitionsMarkdown: collectReferenceDefinitionMarkdown(body),
+  }
+}
+
+function syncInlineRenderedFragmentDom(
+  wrapper: HTMLElement,
+  markdown: string,
+  editAnchor: number,
+  kind: 'image' | 'linked-media',
+  context: WysiwygDocumentContext
+): void {
+  wrapper.className = `cm-wysiwyg-inline-fragment cm-wysiwyg-inline-fragment--${kind}`
+  wrapper.dataset.inlineFragmentEditAnchor = String(editAnchor)
+  wrapper.dataset.inlineFragmentKind = kind
+  wrapper.setAttribute('role', 'button')
+  wrapper.setAttribute('aria-keyshortcuts', 'Enter Space')
+  wrapper.setAttribute('aria-label', kind === 'image' ? 'Edit image' : 'Edit linked media')
+  wrapper.tabIndex = 0
+  wrapper.innerHTML = renderInlineRenderedFragmentHtml(markdown, context)
+  hydrateInlineRenderedFragmentImages(wrapper, context)
+}
+
+function renderInlineRenderedFragmentHtml(markdown: string, context: WysiwygDocumentContext): string {
+  const previewOrigin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin
+  const rendered = renderInlineMarkdownFragment(markdown, {
+    referenceDefinitionsMarkdown: context.referenceDefinitionsMarkdown,
+  })
+  const withResolvedRoots = rewriteRenderedHtmlImageSources(rendered, { frontMatter: context.frontMatter })
+  const withLocalImages = rewritePreviewHtmlLocalImages(withResolvedRoots, { documentPath: context.documentPath })
+  return rewritePreviewHtmlExternalImages(
+    withLocalImages,
+    {
+      blockedLabel: i18n.t('preview.externalImageBlocked'),
+      clickLabel: i18n.t('preview.externalImageClickToLoad'),
+    },
+    previewOrigin,
+    {
+      enableDirectExternalImageFallback: isTauriRuntime(),
+    }
+  )
+}
+
+function hydrateInlineRenderedFragmentImages(
+  wrapper: HTMLElement,
+  context: WysiwygDocumentContext
+): void {
+  const pendingLocalImages = Array.from(
+    wrapper.querySelectorAll<HTMLImageElement>('img[data-local-src][data-local-image="pending"]')
+  )
+
+  for (const image of pendingLocalImages) {
+    const localSource = image.dataset.localSrc
+    if (!localSource) continue
+
+    void loadLocalPreviewImage(localSource, context.documentPath)
+      .then((resolvedSource) => {
+        if (!resolvedSource || !image.isConnected) return
+        applyResolvedInlineFragmentImage(image, resolvedSource)
+        image.removeAttribute('data-local-src')
+        image.removeAttribute('data-local-image')
+        image.removeAttribute('data-local-placeholder')
+      })
+  }
+
+  if (!isTauriRuntime()) return
+
+  const pendingExternalImages = Array.from(wrapper.querySelectorAll<HTMLImageElement>('img[data-external-src]'))
+  for (const image of pendingExternalImages) {
+    const externalSource = image.dataset.externalSrc
+    if (!externalSource) continue
+
+    void loadExternalPreviewImage(externalSource)
+      .then((resolvedSource) => {
+        if (!resolvedSource || !image.isConnected) return
+        applyResolvedInlineFragmentImage(image, resolvedSource)
+        image.classList.remove('preview-external-image')
+        image.removeAttribute('data-external-src')
+        image.removeAttribute('data-external-host')
+        image.removeAttribute('data-external-image')
+        image.removeAttribute('data-external-placeholder')
+        image.removeAttribute('tabindex')
+        image.removeAttribute('role')
+        image.removeAttribute('aria-label')
+        image.removeAttribute('referrerpolicy')
+      })
+  }
+
+  const pendingExternalFallbackImages = Array.from(
+    wrapper.querySelectorAll<HTMLImageElement>('img[data-external-fallback-src]')
+  )
+  for (const image of pendingExternalFallbackImages) {
+    const externalSource = image.dataset.externalFallbackSrc
+    if (!externalSource) continue
+
+    void loadExternalPreviewImage(externalSource)
+      .then((resolvedSource) => {
+        if (!resolvedSource || !image.isConnected) return
+        applyResolvedInlineFragmentImage(image, resolvedSource)
+        image.removeAttribute('data-external-fallback-src')
+        image.removeAttribute('data-external-fallback-host')
+        image.removeAttribute('data-external-fallback-state')
+      })
+  }
+}
+
+function applyResolvedInlineFragmentImage(image: HTMLImageElement, resolvedSource: string): void {
+  image.src = resolvedSource
+  image.removeAttribute('aria-busy')
+}
+
+function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
 // ── Cursor range helpers ───────────────────────────────────────────────────
 
 function cursorIsOnLine(view: WysiwygDecorationView, lineFrom: number, lineTo: number): boolean {
@@ -865,6 +1066,7 @@ export function buildWysiwygDecorations(
   // Collect first, then sort by CodeMirror's range ordering rules.
   const decorations: DecorationSpec[] = [...collectWysiwygCodeBlockDecorations(view, fencedCodeBlocks)]
   const { doc } = view.state
+  const documentContext = resolveWysiwygDocumentContext(doc.toString())
   let fenceIndex = 0
   let mathIndex = 0
   let tableIndex = 0
@@ -976,6 +1178,12 @@ export function buildWysiwygDecorations(
           queueDecoration(
             decorations,
             lineFrom,
+            lineFrom,
+            Decoration.line({ attributes: { class: 'cm-wysiwyg-hr-anchor-line' } })
+          )
+          queueDecoration(
+            decorations,
+            lineFrom,
             lineTo,
             Decoration.replace({ widget: new HrWidget(), block: false })
           )
@@ -1013,11 +1221,14 @@ export function buildWysiwygDecorations(
       const blockquoteLine = parseWysiwygBlockquoteLine(text)
       if (blockquoteLine) {
         if (onLine || !blockquoteLine.isEmpty) {
+          const blockquoteClass = onLine
+            ? 'cm-wysiwyg-blockquote cm-wysiwyg-blockquote-active'
+            : 'cm-wysiwyg-blockquote'
           queueDecoration(
             decorations,
             lineFrom,
             lineTo,
-            Decoration.mark({ class: 'cm-wysiwyg-blockquote' })
+            Decoration.mark({ class: blockquoteClass })
           )
         }
         if (!onLine) {
@@ -1118,7 +1329,7 @@ export function buildWysiwygDecorations(
       // Only apply when NOT on the line containing the cursor
       if (!onLine) {
         processInlineMath(decorations, text, lineFrom)
-        processInline(decorations, text, lineFrom, line.number < doc.lines, footnoteIndices)
+        processInline(decorations, text, lineFrom, line.number < doc.lines, footnoteIndices, documentContext)
       }
 
       pos = line.to + 1
@@ -1146,7 +1357,12 @@ class HiddenGutterMarker extends GutterMarker {
   elementClass = 'cm-wysiwyg-gutter-hidden'
 }
 
+class ReservedHiddenGutterMarker extends GutterMarker {
+  elementClass = 'cm-wysiwyg-gutter-hidden-reserved'
+}
+
 const hiddenGutterMarker = new HiddenGutterMarker()
+const reservedHiddenGutterMarker = new ReservedHiddenGutterMarker()
 
 function stateSelectionTouchesRange(
   state: CodeMirrorState,
@@ -1162,13 +1378,18 @@ function buildWysiwygGutterClasses(state: CodeMirrorState): RangeSet<GutterMarke
   const mathBlocks = collectMathBlocks(markdown, fencedCodeBlocks)
   const tables = collectMarkdownTableBlocks(markdown, [...fencedCodeBlocks, ...mathBlocks])
   const { doc } = state
-  const starts = new Set<number>()
+  const markers = new Map<number, GutterMarker>()
+  const nonTextBlockRanges = [
+    ...fencedCodeBlocks.map(({ from, to }) => ({ from, to })),
+    ...mathBlocks.map(({ from, to }) => ({ from, to })),
+    ...tables.map(({ from, to }) => ({ from, to })),
+  ].sort((left, right) => left.from - right.from)
 
   for (const fence of fencedCodeBlocks) {
     if (stateSelectionTouchesRange(state, fence.from, fence.to)) continue
     const closingFrom = fence.closingLineFrom
     if (closingFrom === null || closingFrom === undefined) continue
-    starts.add(doc.lineAt(closingFrom).from)
+    markers.set(doc.lineAt(closingFrom).from, reservedHiddenGutterMarker)
   }
 
   for (const mathBlock of mathBlocks) {
@@ -1178,7 +1399,7 @@ function buildWysiwygGutterClasses(state: CodeMirrorState): RangeSet<GutterMarke
     let nextFrom = openingLine.to + 1
     while (nextFrom <= closingLine.to) {
       const hiddenLine = doc.lineAt(nextFrom)
-      starts.add(hiddenLine.from)
+      if (!markers.has(hiddenLine.from)) markers.set(hiddenLine.from, hiddenGutterMarker)
       nextFrom = hiddenLine.to + 1
     }
   }
@@ -1189,16 +1410,36 @@ function buildWysiwygGutterClasses(state: CodeMirrorState): RangeSet<GutterMarke
     let nextFrom = openingLine.to + 1
     while (nextFrom <= closingLine.to) {
       const hiddenLine = doc.lineAt(nextFrom)
-      starts.add(hiddenLine.from)
+      if (!markers.has(hiddenLine.from)) markers.set(hiddenLine.from, hiddenGutterMarker)
       nextFrom = hiddenLine.to + 1
     }
   }
 
-  if (starts.size === 0) return RangeSet.empty
-  const sorted = [...starts].sort((a, b) => a - b)
+  let nonTextBlockIndex = 0
+  for (let lineNumber = 1; lineNumber <= doc.lines; lineNumber += 1) {
+    const line = doc.line(lineNumber)
+
+    while (nonTextBlockIndex < nonTextBlockRanges.length && nonTextBlockRanges[nonTextBlockIndex].to < line.from) {
+      nonTextBlockIndex += 1
+    }
+
+    const activeNonTextBlock = nonTextBlockRanges[nonTextBlockIndex]
+    if (activeNonTextBlock && line.from >= activeNonTextBlock.from && line.from <= activeNonTextBlock.to) {
+      continue
+    }
+
+    if (!isThematicBreakLine(line.text) || stateSelectionTouchesRange(state, line.from, line.to)) {
+      continue
+    }
+
+    if (!markers.has(line.from)) markers.set(line.from, hiddenGutterMarker)
+  }
+
+  if (markers.size === 0) return RangeSet.empty
+  const sorted = [...markers.entries()].sort(([left], [right]) => left - right)
   const builder = new RangeSetBuilder<GutterMarker>()
-  for (const pos of sorted) {
-    builder.add(pos, pos, hiddenGutterMarker)
+  for (const [pos, marker] of sorted) {
+    builder.add(pos, pos, marker)
   }
   return builder.finish()
 }
@@ -1227,7 +1468,8 @@ const wysiwygGutterClassField = StateField.define<RangeSet<GutterMarker>>({
 function collectWysiwygTableDecorationSpecs(
   doc: CodeMirrorState['doc'],
   tables: readonly MarkdownTableBlock[],
-  activeTableCell: ActiveWysiwygTableCell | null
+  activeTableCell: ActiveWysiwygTableCell | null,
+  spellcheckConfig: WysiwygSpellcheckConfig
 ): DecorationSpec[] {
   const decorations: DecorationSpec[] = []
 
@@ -1259,7 +1501,7 @@ function collectWysiwygTableDecorationSpecs(
       decorations,
       openingLine.from,
       openingLine.to,
-      Decoration.replace({ widget: new TableWidget(table, activeTableCellForTable), block: true })
+      Decoration.replace({ widget: new TableWidget(table, activeTableCellForTable, spellcheckConfig), block: true })
     )
 
     let hiddenLineFrom = openingLine.to + 1
@@ -1307,14 +1549,20 @@ function buildWysiwygTableDecorationState(state: CodeMirrorState): WysiwygTableD
   const mathBlocks = collectMathBlocks(markdown, fencedCodeBlocks)
   const tables = collectMarkdownTableBlocks(markdown, [...fencedCodeBlocks, ...mathBlocks])
   const activeTableCell = resolveActiveTableCellFromSelection(state, tables)
+  const spellcheckConfig = resolveDocumentSpellcheckConfig(
+    detectDocumentLanguage(markdown),
+    useEditorStore.getState().spellcheckMode
+  )
 
   return {
     tables,
     decorations: buildSortedRangeSet(
-      collectWysiwygTableDecorationSpecs(state.doc, tables, activeTableCell)
+      collectWysiwygTableDecorationSpecs(state.doc, tables, activeTableCell, spellcheckConfig)
     ),
   }
 }
+
+type WysiwygSpellcheckConfig = ReturnType<typeof resolveDocumentSpellcheckConfig>
 
 const wysiwygTableDecorationField = StateField.define<WysiwygTableDecorationState>({
   create(state) {
@@ -1355,7 +1603,8 @@ function processInline(
   text: string,
   lineFrom: number,
   hasFollowingLine: boolean,
-  footnoteIndices: Map<string, number>
+  footnoteIndices: Map<string, number>,
+  documentContext: WysiwygDocumentContext
 ): void {
   const inlineCodeRanges = collectInlineCodeRanges(text)
   const combinedEmphasisRanges = findInlineBoldItalicRanges(text)
@@ -1401,51 +1650,40 @@ function processInline(
   // Inline code `code`
   processPattern(decorations, text, lineFrom, /(`+)((?:.)+?)\1/g, 'cm-wysiwyg-code')
 
-  // Images ![alt](url)
-  const imgRe = /!\[([^\]]*)\]\(([^)]+)\)/g
-  let m: RegExpExecArray | null
-  while ((m = imgRe.exec(text)) !== null) {
-    const matchStart = m.index
-    const matchEnd = matchStart + m[0].length - 1
-    if (hasOddTrailingBackslashes(text, matchStart)) continue
-    if (findContainingTextRange(matchStart, inlineCodeRanges) || findContainingTextRange(matchEnd, inlineCodeRanges)) {
-      continue
-    }
+  const inlineMediaRanges = collectInlineMediaRanges(text, {
+    referenceDefinitionsMarkdown: documentContext.referenceDefinitionsMarkdown,
+  })
 
-    // Replace entire image markdown with a styled span showing alt text
+  for (const range of inlineMediaRanges.renderedFragments) {
     queueDecoration(
       decorations,
-      lineFrom + m.index,
-      lineFrom + m.index + m[0].length,
-      Decoration.mark({ class: 'cm-wysiwyg-image' })
+      lineFrom + range.from,
+      lineFrom + range.to,
+      Decoration.replace({
+        widget: new InlineRenderedFragmentWidget(
+          text.slice(range.from, range.to),
+          lineFrom + range.from,
+          range.kind,
+          documentContext
+        ),
+      })
     )
   }
 
-  // Links [text](url) — hide the (url) part
-  const linkRe = /(?<!!)\[([^\]]+)\]\(([^)]+)\)/g
-  while ((m = linkRe.exec(text)) !== null) {
-    const matchStart = m.index
-    const matchEnd = matchStart + m[0].length - 1
-    if (hasOddTrailingBackslashes(text, matchStart)) continue
-    if (findContainingTextRange(matchStart, inlineCodeRanges) || findContainingTextRange(matchEnd, inlineCodeRanges)) {
-      continue
-    }
+  for (const range of inlineMediaRanges.links) {
+    const fullStart = lineFrom + range.from
+    const contentStart = lineFrom + range.contentFrom
+    const contentEnd = lineFrom + range.contentTo
+    const fullEnd = lineFrom + range.to
 
-    const fullStart = lineFrom + m.index
-    const textEnd = fullStart + 1 + m[1].length + 1  // past ]
-    const fullEnd = lineFrom + m.index + m[0].length
-
-    // Style the link text
     queueDecoration(
       decorations,
-      fullStart + 1,
-      textEnd - 1,
+      contentStart,
+      contentEnd,
       Decoration.mark({ class: 'cm-wysiwyg-link' })
     )
-    // Hide the [ ] ( url ) wrapping
-    queueDecoration(decorations, fullStart, fullStart + 1, Decoration.replace({}))
-    queueDecoration(decorations, textEnd - 1, textEnd, Decoration.replace({}))
-    queueDecoration(decorations, textEnd, fullEnd, Decoration.replace({}))
+    queueDecoration(decorations, fullStart, contentStart, Decoration.replace({}))
+    queueDecoration(decorations, contentEnd, fullEnd, Decoration.replace({}))
   }
 
   processLiteralEscapes(decorations, text, lineFrom, inlineLiteralExcludedRanges)
@@ -1718,6 +1956,16 @@ function isPlainMathWidgetActivationKey(event: KeyboardEvent): boolean {
 }
 
 function isPlainFootnoteWidgetActivationKey(event: KeyboardEvent): boolean {
+  return (
+    !event.altKey &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    (event.key === ' ' || event.key === 'Enter')
+  )
+}
+
+function isPlainInlineRenderedFragmentActivationKey(event: KeyboardEvent): boolean {
   return (
     !event.altKey &&
     !event.ctrlKey &&
@@ -2502,6 +2750,22 @@ function activateFootnoteTarget(view: EditorView, target: EventTarget | null): b
   return true
 }
 
+function activateInlineRenderedFragmentTarget(view: EditorView, target: EventTarget | null): boolean {
+  const fragmentTarget = (target as HTMLElement | null)?.closest<HTMLElement>('.cm-wysiwyg-inline-fragment')
+  if (!fragmentTarget) return false
+
+  const editAnchor = Number(fragmentTarget.dataset.inlineFragmentEditAnchor)
+  if (!Number.isFinite(editAnchor)) return false
+
+  view.dispatch({
+    selection: { anchor: editAnchor },
+    userEvent: 'select.pointer',
+    scrollIntoView: true,
+  })
+  view.focus()
+  return true
+}
+
 // ── Plugin definition ──────────────────────────────────────────────────────
 
 export const wysiwygPlugin = ViewPlugin.fromClass(
@@ -2512,6 +2776,10 @@ export const wysiwygPlugin = ViewPlugin.fromClass(
       mousedown(event, view) {
         if (getTableCellInputFromTarget(event.target, view)) return false
         if (activateTable(view, event.target)) {
+          event.preventDefault()
+          return true
+        }
+        if (activateInlineRenderedFragmentTarget(view, event.target)) {
           event.preventDefault()
           return true
         }
@@ -2533,6 +2801,10 @@ export const wysiwygPlugin = ViewPlugin.fromClass(
       click(event, view) {
         if (getTableCellInputFromTarget(event.target, view)) return false
         if (activateTable(view, event.target)) {
+          event.preventDefault()
+          return true
+        }
+        if (activateInlineRenderedFragmentTarget(view, event.target)) {
           event.preventDefault()
           return true
         }
@@ -2588,6 +2860,14 @@ export const wysiwygPlugin = ViewPlugin.fromClass(
         if (mathTarget) {
           if (!isPlainMathWidgetActivationKey(event)) return false
           if (!activateMathTarget(view, event.target)) return false
+          event.preventDefault()
+          return true
+        }
+
+        const inlineFragmentTarget = (event.target as HTMLElement | null)?.closest('.cm-wysiwyg-inline-fragment')
+        if (inlineFragmentTarget) {
+          if (!isPlainInlineRenderedFragmentActivationKey(event)) return false
+          if (!activateInlineRenderedFragmentTarget(view, event.target)) return false
           event.preventDefault()
           return true
         }
@@ -2663,6 +2943,23 @@ export const wysiwygTheme = EditorView.baseTheme({
   '.cm-wysiwyg-h4': { fontSize: '1.1em', fontWeight: '600', color: 'var(--text-primary) !important' },
   '.cm-wysiwyg-h5': { fontSize: '1em', fontWeight: '600', color: 'var(--text-secondary) !important' },
   '.cm-wysiwyg-h6': { fontSize: '0.95em', fontWeight: '600', color: 'var(--text-muted) !important' },
+  '.cm-wysiwyg-hr-anchor-line': {
+    padding: '0 !important',
+    lineHeight: '0',
+    fontSize: '0',
+  },
+  '.cm-wysiwyg-hr': {
+    display: 'block',
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '0 32px',
+    pointerEvents: 'none',
+  },
+  '.cm-wysiwyg-hr__rule': {
+    display: 'block',
+    borderTop: '1px solid var(--border)',
+    margin: '0.75em 0',
+  },
 
   // Inline
   '.cm-wysiwyg-bold': { fontWeight: '700', color: 'var(--text-primary) !important' },
@@ -2700,9 +2997,40 @@ export const wysiwygTheme = EditorView.baseTheme({
     textDecoration: 'underline',
     cursor: 'pointer',
   },
-  '.cm-wysiwyg-image': {
-    color: 'var(--text-muted) !important',
-    fontStyle: 'italic',
+  '.cm-wysiwyg-inline-fragment': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    maxWidth: '100%',
+    verticalAlign: 'middle',
+    borderRadius: '10px',
+    cursor: 'text',
+    transition: 'background-color 140ms ease, box-shadow 140ms ease',
+  },
+  '.cm-wysiwyg-inline-fragment:hover': {
+    backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 44%, transparent)',
+    boxShadow: '0 0 0 1px color-mix(in srgb, var(--border) 64%, transparent)',
+  },
+  '.cm-wysiwyg-inline-fragment:focus-visible': {
+    outline: '2px solid color-mix(in srgb, var(--accent) 72%, transparent)',
+    outlineOffset: '2px',
+    backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 60%, transparent)',
+  },
+  '.cm-wysiwyg-inline-fragment *': {
+    pointerEvents: 'none',
+  },
+  '.cm-wysiwyg-inline-fragment a': {
+    color: 'var(--accent) !important',
+    textDecoration: 'underline',
+  },
+  '.cm-wysiwyg-inline-fragment img': {
+    display: 'inline-block',
+    maxWidth: '100%',
+    borderRadius: '4px',
+    verticalAlign: 'middle',
+  },
+  '.cm-wysiwyg-inline-fragment img.preview-external-image': {
+    border: '1px solid color-mix(in srgb, var(--border) 78%, transparent)',
+    boxShadow: '0 14px 36px -22px color-mix(in srgb, var(--text-primary) 22%, transparent)',
   },
   '.cm-wysiwyg-codeblock-meta-line': {
     position: 'relative',
@@ -2937,6 +3265,9 @@ export const wysiwygTheme = EditorView.baseTheme({
     fontStyle: 'normal',
     borderLeft: '4px solid color-mix(in srgb, var(--text-muted) 42%, transparent)',
     paddingLeft: '14px',
+  },
+  '.cm-wysiwyg-blockquote-active': {
+    borderLeftColor: 'color-mix(in srgb, var(--text-muted) 22%, transparent)',
   },
   '.cm-wysiwyg-task-completed': {
     textDecoration: 'line-through',

@@ -13,6 +13,47 @@ Core principles:
 - Markdown-safe: output must preserve Markdown structure.
 - Desktop-first security: API keys must not live in persisted frontend state.
 
+## Product Positioning Note
+
+This document currently contains both default editor AI workflows and more advanced workspace automation flows. They should not be presented as equal product pillars.
+
+Advanced automation must stay subordinate to the writing surface by default and must not become the primary product story ahead of core Markdown editing quality.
+
+See `docs/product-priority-checklist.md` for the current alignment backlog.
+
+## Stable Default AI Surface
+
+These are the editor-first AI capabilities that belong in the default product surface:
+
+- `Ctrl/Cmd+J` composer
+- selection bubble
+- command palette AI actions
+- explicit-context editing flows
+- `Draft / Diff / Apply`
+- single-step undo on apply
+
+Rules for this surface:
+
+- It must be understandable from inside the current document context.
+- It must not displace the writing surface.
+- It is the AI layer the README and default onboarding should emphasize first.
+
+## Experimental / Advanced AI Surface
+
+These capabilities remain available, but they are not the default product story:
+
+- workspace run
+- autonomous multi-note execution
+- phase-aware orchestration
+- broader workflow automation
+- audit expansion beyond direct editing help
+
+Rules for this surface:
+
+- It must stay easy to disable or visually subordinate.
+- It must not dominate first-run onboarding.
+- Its QA and smoke planning should be described separately from core editor AI, even when both live in the same repository.
+
 ## Scope
 
 ### P0

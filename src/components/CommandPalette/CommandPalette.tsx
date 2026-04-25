@@ -3,6 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { useCommands, type Command } from '../../hooks/useCommands'
 import { useRecentFiles } from '../../hooks/useRecentFiles'
 import { useEditorStore } from '../../store/editor'
+import {
+  getSidebarSurfaceCommandPriority,
+  getSidebarSurfaceIdFromCommandId,
+  getSidebarSurfaceMeta,
+} from '../../lib/sidebarSurfaces'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 import { useDialogFocusRestore } from '../../hooks/useDialogFocusRestore'
 
@@ -55,15 +60,15 @@ const COMMAND_PRIORITY = new Map<string, number>([
   ['view.wysiwyg', 213],
   ['view.focus', 214],
   ['view.sidebar', 215],
-  ['view.lineNumbers', 216],
-  ['view.wordWrap', 217],
-  ['view.typewriter', 218],
-  ['view.zoomIn', 219],
-  ['view.zoomOut', 220],
-  ['view.zoomReset', 221],
-  ['view.fontSizeIncrease', 222],
-  ['view.fontSizeDecrease', 223],
-  ['view.fontSizeReset', 224],
+  ['view.lineNumbers', 223],
+  ['view.wordWrap', 224],
+  ['view.typewriter', 225],
+  ['view.zoomIn', 226],
+  ['view.zoomOut', 227],
+  ['view.zoomReset', 228],
+  ['view.fontSizeIncrease', 229],
+  ['view.fontSizeDecrease', 230],
+  ['view.fontSizeReset', 231],
   ['export.html', 310],
   ['export.pdf', 311],
   ['export.markdown', 312],
@@ -101,6 +106,9 @@ function getMatchScore(query: string, text?: string): number {
 function getCommandPriority(command: Command): number {
   const explicit = COMMAND_PRIORITY.get(command.id)
   if (typeof explicit === 'number') return explicit
+
+  const sidebarSurfacePriority = getSidebarSurfaceCommandPriority(command.id)
+  if (sidebarSurfacePriority !== null) return sidebarSurfacePriority
 
   if (command.id.startsWith('file.recent.')) return 15
   if (command.id.startsWith('theme.')) return 410
@@ -166,6 +174,11 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
   if (command.id.startsWith('ai.')) return <SvgBadge name="sparkles" />
   if (command.id.startsWith('theme.')) return <SvgBadge name="palette" />
   if (command.id.startsWith('lang.')) return <SvgBadge name="globe" />
+
+  const sidebarSurfaceId = getSidebarSurfaceIdFromCommandId(command.id)
+  if (sidebarSurfaceId) {
+    return <SvgBadge name={getSidebarSurfaceMeta(sidebarSurfaceId).icon} />
+  }
 
   const headingMatch = command.id.match(/^edit\.(h[1-6])$/)
   if (headingMatch) return <TextBadge label={headingMatch[1].toUpperCase()} />

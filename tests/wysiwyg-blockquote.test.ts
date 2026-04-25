@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { parseWysiwygBlockquoteLine } from '../src/components/Editor/wysiwygBlockquote.ts'
 
@@ -45,4 +46,22 @@ test('parseWysiwygBlockquoteLine preserves nested quote prefixes', () => {
     depth: 2,
     isEmpty: false,
   })
+})
+
+test('wysiwyg blockquotes keep the active line structurally visible while weakening the quote rule', async () => {
+  const source = await readFile(new URL('../src/components/Editor/wysiwyg.ts', import.meta.url), 'utf8')
+
+  assert.match(
+    source,
+    /const blockquoteClass = onLine[\s\S]*?'cm-wysiwyg-blockquote cm-wysiwyg-blockquote-active'[\s\S]*?: 'cm-wysiwyg-blockquote'/u,
+  )
+  assert.match(source, /Decoration\.mark\(\{ class: blockquoteClass \}\)/u)
+  assert.match(
+    source,
+    /'\.cm-wysiwyg-blockquote': \{[\s\S]*?borderLeft: '4px solid color-mix\(in srgb, var\(--text-muted\) 42%, transparent\)'[\s\S]*?paddingLeft: '14px'/u,
+  )
+  assert.match(
+    source,
+    /'\.cm-wysiwyg-blockquote-active': \{[\s\S]*?borderLeftColor: 'color-mix\(in srgb, var\(--text-muted\) 22%, transparent\)'/u,
+  )
 })

@@ -3,8 +3,14 @@ import { useAIStore } from '../store/ai'
 import { useEditorStore } from '../store/editor'
 import { useFileTreeStore, type FileNode } from '../store/fileTree'
 import { useRecentFilesStore } from '../store/recentFiles'
-import { ensureFsPathAccess } from '../lib/fsAccess'
-import { pushErrorNotice } from '../lib/notices'
+import { ensureFsPathAccess, ensureFsPathAccessBatch } from '../lib/fsAccess'
+import { pushErrorNotice, pushSuccessNotice } from '../lib/notices'
+import { getWorkspaceIndexSnapshot, invalidateWorkspaceIndexPaths } from '../lib/workspaceIndex/index.ts'
+import {
+  buildWorkspaceAssetRepairPlan,
+  countWorkspaceAssetRepairPlanReferences,
+  rewriteWorkspaceAssetReferences,
+} from '../lib/workspaceAssetRepair'
 import {
   ensureMarkdownFileName,
   getPathBaseName,
@@ -194,7 +200,8 @@ export function useFileTree() {
         const { watch } = await import('@tauri-apps/plugin-fs')
         if (disposed) return
 
-        unwatch = await watch(rootPath, () => {
+        unwatch = await watch(rootPath, (event) => {
+          invalidateWorkspaceIndexPaths(rootPath, event.paths)
           scheduleRefresh()
         }, {
           recursive: true,
@@ -303,6 +310,164 @@ export function useFileTree() {
     [addRecent, openDocument]
   )
 
+  const propagateWorkspaceAssetPathChange = useCallback(
+    async (oldPath: string, newPath: string, snapshot: Awaited<ReturnType<typeof getWorkspaceIndexSnapshot>> | null) => {
+      if (!rootPath || !snapshot) return
+
+      const plan = buildWorkspaceAssetRepairPlan(snapshot, oldPath, newPath)
+      if (plan.length === 0) return
+
+      const { tabs } = useEditorStore.getState()
+      const tabsByPath = new Map(
+        tabs
+          .filter((tab) => tab.path)
+          .map((tab) => [normalizeWorkspacePath(tab.path ?? ''), tab] as const)
+      )
+
+      const documentsToRead = plan
+        .filter((entry) => !tabsByPath.has(normalizeWorkspacePath(entry.documentPath)))
+        .map((entry) => entry.documentPath)
+
+      if (documentsToRead.length > 0) {
+        await ensureFsPathAccessBatch(documentsToRead)
+      }
+
+      const { readTextFile, writeTextFile } = await import('@tauri-apps/plugin-fs')
+      const workItems: Array<{
+        documentPath: string
+        documentKey: string
+        updates: (typeof plan)[number]['updates']
+        nextDiskContent: string
+        tabId?: string
+        nextTabContent?: string
+        nextTabSavedContent?: string
+      }> = []
+      const failedDocumentKeys = new Set<string>()
+
+      for (const entry of plan) {
+        const documentKey = normalizeWorkspacePath(entry.documentPath)
+        const openTab = tabsByPath.get(documentKey)
+
+        if (openTab?.path) {
+          const nextSavedContent = rewriteWorkspaceAssetReferences(openTab.savedContent, entry.updates)
+          const nextContent = rewriteWorkspaceAssetReferences(openTab.content, entry.updates)
+          if (nextSavedContent === null || nextContent === null) {
+            failedDocumentKeys.add(documentKey)
+            continue
+          }
+
+          workItems.push({
+            documentPath: openTab.path,
+            documentKey,
+            updates: entry.updates,
+            nextDiskContent: nextSavedContent,
+            tabId: openTab.id,
+            nextTabContent: nextContent,
+            nextTabSavedContent: nextSavedContent,
+          })
+          continue
+        }
+
+        try {
+          const diskContent = await readTextFile(entry.documentPath)
+          const nextDiskContent = rewriteWorkspaceAssetReferences(diskContent, entry.updates)
+          if (nextDiskContent === null) {
+            failedDocumentKeys.add(documentKey)
+            continue
+          }
+
+          workItems.push({
+            documentPath: entry.documentPath,
+            documentKey,
+            updates: entry.updates,
+            nextDiskContent,
+          })
+        } catch (error) {
+          console.error('Read workspace document for asset propagation error:', error)
+          failedDocumentKeys.add(documentKey)
+        }
+      }
+
+      if (workItems.length === 0) {
+        pushErrorNotice('notices.assetPathPropagationFailedTitle', 'notices.assetPathPropagationFailedMessage')
+        return
+      }
+
+      await ensureFsPathAccessBatch(workItems.map((item) => item.documentPath))
+
+      const successfulDocumentKeys = new Set<string>()
+      const successfulTabUpdates = new Map<string, { content: string; savedContent: string }>()
+
+      for (const item of workItems) {
+        try {
+          await writeTextFile(item.documentPath, item.nextDiskContent)
+          successfulDocumentKeys.add(item.documentKey)
+
+          if (item.tabId && item.nextTabContent !== undefined && item.nextTabSavedContent !== undefined) {
+            successfulTabUpdates.set(item.tabId, {
+              content: item.nextTabContent,
+              savedContent: item.nextTabSavedContent,
+            })
+          }
+        } catch (error) {
+          console.error('Write workspace document for asset propagation error:', error)
+          failedDocumentKeys.add(item.documentKey)
+        }
+      }
+
+      if (successfulTabUpdates.size > 0) {
+        useEditorStore.setState((state) => ({
+          tabs: state.tabs.map((tab) => {
+            const update = successfulTabUpdates.get(tab.id)
+            if (!update) return tab
+
+            return {
+              ...tab,
+              content: update.content,
+              savedContent: update.savedContent,
+              isDirty: update.content !== update.savedContent,
+            }
+          }),
+        }))
+      }
+
+      if (successfulDocumentKeys.size > 0) {
+        invalidateWorkspaceIndexPaths(rootPath, [oldPath, newPath, ...Array.from(successfulDocumentKeys)])
+      }
+
+      const successfulPlan = plan.filter((entry) => successfulDocumentKeys.has(normalizeWorkspacePath(entry.documentPath)))
+      const updatedDocumentCount = successfulPlan.length
+      const updatedReferenceCount = countWorkspaceAssetRepairPlanReferences(successfulPlan)
+      const failedDocumentCount = new Set(
+        Array.from(failedDocumentKeys).filter((documentKey) => !successfulDocumentKeys.has(documentKey))
+      ).size
+
+      if (failedDocumentCount > 0 && updatedDocumentCount > 0) {
+        pushErrorNotice('notices.assetPathPropagationPartialTitle', 'notices.assetPathPropagationPartialMessage', {
+          values: {
+            references: updatedReferenceCount,
+            documents: updatedDocumentCount,
+            failed: failedDocumentCount,
+          },
+        })
+        return
+      }
+
+      if (updatedDocumentCount > 0) {
+        pushSuccessNotice('notices.assetPathPropagationSuccessTitle', 'notices.assetPathPropagationSuccessMessage', {
+          values: {
+            references: updatedReferenceCount,
+            documents: updatedDocumentCount,
+          },
+        })
+        return
+      }
+
+      pushErrorNotice('notices.assetPathPropagationFailedTitle', 'notices.assetPathPropagationFailedMessage')
+    },
+    [rootPath]
+  )
+
   const createEntry = useCallback(
     async (
       parentDirPath: string,
@@ -388,6 +553,13 @@ export function useFileTree() {
           : normalizedInput
 
       try {
+        const assetRepairSnapshot =
+          rootPath && node.type === 'dir'
+            ? await getWorkspaceIndexSnapshot(rootPath).catch((error) => {
+                console.error('Load workspace snapshot for asset propagation error:', error)
+                return null
+              })
+            : null
         const [{ dirname, join }, { exists, rename }] = await Promise.all([
           import('@tauri-apps/api/path'),
           import('@tauri-apps/plugin-fs'),
@@ -407,6 +579,9 @@ export function useFileTree() {
         remapHistoryForPathChange(node.path, nextPath)
         remapRecentForPathChange(node.path, nextPath)
         if (node.type === 'file') addRecent(nextPath, nextName)
+        if (node.type === 'dir') {
+          await propagateWorkspaceAssetPathChange(node.path, nextPath, assetRepairSnapshot)
+        }
 
         const currentTree = useFileTreeStore.getState().tree
         if (rootPath) {
@@ -419,7 +594,7 @@ export function useFileTree() {
         return { ok: false, reason: 'unknown' }
       }
     },
-    [addRecent, refreshTree, remapHistoryForPathChange, remapRecentForPathChange, remapTabsForPathChange, rootPath]
+    [addRecent, propagateWorkspaceAssetPathChange, refreshTree, remapHistoryForPathChange, remapRecentForPathChange, remapTabsForPathChange, rootPath]
   )
 
   const deleteNode = useCallback(
@@ -456,6 +631,13 @@ export function useFileTree() {
       }
 
       try {
+        const assetRepairSnapshot =
+          rootPath && node.type === 'dir'
+            ? await getWorkspaceIndexSnapshot(rootPath).catch((error) => {
+                console.error('Load workspace snapshot for asset propagation error:', error)
+                return null
+              })
+            : null
         const [{ join }, { exists, rename }] = await Promise.all([
           import('@tauri-apps/api/path'),
           import('@tauri-apps/plugin-fs'),
@@ -473,6 +655,9 @@ export function useFileTree() {
         remapTabsForPathChange(node.path, nextPath)
         remapHistoryForPathChange(node.path, nextPath)
         remapRecentForPathChange(node.path, nextPath)
+        if (node.type === 'dir') {
+          await propagateWorkspaceAssetPathChange(node.path, nextPath, assetRepairSnapshot)
+        }
 
         const currentTree = useFileTreeStore.getState().tree
         if (rootPath) {
@@ -485,7 +670,7 @@ export function useFileTree() {
         return { ok: false, reason: 'unknown' }
       }
     },
-    [refreshTree, remapHistoryForPathChange, remapRecentForPathChange, remapTabsForPathChange, rootPath]
+    [propagateWorkspaceAssetPathChange, refreshTree, remapHistoryForPathChange, remapRecentForPathChange, remapTabsForPathChange, rootPath]
   )
 
   return {
@@ -501,4 +686,8 @@ export function useFileTree() {
     deleteNode,
     moveNode,
   }
+}
+
+function normalizeWorkspacePath(path: string): string {
+  return path.replace(/\\/gu, '/')
 }

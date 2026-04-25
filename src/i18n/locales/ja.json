@@ -253,6 +253,15 @@
     "showInvisibleCharacters": "不可視文字を表示",
     "typewriterMode": "タイプライターモード",
     "showInvisibleCharactersHint": "ソースモードで Tab、行末空白、特殊な空白文字を表示します。Markdown のハード改行に使う行末空白を見つけやすくします。",
+    "spellcheck": "スペルチェック",
+    "spellcheckModes": {
+      "document-language": "文書言語",
+      "system": "システム",
+      "off": "オフ"
+    },
+    "spellcheckHintDocumentLanguage": "推奨。スペルチェックを有効にしたまま、文書が明確に英語・日本語・中国語ならエディター言語も合わせます。",
+    "spellcheckHintSystem": "文書言語は固定せず、システムのスペルチェックを使います。",
+    "spellcheckHintOff": "ソースエディターと WYSIWYG テーブル入力のスペルチェックを無効にします。",
     "previewOptions": "プレビュー設定",
     "previewLineBreaks": "プレビュー改行表示",
     "previewLineBreakModes": {
@@ -715,6 +724,7 @@
     "findInDocument": "文書内を検索",
     "findReplace": "検索と置換",
     "checkForUpdates": "アップデートを確認",
+    "openSidebarSurface": "サイドバーを開く: {{name}}",
     "exportHtml": "HTML として書き出し",
     "exportPdf": "PDF として書き出し",
     "exportMarkdown": "Markdown を書き出し",
@@ -870,6 +880,12 @@
     "exportPdfErrorTitle": "PDF の書き出しに失敗しました",
     "exportPdfErrorMessage": "ネイティブ PDF 書き出しを完了できませんでした。{{reason}}",
     "exportPdfErrorReasonFallback": "追加のエラー詳細はありませんでした。",
+    "assetPathPropagationSuccessTitle": "アセット参照を更新しました",
+    "assetPathPropagationSuccessMessage": "アセット移動後に {{documents}} 件の文書で {{references}} 件の参照を更新しました。",
+    "assetPathPropagationPartialTitle": "一部のアセット参照は手動修復が必要です",
+    "assetPathPropagationPartialMessage": "{{documents}} 件の文書で {{references}} 件の参照を更新しましたが、{{failed}} 件の文書はまだ手動修復が必要です。",
+    "assetPathPropagationFailedTitle": "アセット参照を更新できませんでした",
+    "assetPathPropagationFailedMessage": "アセット移動後に対象文書を安全に書き換えられませんでした。",
     "copyHtmlSuccessTitle": "HTML をコピーしました",
     "copyHtmlSuccessMessage": "レンダリング済み HTML をクリップボードにコピーしました。",
     "dismissLabel": "通知を閉じる"

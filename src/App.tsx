@@ -7,9 +7,6 @@ import DocumentTabs from './components/DocumentTabs/DocumentTabs'
 import ResizableDivider from './components/Layout/ResizableDivider'
 import TitleBar from './components/TitleBar/TitleBar'
 import NotificationCenter from './components/Notifications/NotificationCenter'
-import ExternalFileConflictDialog from './components/ExternalFileConflicts/ExternalFileConflictDialog'
-import ExternalMissingFileDialog from './components/ExternalFileConflicts/ExternalMissingFileDialog'
-import UpdateAvailableDialog from './components/Updates/UpdateAvailableDialog'
 import RecoverableErrorBoundary from './components/ErrorBoundary/RecoverableErrorBoundary'
 import ErrorFallback from './components/ErrorBoundary/ErrorFallback'
 import { buildAIContextPacket, resolveCurrentBlockRange } from './lib/ai/context'
@@ -26,6 +23,7 @@ import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MI
 import { matchesPrimaryShortcut } from './lib/platform'
 import { maybeRunAutomaticUpdateCheck } from './lib/updateActions'
 import { useAIStore } from './store/ai'
+import { useUpdateStore } from './store/update'
 import { useActiveTab, useEditorStore } from './store/editor'
 import { applyTheme, getThemeById } from './themes'
 
@@ -34,6 +32,9 @@ const EditorPane = lazy(() => import('./components/Editor/EditorPane'))
 const MarkdownPreview = lazy(() => import('./components/Preview/MarkdownPreview'))
 const CommandPalette = lazy(() => import('./components/CommandPalette/CommandPalette'))
 const AIComposer = lazy(() => import('./components/AI/AIComposer'))
+const UpdateAvailableDialog = lazy(() => import('./components/Updates/UpdateAvailableDialog'))
+const ExternalMissingFileDialog = lazy(() => import('./components/ExternalFileConflicts/ExternalMissingFileDialog'))
+const ExternalFileConflictDialog = lazy(() => import('./components/ExternalFileConflicts/ExternalFileConflictDialog'))
 
 function EditorPlaceholder() {
   const { t } = useTranslation()
@@ -106,6 +107,11 @@ export default function App() {
   } = useEditorStore()
   const activeTab = useActiveTab()
   const aiComposerOpen = useAIStore((state) => state.composer.open)
+  const updateDialogOpen = useUpdateStore((state) => state.dialogOpen)
+  const externalMissingDialogOpen = useEditorStore((state) => state.externalMissingFiles.length > 0)
+  const externalConflictDialogOpen = useEditorStore(
+    (state) => state.externalMissingFiles.length === 0 && state.externalFileConflicts.length > 0
+  )
   const { saveAllDirtyTabs } = useFileOps()
   const [paletteMode, setPaletteMode] = useState<'command' | 'file' | null>(null)
   const [previewActivated, setPreviewActivated] = useState(viewMode === 'preview')
@@ -459,10 +465,22 @@ export default function App() {
         </Suspense>
       )}
 
-      <UpdateAvailableDialog />
+      {updateDialogOpen && (
+        <Suspense fallback={null}>
+          <UpdateAvailableDialog />
+        </Suspense>
+      )}
       <NotificationCenter />
-      <ExternalMissingFileDialog />
-      <ExternalFileConflictDialog />
+      {externalMissingDialogOpen && (
+        <Suspense fallback={null}>
+          <ExternalMissingFileDialog />
+        </Suspense>
+      )}
+      {externalConflictDialogOpen && (
+        <Suspense fallback={null}>
+          <ExternalFileConflictDialog />
+        </Suspense>
+      )}
 
       {isTauri && <TitleBar />}
 

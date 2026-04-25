@@ -4,6 +4,8 @@ import {
   buildRelativeMarkdownImagePath,
   getImageAltText,
   getImageFileExtension,
+  isLikelyAttachmentFileName,
+  isLikelyWorkspaceAssetFileName,
   isSupportedDocumentName,
 } from '../src/lib/fileTypes.ts'
 
@@ -26,6 +28,17 @@ test('getImageAltText normalizes separators and strips brackets', () => {
   assert.equal(getImageAltText('hero-image_v2.png'), 'hero image v2')
   assert.equal(getImageAltText('[cover]_draft.JPG'), 'cover draft')
   assert.equal(getImageAltText('.png'), 'image')
+})
+
+test('attachment and workspace asset helpers recognize supported non-image asset types', () => {
+  assert.equal(isLikelyAttachmentFileName('manual.pdf'), true)
+  assert.equal(isLikelyAttachmentFileName('bundle.zip'), true)
+  assert.equal(isLikelyAttachmentFileName('hero.png'), false)
+  assert.equal(isLikelyAttachmentFileName('notes.md'), false)
+
+  assert.equal(isLikelyWorkspaceAssetFileName('manual.pdf'), true)
+  assert.equal(isLikelyWorkspaceAssetFileName('hero.png'), true)
+  assert.equal(isLikelyWorkspaceAssetFileName('notes.md'), false)
 })
 
 test('buildRelativeMarkdownImagePath defaults to the sibling images directory', () => {

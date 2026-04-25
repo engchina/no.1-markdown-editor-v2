@@ -258,6 +258,15 @@
     "showInvisibleCharacters": "Show Invisible Characters",
     "typewriterMode": "Typewriter Mode",
     "showInvisibleCharactersHint": "Shows tabs, trailing spaces, and special whitespace in source mode. Markdown hard-break spaces at line ends become easy to spot.",
+    "spellcheck": "SPELLCHECK",
+    "spellcheckModes": {
+      "document-language": "Document",
+      "system": "System",
+      "off": "Off"
+    },
+    "spellcheckHintDocumentLanguage": "Recommended. Keeps spellcheck on and sets the editor language when the document is clearly English, Japanese, or Chinese.",
+    "spellcheckHintSystem": "Uses the system spellcheck without forcing a document language.",
+    "spellcheckHintOff": "Disables spellcheck in the source editor and WYSIWYG table inputs.",
     "previewOptions": "PREVIEW OPTIONS",
     "previewLineBreaks": "Preview Line Breaks",
     "previewLineBreakModes": {
@@ -720,6 +729,7 @@
     "findInDocument": "Find in Document",
     "findReplace": "Find & Replace",
     "checkForUpdates": "Check for Updates",
+    "openSidebarSurface": "Open Sidebar: {{name}}",
     "exportHtml": "Export as HTML",
     "exportPdf": "Export as PDF",
     "exportMarkdown": "Export Markdown",
@@ -876,6 +886,12 @@
     "exportPdfErrorTitle": "PDF export failed",
     "exportPdfErrorMessage": "The native PDF export could not finish. {{reason}}",
     "exportPdfErrorReasonFallback": "No additional error details were available.",
+    "assetPathPropagationSuccessTitle": "Asset references updated",
+    "assetPathPropagationSuccessMessage": "Updated {{references}} references across {{documents}} documents after the asset move.",
+    "assetPathPropagationPartialTitle": "Some asset references still need repair",
+    "assetPathPropagationPartialMessage": "Updated {{references}} references across {{documents}} documents, but {{failed}} documents still need manual repair.",
+    "assetPathPropagationFailedTitle": "Couldn't update asset references",
+    "assetPathPropagationFailedMessage": "The editor couldn't safely rewrite the affected documents after the asset move.",
     "copyHtmlSuccessTitle": "HTML copied",
     "copyHtmlSuccessMessage": "The rendered HTML is now on the clipboard.",
     "dismissLabel": "Dismiss notification"

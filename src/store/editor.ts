@@ -13,14 +13,16 @@ import {
   isRestorableDraftTab,
   restoreDraftTabs,
 } from '../lib/draftRecovery'
+import { isSidebarSurfaceId, type SidebarSurfaceId } from '../lib/sidebarSurfaces.ts'
 import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH } from '../lib/layout'
 import { pathMatchesPrefix, remapPathPrefix } from '../lib/fileTreePaths'
 import { pushInfoNotice } from '../lib/notices'
 import type { AIDefaultWriteTarget } from '../lib/ai/opening.ts'
+import type { SpellcheckMode } from '../lib/documentLanguage.ts'
 
 export type Theme = 'light' | 'dark'
 export type ViewMode = 'source' | 'split' | 'preview' | 'focus'
-export type SidebarTab = 'outline' | 'files' | 'recent' | 'search'
+export type SidebarTab = SidebarSurfaceId
 export type SyntaxHighlightEngine = 'highlightjs' | 'shiki'
 export type PreviewLineBreakMode = 'strict' | 'visual-soft-breaks'
 
@@ -139,6 +141,8 @@ interface EditorState {
   setWordWrap: (v: boolean) => void
   showInvisibleCharacters: boolean
   setShowInvisibleCharacters: (v: boolean) => void
+  spellcheckMode: SpellcheckMode
+  setSpellcheckMode: (mode: SpellcheckMode) => void
   fontSize: number
   setFontSize: (size: number) => void
   wysiwygMode: boolean
@@ -184,20 +188,25 @@ function isReusableScratchTab(tab: FileTab): boolean {
 const initialTab = createNewTab()
 
 function sanitizeSidebarTab(value: unknown): SidebarTab {
-  switch (value) {
-    case 'files':
-    case 'recent':
-    case 'search':
-    case 'outline':
-      return value
-    case 'ai':
-    default:
-      return 'outline'
+  if (value === 'ai' || value === 'links' || value === 'inspect' || value === 'assets' || value === 'health') {
+    return 'outline'
   }
+  return isSidebarSurfaceId(value) ? value : 'outline'
 }
 
 function sanitizePreviewLineBreakMode(value: unknown): PreviewLineBreakMode {
   return value === 'strict' ? value : 'visual-soft-breaks'
+}
+
+function sanitizeSpellcheckMode(value: unknown): SpellcheckMode {
+  switch (value) {
+    case 'system':
+    case 'off':
+    case 'document-language':
+      return value
+    default:
+      return 'document-language'
+  }
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -553,6 +562,8 @@ export const useEditorStore = create<EditorState>()(
       setWordWrap: (wordWrap) => set({ wordWrap }),
       showInvisibleCharacters: false,
       setShowInvisibleCharacters: (showInvisibleCharacters) => set({ showInvisibleCharacters }),
+      spellcheckMode: 'document-language',
+      setSpellcheckMode: (spellcheckMode) => set({ spellcheckMode }),
       fontSize: 14,
       setFontSize: (fontSize) => set({ fontSize }),
       wysiwygMode: false,
@@ -581,6 +592,7 @@ export const useEditorStore = create<EditorState>()(
         lineNumbers: s.lineNumbers,
         wordWrap: s.wordWrap,
         showInvisibleCharacters: s.showInvisibleCharacters,
+        spellcheckMode: s.spellcheckMode,
         fontSize: s.fontSize,
         typewriterMode: s.typewriterMode,
         wysiwygMode: s.wysiwygMode,
@@ -619,6 +631,7 @@ export const useEditorStore = create<EditorState>()(
           aiHistoryProviderRerankEnabled: true,
           aiHistoryProviderRerankBudget: 'balanced',
           showInvisibleCharacters: persistedState?.showInvisibleCharacters === true,
+          spellcheckMode: sanitizeSpellcheckMode(persistedState?.spellcheckMode),
           syntaxHighlightEngine: persistedState?.syntaxHighlightEngine ?? 'highlightjs',
           previewLineBreakMode:
             persistedState?.hasExplicitPreviewLineBreakModePreference

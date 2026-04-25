@@ -161,13 +161,14 @@ async function resolveNoteMention(
     query: mention.query,
     tabs: options.tabs,
     rootPath: options.rootPath,
+    includeContent: true,
   })
 
   if (!reference) {
     return buildMentionError(mention, 'note-not-found')
   }
 
-  const clipped = clipMentionContent(reference.content, NOTE_ATTACHMENT_MAX_CHARS)
+  const clipped = clipMentionContent(reference.content ?? '', NOTE_ATTACHMENT_MAX_CHARS)
   return {
     mention,
     status: 'resolved',

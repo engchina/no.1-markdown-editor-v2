@@ -84,3 +84,16 @@ test('wysiwyg code block theme keeps preview-like horizontal insets instead of s
   assert.doesNotMatch(codeBlockSource, /tabIndex/u)
   assert.doesNotMatch(codeBlockSource, /setAttribute\('role'/u)
 })
+
+test('wysiwyg code block closing fence keeps gutter height while hiding its line number', async () => {
+  const [source, css] = await Promise.all([
+    readFile(new URL('../src/components/Editor/wysiwyg.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/global.css', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(source, /class ReservedHiddenGutterMarker extends GutterMarker/u)
+  assert.match(source, /elementClass = 'cm-wysiwyg-gutter-hidden-reserved'/u)
+  assert.match(source, /markers\.set\(doc\.lineAt\(closingFrom\)\.from, reservedHiddenGutterMarker\)/u)
+  assert.match(css, /\.cm-gutterElement\.cm-wysiwyg-gutter-hidden-reserved\s*\{[\s\S]*visibility:\s*hidden;[\s\S]*pointer-events:\s*none;/u)
+  assert.doesNotMatch(css, /\.cm-gutterElement\.cm-wysiwyg-gutter-hidden-reserved\s*\{[\s\S]*height:\s*0\s*!important;/u)
+})

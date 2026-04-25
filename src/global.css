@@ -27,6 +27,10 @@
   --editor-line-active: rgba(14, 165, 233, 0.04);
   --editor-selection: rgba(14, 165, 233, 0.15);
   --editor-cursor: #0ea5e9;
+  --editor-invisible-ink: color-mix(in srgb, var(--accent) 18%, var(--text-muted));
+  --editor-invisible-soft: color-mix(in srgb, var(--accent) 8%, transparent);
+  --editor-invisible-outline: color-mix(in srgb, var(--accent) 14%, var(--text-muted));
+  --editor-invisible-trailing: color-mix(in srgb, var(--accent) 26%, var(--text-muted));
 
   /* Preview */
   --preview-bg: transparent;
@@ -67,6 +71,10 @@
   --editor-line-active: rgba(137, 180, 250, 0.05);
   --editor-selection: rgba(137, 180, 250, 0.2);
   --editor-cursor: #89B4FA;
+  --editor-invisible-ink: color-mix(in srgb, var(--accent) 20%, var(--text-secondary));
+  --editor-invisible-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --editor-invisible-outline: color-mix(in srgb, var(--accent) 16%, var(--text-secondary));
+  --editor-invisible-trailing: color-mix(in srgb, var(--accent) 28%, var(--text-secondary));
 
   /* Preview */
   --preview-bg: transparent;
@@ -406,46 +414,58 @@ a:focus-visible {
   pointer-events: none;
 }
 
+.cm-gutterElement.cm-wysiwyg-gutter-hidden-reserved {
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
 .cm-tab {
   position: relative;
-  border-radius: 0.25em;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0.14em,
+    var(--editor-invisible-outline) 0.14em calc(100% - 0.42em),
+    transparent calc(100% - 0.42em)
+  );
+  background-position: center 72%;
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
 }
 
 .cm-tab::after {
   content: '⇥';
   position: absolute;
-  inset-inline-end: 0.18em;
+  inset-inline-end: 0.08em;
   top: 50%;
   transform: translateY(-50%);
-  color: color-mix(in srgb, var(--text-muted) 76%, transparent);
-  font-size: 0.72em;
+  color: var(--editor-invisible-ink);
+  font-size: 0.54em;
   line-height: 1;
+  opacity: 0.64;
   pointer-events: none;
 }
 
 .cm-trailingSpace {
-  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
-  background-image:
-    radial-gradient(circle at 50% 58%, color-mix(in srgb, var(--accent) 70%, transparent) 0 1.1px, transparent 1.8px);
+  background-image: radial-gradient(circle at 50% 58%, var(--editor-invisible-trailing) 0 0.9px, transparent 1.45px);
   background-position: center;
-  background-repeat: repeat-x;
-  background-size: 1ch 1em;
-  border-radius: 0.22em;
+  background-repeat: no-repeat;
+  background-size: 100% 1em;
 }
 
 .cm-specialChar {
   display: inline-block;
-  min-width: 0.92em;
-  padding: 0 0.08em;
-  border-radius: 0.25em;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
-  color: color-mix(in srgb, var(--accent) 72%, var(--text-secondary)) !important;
-  font-size: 0.78em;
-  line-height: 1.15;
+  min-width: 0.72em;
+  padding: 0;
+  background: none;
+  color: var(--editor-invisible-ink) !important;
+  font-size: 0.58em;
+  font-weight: 500;
+  line-height: 1;
   text-align: center;
   vertical-align: baseline;
+  box-shadow: none;
+  opacity: 0.68;
 }
 
 /* Markdown syntax colors — light */

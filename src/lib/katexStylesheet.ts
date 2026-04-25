@@ -1,4 +1,4 @@
-import katexStylesheetUrl from 'katex/dist/katex.min.css?url'
+const katexStylesheetUrl = new URL('../../node_modules/katex/dist/katex.min.css', import.meta.url).href
 
 let pendingStylesheetLoad: Promise<void> | null = null
 

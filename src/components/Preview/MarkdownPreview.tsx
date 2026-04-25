@@ -10,7 +10,6 @@ import {
   renderMermaidShells,
   updateMermaidShellLabels,
 } from '../../lib/mermaid'
-import { ensureKatexStylesheet } from '../../lib/katexStylesheet'
 import {
   buildMarkdownSafeClipboardPayload,
   writeClipboardEventPayload,
@@ -22,6 +21,7 @@ import { convertPreviewSelectionHtmlToMarkdown, extractPreviewSelectionFragment 
 import { buildLocalPreviewImageKey, rewritePreviewHtmlLocalImages } from '../../lib/previewLocalImages'
 import { buildExternalPreviewImageKey, rewritePreviewHtmlExternalImages } from '../../lib/previewExternalImages'
 import { getPreviewExternalLink } from '../../lib/previewLinks'
+import { flashPreviewTarget, getPreviewInternalAnchorId, resolvePreviewAnchorTarget, scrollPreviewToTarget } from '../../lib/previewNavigation'
 import { loadExternalPreviewImage } from '../../lib/previewRemoteImage'
 import { wasDynamicImportRecoveryTriggered } from '../../lib/vitePreloadRecovery'
 import { resolveActiveHeadingId, updateVisibleHeadingIds } from '../../lib/previewScrollSpy'
@@ -148,6 +148,24 @@ export default function MarkdownPreview() {
     [isTauri, t]
   )
 
+  const navigateInternalPreviewAnchor = useCallback(
+    (anchor: HTMLAnchorElement) => {
+      const preview = previewRef.current
+      if (!preview) return false
+
+      const anchorId = getPreviewInternalAnchorId(anchor.getAttribute('href'), previewLocationHref)
+      if (!anchorId) return false
+
+      const target = resolvePreviewAnchorTarget(preview, anchorId)
+      if (!target) return false
+
+      scrollPreviewToTarget(preview, target)
+      flashPreviewTarget(target)
+      return true
+    },
+    [previewLocationHref]
+  )
+
   const activateExternalImage = (image: HTMLImageElement) => {
     const externalSource = image.dataset.externalSrc
     if (!externalSource || image.dataset.externalImage === 'loading') return
@@ -252,9 +270,19 @@ export default function MarkdownPreview() {
 
   useEffect(() => {
     if (!previewHtml.includes('class="katex"')) return
-    void ensureKatexStylesheet().catch((error) => {
-      console.error('Load KaTeX stylesheet error:', error)
-    })
+
+    let cancelled = false
+    void import('../../lib/katexStylesheet')
+      .then(({ ensureKatexStylesheet }) => ensureKatexStylesheet())
+      .catch((error) => {
+        if (!cancelled) {
+          console.error('Load KaTeX stylesheet error:', error)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [previewHtml])
 
   useEffect(() => {
@@ -402,6 +430,12 @@ export default function MarkdownPreview() {
           void openExternalPreviewLink(externalLink.href, externalLink.label)
           return
         }
+
+        if (navigateInternalPreviewAnchor(anchor)) {
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
       }
 
       const button = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>('[data-mermaid-action="render"]')
@@ -421,7 +455,7 @@ export default function MarkdownPreview() {
 
     preview.addEventListener('click', onClick)
     return () => preview.removeEventListener('click', onClick)
-  }, [openExternalPreviewLink, previewLocationHref])
+  }, [navigateInternalPreviewAnchor, openExternalPreviewLink, previewLocationHref])
 
   useEffect(() => {
     if (!isTauri) return
@@ -512,16 +546,22 @@ export default function MarkdownPreview() {
       if (!anchor) return
 
       const externalLink = getPreviewExternalLink(anchor.getAttribute('href'), previewLocationHref)
-      if (!externalLink) return
+      if (externalLink) {
+        event.preventDefault()
+        event.stopPropagation()
+        void openExternalPreviewLink(externalLink.href, externalLink.label)
+        return
+      }
+
+      if (!navigateInternalPreviewAnchor(anchor)) return
 
       event.preventDefault()
       event.stopPropagation()
-      void openExternalPreviewLink(externalLink.href, externalLink.label)
     }
 
     preview.addEventListener('keydown', onKeyDown)
     return () => preview.removeEventListener('keydown', onKeyDown)
-  }, [openExternalPreviewLink, previewLocationHref])
+  }, [navigateInternalPreviewAnchor, openExternalPreviewLink, previewLocationHref])
 
   useEffect(() => {
     const preview = previewRef.current

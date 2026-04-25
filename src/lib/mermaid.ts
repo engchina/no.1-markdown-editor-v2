@@ -9,19 +9,78 @@ type MermaidLogosIconPackModule = typeof import('@iconify-json/logos')
 type MermaidWarmLoader = () => Promise<unknown>
 type MermaidExternalDiagramType = 'zenuml'
 type MermaidDetectedDiagramType = SupportedMermaidParserType | MermaidExternalDiagramType
+type MermaidLogosIconPackKey = 'common' | 'full'
 
 let mermaidPromise: Promise<MermaidModule> | null = null
 let mermaidParserPromise: Promise<typeof import('./mermaidParser.ts')> | null = null
 let mermaidLogosIconPackPromise: Promise<MermaidLogosIconPackModule['icons']> | null = null
+let mermaidLogosIconPackUrlPromise: Promise<string> | null = null
+let mermaidCommonLogosIconPackPromise: Promise<MermaidLogosIconPackModule['icons']> | null = null
+let mermaidCommonLogosIconPackUrlPromise: Promise<string> | null = null
 let mermaidRenderSequence = 0
 const MAX_MERMAID_RENDER_CACHE_ENTRIES = 48
 const mermaidRenderCache = new Map<string, string>()
 const mermaidWarmCache = new Map<string, Promise<void>>()
 const canUseBrowserChunkLoaders = typeof window !== 'undefined'
-const registeredMermaidIconPacks = new Set<'logos'>()
 let mermaidZenumlPluginPromise: Promise<ExternalDiagramDefinition> | null = null
 let mermaidZenumlRegistrationPromise: Promise<void> | null = null
 let mermaidZenumlRegistrationLevel: 'none' | 'lazy' | 'eager' = 'none'
+let activeMermaidLogosIconPackKey: MermaidLogosIconPackKey | null = null
+
+const COMMON_MERMAID_LOGOS_ICON_NAMES: ReadonlySet<string> = new Set([
+  'apple',
+  'aws',
+  'azure-icon',
+  'cloudflare',
+  'confluence',
+  'debian',
+  'digital-ocean',
+  'docker-icon',
+  'elasticsearch',
+  'figma',
+  'firebase',
+  'github-icon',
+  'gitlab',
+  'go',
+  'google-cloud',
+  'grafana',
+  'graphql',
+  'heroku',
+  'java',
+  'javascript',
+  'jira',
+  'kafka',
+  'kubernetes',
+  'linux-tux',
+  'mariadb',
+  'microsoft-azure',
+  'mongodb',
+  'mysql',
+  'netlify',
+  'nginx',
+  'nodejs-icon',
+  'notion-icon',
+  'openai-icon',
+  'oracle',
+  'paypal',
+  'postgresql',
+  'prometheus',
+  'python',
+  'rabbitmq',
+  'react',
+  'redis',
+  'sendgrid',
+  'slack-icon',
+  'sqlite',
+  'stripe',
+  'supabase',
+  'terraform-icon',
+  'twilio',
+  'typescript',
+  'ubuntu',
+  'vercel',
+  'vue',
+] as const)
 
 const architectureDiagramLoader =
   canUseBrowserChunkLoaders
@@ -60,7 +119,9 @@ const mermaidDiagramWarmers: Partial<Record<MermaidDetectedDiagramType, MermaidW
   wardley: () => pickSingleMermaidWarmLoader(wardleyDiagramLoader, 'wardley')(),
   zenuml: async () => {
     const mermaid = await loadConfiguredMermaid()
-    await ensureMermaidExternalDiagramRegistered(mermaid, 'zenuml', true)
+    // ZenUML's runtime payload is unusually large, so warming should register
+    // the external diagram lazily instead of preloading the full definition.
+    await ensureMermaidExternalDiagramRegistered(mermaid, 'zenuml')
   },
 }
 
@@ -105,37 +166,108 @@ function loadMermaid() {
 }
 
 function loadMermaidLogosIconPack() {
-  mermaidLogosIconPackPromise ??= import('@iconify-json/logos')
-    .then((module) => module.icons)
+  mermaidLogosIconPackPromise ??= loadMermaidLogosIconPackUrl()
+    .then(async (iconSetUrl) => {
+      const response = await fetch(iconSetUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to load Mermaid logos icon pack: ${response.status}`)
+      }
+      return (await response.json()) as MermaidLogosIconPackModule['icons']
+    })
     .catch((error) => {
       mermaidLogosIconPackPromise = null
-      attemptDynamicImportRecovery(error)
       throw error
     })
 
   return mermaidLogosIconPackPromise
 }
 
-function ensureMermaidIconPacksRegistered(mermaid: MermaidModule['default']): void {
-  if (registeredMermaidIconPacks.has('logos')) {
-    return
+function loadMermaidLogosIconPackUrl() {
+  mermaidLogosIconPackUrlPromise ??= import('@iconify-json/logos/icons.json?url')
+    .then((module) => module.default)
+    .catch((error) => {
+      mermaidLogosIconPackUrlPromise = null
+      attemptDynamicImportRecovery(error)
+      throw error
+    })
+
+  return mermaidLogosIconPackUrlPromise
+}
+
+function loadMermaidCommonLogosIconPackUrl() {
+  mermaidCommonLogosIconPackUrlPromise ??= import('./mermaidLogosCommon.json?url')
+    .then((module) => module.default)
+    .catch((error) => {
+      mermaidCommonLogosIconPackUrlPromise = null
+      attemptDynamicImportRecovery(error)
+      throw error
+    })
+
+  return mermaidCommonLogosIconPackUrlPromise
+}
+
+function loadMermaidCommonLogosIconPack() {
+  mermaidCommonLogosIconPackPromise ??= loadMermaidCommonLogosIconPackUrl()
+    .then(async (iconSetUrl) => {
+      const response = await fetch(iconSetUrl)
+      if (!response.ok) {
+        throw new Error(`Failed to load Mermaid common logos icon pack: ${response.status}`)
+      }
+      return (await response.json()) as MermaidLogosIconPackModule['icons']
+    })
+    .catch((error) => {
+      mermaidCommonLogosIconPackPromise = null
+      throw error
+    })
+
+  return mermaidCommonLogosIconPackPromise
+}
+
+export function extractMermaidLogosIconNames(source: string): string[] {
+  const matches = source.matchAll(/\blogos:([a-z0-9]+(?:[._-][a-z0-9]+)*)/giu)
+  const uniqueNames = new Set<string>()
+
+  for (const match of matches) {
+    uniqueNames.add(match[1].toLowerCase())
   }
 
-  // Mermaid's architecture examples use Iconify-backed `logos:*` icons. We
-  // register the pack lazily so offline desktop builds still render them.
+  return Array.from(uniqueNames)
+}
+
+export function canUseMermaidCommonLogosIconPack(source: string): boolean {
+  const iconNames = extractMermaidLogosIconNames(source)
+  return iconNames.length > 0 && iconNames.every((name) => COMMON_MERMAID_LOGOS_ICON_NAMES.has(name))
+}
+
+async function ensureMermaidLogosIconPackForSource(
+  mermaid: MermaidModule['default'],
+  source: string
+): Promise<void> {
+  const iconNames = extractMermaidLogosIconNames(source)
+  if (iconNames.length === 0) return
+
+  const nextPackKey: MermaidLogosIconPackKey =
+    iconNames.every((name) => COMMON_MERMAID_LOGOS_ICON_NAMES.has(name)) ? 'common' : 'full'
+
+  if (activeMermaidLogosIconPackKey === nextPackKey) return
+  if (activeMermaidLogosIconPackKey === 'full' && nextPackKey === 'common') return
+
+  const icons =
+    nextPackKey === 'common'
+      ? await loadMermaidCommonLogosIconPack()
+      : await loadMermaidLogosIconPack()
+
   mermaid.registerIconPacks([
     {
       name: 'logos',
-      loader: loadMermaidLogosIconPack,
+      icons,
     },
   ])
-  registeredMermaidIconPacks.add('logos')
+  activeMermaidLogosIconPackKey = nextPackKey
 }
 
 async function loadConfiguredMermaid(): Promise<MermaidModule['default']> {
-  const mermaid = (await loadMermaid()).default
-  ensureMermaidIconPacksRegistered(mermaid)
-  return mermaid
+  return (await loadMermaid()).default
 }
 
 function loadMermaidParser() {
@@ -310,6 +442,7 @@ async function ensureMermaidDiagramSupport(
   mermaid: MermaidModule['default'],
   source: string
 ): Promise<MermaidDetectedDiagramType | null> {
+  await ensureMermaidLogosIconPackForSource(mermaid, source)
   const diagramType = detectMermaidDiagramType(source)
   if (!isMermaidExternalDiagramType(diagramType)) {
     return diagramType

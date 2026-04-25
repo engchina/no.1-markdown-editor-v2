@@ -7,11 +7,13 @@ const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, './package.j
   version?: string
 }
 const appVersion = typeof packageJson.version === 'string' ? packageJson.version : '0.0.0'
+const ACTIONABLE_CHUNK_SIZE_WARNING_LIMIT_KB = 560
+const KNOWN_OPTIONAL_LARGE_CHUNK_PATTERN = /^assets\/zenuml-definition-[^/]+\.js$/u
 
 const OPTIONAL_PREVIEW_CHUNK_PATTERN =
   /\/assets\/(?:MarkdownPreview|markdown(?:[A-Za-z]+)?|vendor-markdown(?:-(?:math|html))?|vendor-mermaid(?:-[^"]+)?|mermaid|.*katex[^"]*|.*rehype-katex[^"]*|.*zenuml[^"]*)/
 const OPTIONAL_EDITOR_CHUNK_PATTERN =
-  /\/assets\/(?:EditorPane|CodeMirrorEditor|vendor-editor(?:-(?:search|language|language-web|autocomplete))?|optionalFeatures|formatCommands|wysiwyg|.*autocomplete[^"]*)/
+  /\/assets\/(?:EditorPane|CodeMirrorEditor|vendor-editor(?:-[^"]+)?|optionalFeatures|formatCommands|wysiwyg|.*autocomplete[^"]*)/
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
@@ -29,6 +31,23 @@ export default defineConfig(async () => ({
         )
       },
     },
+    {
+      name: 'report-actionable-large-chunks',
+      apply: 'build',
+      generateBundle(_options, bundle) {
+        for (const output of Object.values(bundle)) {
+          if (output.type !== 'chunk') continue
+
+          const sizeKb = Buffer.byteLength(output.code, 'utf8') / 1024
+          if (sizeKb <= ACTIONABLE_CHUNK_SIZE_WARNING_LIMIT_KB) continue
+          if (KNOWN_OPTIONAL_LARGE_CHUNK_PATTERN.test(output.fileName)) continue
+
+          this.warn(
+            `Actionable chunk size ${sizeKb.toFixed(1)} kB exceeds ${ACTIONABLE_CHUNK_SIZE_WARNING_LIMIT_KB} kB: ${output.fileName}`
+          )
+        }
+      },
+    },
   ],
   resolve: {
     alias: [
@@ -39,18 +58,19 @@ export default defineConfig(async () => ({
   },
   optimizeDeps: {
     // Mermaid only becomes reachable after the preview surface is mounted, so we
-    // pre-bundle its runtime, the upstream parser package, ZenUML's external
-    // diagram bridge, and their parser/runtime dependencies up front to avoid
-    // late dev-time optimizer churn the first time a diagram is rendered.
-    // Langium must be eagerly optimized so the browser never falls back to its
-    // raw cancellation bridge modules under /node_modules.
-    include: ['mermaid', '@mermaid-js/parser-upstream', '@mermaid-js/mermaid-zenuml', '@zenuml/core', 'langium'],
+    // pre-bundle its runtime plus the upstream parser/runtime dependencies that
+    // are used by common diagram families. Langium must be eagerly optimized so
+    // the browser never falls back to its raw cancellation bridge modules under
+    // /node_modules. ZenUML stays out of the default optimizer path because its
+    // runtime is intentionally deferred until the user actually renders it.
+    include: ['mermaid', '@mermaid-js/parser-upstream', 'langium'],
   },
   build: {
     // Mermaid's upstream parser core bundles several grammars into a single optional
-    // lazy chunk. It's not on the initial load path, so we allow a slightly higher
-    // warning threshold to keep build output actionable for real regressions.
-    chunkSizeWarningLimit: 560,
+    // lazy chunk, and the optional ZenUML runtime is significantly larger still.
+    // We suppress Vite's generic warning and report actionable overages via the
+    // custom plugin above so known cold-path bundles do not hide real regressions.
+    chunkSizeWarningLimit: 4000,
     modulePreload: {
       resolveDependencies(_filename, deps) {
         return deps.filter((dep) => {
@@ -108,6 +128,10 @@ export default defineConfig(async () => ({
             return 'mermaid-parser'
           }
 
+          if (normalizedId.includes('/node_modules/@iconify-json/logos/')) {
+            return 'vendor-mermaid-icons'
+          }
+
           if (!normalizedId.includes('/node_modules/')) return
 
           if (mermaidParserRuntimeChunk) {
@@ -125,44 +149,202 @@ export default defineConfig(async () => ({
             return
           }
 
+          const isMarkdownHighlightDependency =
+            normalizedId.includes('/node_modules/lowlight/') ||
+            normalizedId.includes('/node_modules/highlight.js/') ||
+            normalizedId.includes('/node_modules/hast-util-to-text/')
+
+          if (isMarkdownHighlightDependency) {
+            return 'vendor-markdown-highlight'
+          }
+
           if (normalizedId.includes('/node_modules/@codemirror/autocomplete/')) {
             return 'vendor-editor-autocomplete'
           }
 
-          const isCodeMirrorWebLanguage =
+          if (normalizedId.includes('/node_modules/@codemirror/language-data/')) {
+            return 'vendor-editor-language-data'
+          }
+
+          if (normalizedId.includes('/node_modules/@codemirror/legacy-modes/')) {
+            const isCommonLegacyMode =
+              normalizedId.includes('/node_modules/@codemirror/legacy-modes/mode/shell') ||
+              normalizedId.includes('/node_modules/@codemirror/legacy-modes/mode/diff')
+
+            if (isCommonLegacyMode) {
+              return 'vendor-editor-legacy-common'
+            }
+
+            // Let rare legacy modes stay module-split instead of merging them
+            // back into a single cold-start chunk.
+            return
+          }
+
+          if (
+            normalizedId.includes('/node_modules/@codemirror/state/') ||
+            normalizedId.includes('/node_modules/@marijn/find-cluster-break/')
+          ) {
+            return 'vendor-editor-state'
+          }
+
+          if (
+            normalizedId.includes('/node_modules/@codemirror/view/') ||
+            normalizedId.includes('/node_modules/crelt/') ||
+            normalizedId.includes('/node_modules/style-mod/') ||
+            normalizedId.includes('/node_modules/w3c-keyname/')
+          ) {
+            return 'vendor-editor-view'
+          }
+
+          if (normalizedId.includes('/node_modules/@codemirror/commands/')) {
+            return 'vendor-editor-commands'
+          }
+
+          if (
+            normalizedId.includes('/node_modules/@codemirror/language/') ||
+            normalizedId.includes('/node_modules/@lezer/common/') ||
+            normalizedId.includes('/node_modules/@lezer/highlight/') ||
+            normalizedId.includes('/node_modules/@lezer/lr/')
+          ) {
+            return 'vendor-editor-language-core'
+          }
+
+          const isMarkdownLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-markdown/') ||
+            normalizedId.includes('/node_modules/@lezer/markdown/')
+
+          if (isMarkdownLanguageSupport) {
+            return 'vendor-editor-language-markdown'
+          }
+
+          const isSqlLanguageSupport = normalizedId.includes('/node_modules/@codemirror/lang-sql/')
+
+          if (isSqlLanguageSupport) {
+            return 'vendor-editor-language-sql'
+          }
+
+          const isCppLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-cpp/') ||
+            normalizedId.includes('/node_modules/@lezer/cpp/')
+
+          if (isCppLanguageSupport) {
+            return 'vendor-editor-language-cpp'
+          }
+
+          const isGoLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-go/') ||
+            normalizedId.includes('/node_modules/@lezer/go/')
+
+          if (isGoLanguageSupport) {
+            return 'vendor-editor-language-go'
+          }
+
+          const isJavaLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-java/') ||
+            normalizedId.includes('/node_modules/@lezer/java/')
+
+          if (isJavaLanguageSupport) {
+            return 'vendor-editor-language-java'
+          }
+
+          const isJsonLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-json/') ||
+            normalizedId.includes('/node_modules/@lezer/json/')
+
+          if (isJsonLanguageSupport) {
+            return 'vendor-editor-language-json'
+          }
+
+          const isPhpLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-php/') ||
+            normalizedId.includes('/node_modules/@lezer/php/')
+
+          if (isPhpLanguageSupport) {
+            return 'vendor-editor-language-php'
+          }
+
+          const isPythonLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-python/') ||
+            normalizedId.includes('/node_modules/@lezer/python/')
+
+          if (isPythonLanguageSupport) {
+            return 'vendor-editor-language-python'
+          }
+
+          const isRustLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-rust/') ||
+            normalizedId.includes('/node_modules/@lezer/rust/')
+
+          if (isRustLanguageSupport) {
+            return 'vendor-editor-language-rust'
+          }
+
+          const isXmlLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-xml/') ||
+            normalizedId.includes('/node_modules/@lezer/xml/')
+
+          if (isXmlLanguageSupport) {
+            return 'vendor-editor-language-xml'
+          }
+
+          const isYamlLanguageSupport =
+            normalizedId.includes('/node_modules/@codemirror/lang-yaml/') ||
+            normalizedId.includes('/node_modules/@lezer/yaml/')
+
+          if (isYamlLanguageSupport) {
+            return 'vendor-editor-language-yaml'
+          }
+
+          const isHtmlLanguageSupport =
             normalizedId.includes('/node_modules/@codemirror/lang-html/') ||
+            normalizedId.includes('/node_modules/@lezer/html/')
+
+          if (isHtmlLanguageSupport) {
+            return 'vendor-editor-language-html'
+          }
+
+          const isCssLanguageSupport =
             normalizedId.includes('/node_modules/@codemirror/lang-css/') ||
+            normalizedId.includes('/node_modules/@lezer/css/')
+
+          if (isCssLanguageSupport) {
+            return 'vendor-editor-language-css'
+          }
+
+          const isJavaScriptLanguageSupport =
             normalizedId.includes('/node_modules/@codemirror/lang-javascript/') ||
+            normalizedId.includes('/node_modules/@codemirror/lint/') ||
+            normalizedId.includes('/node_modules/@lezer/javascript/')
+
+          if (isJavaScriptLanguageSupport) {
+            return 'vendor-editor-language-javascript'
+          }
+
+          const isTemplateWebLanguage =
             normalizedId.includes('/node_modules/@codemirror/lang-angular/') ||
             normalizedId.includes('/node_modules/@codemirror/lang-jinja/') ||
             normalizedId.includes('/node_modules/@codemirror/lang-less/') ||
             normalizedId.includes('/node_modules/@codemirror/lang-liquid/') ||
             normalizedId.includes('/node_modules/@codemirror/lang-vue/')
 
-          const isLezerWebLanguage =
-            normalizedId.includes('/node_modules/@lezer/html/') ||
-            normalizedId.includes('/node_modules/@lezer/css/') ||
-            normalizedId.includes('/node_modules/@lezer/javascript/')
-
-          if (isCodeMirrorWebLanguage || isLezerWebLanguage) {
+          if (isTemplateWebLanguage) {
             return 'vendor-editor-language-web'
           }
 
           if (
             normalizedId.includes('/node_modules/@codemirror/lang-') ||
-            normalizedId.includes('/node_modules/@codemirror/language-data/') ||
-            normalizedId.includes('/node_modules/@codemirror/legacy-modes/') ||
-            normalizedId.includes('/node_modules/@lezer/markdown/')
+            normalizedId.includes('/node_modules/@lezer/markdown/') ||
+            normalizedId.includes('/node_modules/@lezer/sass/')
           ) {
             return 'vendor-editor-language'
           }
 
-          if (normalizedId.includes('/node_modules/langium/')) {
-            return 'vendor-mermaid-parser-langium'
-          }
+          const isMermaidParserRuntimeDependency =
+            normalizedId.includes('/node_modules/langium/') ||
+            normalizedId.includes('/node_modules/chevrotain/')
 
-          if (normalizedId.includes('/node_modules/chevrotain/')) {
-            return 'vendor-mermaid-parser-chevrotain'
+          if (isMermaidParserRuntimeDependency) {
+            return 'vendor-mermaid-parser-runtime'
           }
 
           if (

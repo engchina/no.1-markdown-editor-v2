@@ -41,7 +41,11 @@ test('editor store persists invisible-character mode and CodeMirror wires it thr
   )
 
   assert.match(extensions, /export function buildInvisibleCharacterExtensions\(enabled: boolean\): Extension\[]/)
-  assert.match(extensions, /highlightTrailingWhitespace\(\)/)
+  assert.match(extensions, /const trailingSpaceDecorator = new MatchDecorator\(\{/)
+  assert.match(extensions, /regexp: \/ \+\(\?=\[\\t \]\*\$\)\/g/)
+  assert.match(extensions, /for \(let pos = from; pos < to; pos \+= 1\) \{/)
+  assert.match(extensions, /add\(pos, pos \+ 1, trailingSpaceMark\)/)
+  assert.doesNotMatch(extensions, /highlightTrailingWhitespace\(\)/)
   assert.match(extensions, /highlightSpecialChars\(\{/)
   assert.match(extensions, /addSpecialChars: INVISIBLE_MARKDOWN_SPECIAL_CHARS/)
 })
@@ -64,6 +68,17 @@ test('theme panel, locale copy, and editor styles explain the invisible-characte
   assert.match(css, /\.cm-tab::after\s*\{/)
   assert.match(css, /\.cm-trailingSpace\s*\{/)
   assert.match(css, /\.cm-specialChar\s*\{/)
+  assert.match(css, /--editor-invisible-ink:\s*color-mix\(in srgb, var\(--accent\) 18%, var\(--text-muted\)\);/)
+  assert.match(css, /--editor-invisible-soft:\s*color-mix\(in srgb, var\(--accent\) 8%, transparent\);/)
+  assert.match(css, /--editor-invisible-trailing:\s*color-mix\(in srgb, var\(--accent\) 26%, var\(--text-muted\)\);/)
+  assert.match(css, /\.cm-tab\s*\{[\s\S]*background-image:/)
+  assert.match(css, /\.cm-trailingSpace\s*\{[\s\S]*radial-gradient\(/)
+  assert.match(css, /\.cm-trailingSpace\s*\{[\s\S]*background-repeat:\s*no-repeat;/)
+  assert.match(css, /\.cm-trailingSpace\s*\{[\s\S]*background-size:\s*100% 1em;/)
+  assert.match(css, /\.cm-specialChar\s*\{[\s\S]*display:\s*inline-block/)
+  assert.match(css, /\.cm-specialChar\s*\{[\s\S]*background:\s*none;/)
+  assert.match(css, /\.cm-specialChar\s*\{[\s\S]*box-shadow:\s*none;/)
+  assert.match(css, /\.cm-specialChar\s*\{[\s\S]*color:\s*var\(--editor-invisible-ink\) !important;/)
 
   const locales = [JSON.parse(enRaw), JSON.parse(jaRaw), JSON.parse(zhRaw)] as Array<Record<string, unknown>>
   const keys = [

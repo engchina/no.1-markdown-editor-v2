@@ -1,6 +1,8 @@
 import { hoverTooltip } from '@codemirror/view'
+import { stripFrontMatter } from '../../lib/markdownShared.ts'
 import { findBlockFootnoteRanges, findInlineFootnoteRanges } from './wysiwygFootnote.ts'
 import { renderInlineMarkdownFragment } from './wysiwygInlineMarkdown.ts'
+import { collectReferenceDefinitionMarkdown } from './wysiwygReferenceLinks.ts'
 
 export const wysiwygFootnoteHoverTooltip = hoverTooltip((view, pos) => {
   const line = view.state.doc.lineAt(pos)
@@ -15,6 +17,7 @@ export const wysiwygFootnoteHoverTooltip = hoverTooltip((view, pos) => {
   const label = match.label
   const fullText = view.state.doc.toString()
   const blockRanges = findBlockFootnoteRanges(fullText)
+  const referenceDefinitionsMarkdown = collectReferenceDefinitionMarkdown(stripFrontMatter(fullText).body)
   
   const blockMatch = blockRanges.find(r => r.label === label)
   if (!blockMatch) return null
@@ -35,7 +38,9 @@ export const wysiwygFootnoteHoverTooltip = hoverTooltip((view, pos) => {
       const dom = document.createElement('div')
       dom.className = 'cm-wysiwyg-footnote-tooltip ProseMirror prose dark:prose-invert prose-sm'
       // Use rendering logic to present formatted markdown
-      dom.innerHTML = footnoteContent ? renderInlineMarkdownFragment(footnoteContent) : ''
+      dom.innerHTML = footnoteContent
+        ? renderInlineMarkdownFragment(footnoteContent, { referenceDefinitionsMarkdown })
+        : ''
       return { dom }
     }
   }

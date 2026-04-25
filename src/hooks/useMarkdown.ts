@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { containsLikelyMath } from '../lib/markdownMath'
 import type { MarkdownRenderResponse } from '../workers/markdownMessages'
 
 async function renderMarkdownOnMainThread(markdown: string, syntaxHighlightEngine?: 'highlightjs' | 'shiki'): Promise<string> {
@@ -8,12 +7,6 @@ async function renderMarkdownOnMainThread(markdown: string, syntaxHighlightEngin
 }
 
 import { useEditorStore } from '../store/editor'
-
-function stripFrontMatterBody(markdown: string): string {
-  const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)
-  if (!match) return markdown
-  return markdown.slice(match[0].length).replace(/^\r?\n/, '')
-}
 
 export function useMarkdown(markdown: string) {
   const syntaxHighlightEngine = useEditorStore((s) => s.syntaxHighlightEngine)
@@ -93,8 +86,7 @@ export function useMarkdown(markdown: string) {
 
     timerRef.current = setTimeout(async () => {
       try {
-        const body = stripFrontMatterBody(markdown)
-        if (workerRef.current && !workerUnavailableRef.current && !containsLikelyMath(body)) {
+        if (workerRef.current && !workerUnavailableRef.current) {
           workerRef.current.postMessage({ id: requestId, markdown, syntaxHighlightEngine })
           return
         }

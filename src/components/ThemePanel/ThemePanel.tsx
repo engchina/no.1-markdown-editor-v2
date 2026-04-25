@@ -35,6 +35,8 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
     setWordWrap,
     showInvisibleCharacters,
     setShowInvisibleCharacters,
+    spellcheckMode,
+    setSpellcheckMode,
     wysiwygMode,
     setWysiwygMode,
     typewriterMode,
@@ -282,6 +284,39 @@ export default function ThemePanel({ onClose, triggerRef }: Props) {
           </div>
           <div className="mt-2 text-[10px] leading-4" style={{ color: 'var(--text-secondary)' }}>
             {t('themePanel.showInvisibleCharactersHint')}
+          </div>
+
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs font-medium mb-3" style={{ color: 'var(--text-muted)' }}>
+              {t('themePanel.spellcheck')}
+            </p>
+            <div className="flex gap-2">
+              {([
+                { mode: 'document-language', label: t('themePanel.spellcheckModes.document-language') },
+                { mode: 'system', label: t('themePanel.spellcheckModes.system') },
+                { mode: 'off', label: t('themePanel.spellcheckModes.off') },
+              ] as const).map(({ mode, label }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSpellcheckMode(mode)}
+                  className="flex-1 text-[11px] px-2 py-1.5 rounded transition-all hover-scale"
+                  style={{
+                    background: spellcheckMode === mode ? 'var(--accent)' : 'var(--bg-tertiary)',
+                    color: spellcheckMode === mode ? 'white' : 'var(--text-muted)',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 text-[10px] leading-4" style={{ color: 'var(--text-secondary)' }}>
+              {spellcheckMode === 'off'
+                ? t('themePanel.spellcheckHintOff')
+                : spellcheckMode === 'system'
+                  ? t('themePanel.spellcheckHintSystem')
+                  : t('themePanel.spellcheckHintDocumentLanguage')}
+            </div>
           </div>
 
           <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>

@@ -5,10 +5,10 @@ import {
   parseAIPromptMentions,
   resolveAIPromptMentions,
 } from '../src/lib/ai/mentions.ts'
+import { detectDocumentLanguage } from '../src/lib/documentLanguage.ts'
 import {
   buildAIComposerContextPacket,
   buildAIContextPacket,
-  detectAIDocumentLanguage,
   extractCurrentBlock,
   extractFrontMatter,
   resolveCurrentHeadingRange,
@@ -33,11 +33,11 @@ const sampleDocument = [
   'Another line.',
 ].join('\n')
 
-test('detectAIDocumentLanguage recognizes english, chinese, japanese, and mixed content', () => {
-  assert.equal(detectAIDocumentLanguage('Hello world'), 'en')
-  assert.equal(detectAIDocumentLanguage('这是一个测试'), 'zh')
-  assert.equal(detectAIDocumentLanguage('これはテストです'), 'ja')
-  assert.equal(detectAIDocumentLanguage('Hello 世界'), 'mixed')
+test('detectDocumentLanguage recognizes english, chinese, japanese, and mixed content', () => {
+  assert.equal(detectDocumentLanguage('Hello world'), 'en')
+  assert.equal(detectDocumentLanguage('这是一个测试'), 'zh')
+  assert.equal(detectDocumentLanguage('これはテストです'), 'ja')
+  assert.equal(detectDocumentLanguage('Hello 世界'), 'mixed')
 })
 
 test('extractFrontMatter returns the opening YAML block only', () => {

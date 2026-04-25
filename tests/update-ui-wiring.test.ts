@@ -2,13 +2,23 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
-test('App mounts the update dialog and triggers the automatic update check on startup', async () => {
+test('App lazily mounts rare dialogs while still triggering the automatic update check on startup', async () => {
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 
-  assert.match(app, /import UpdateAvailableDialog from '\.\/components\/Updates\/UpdateAvailableDialog'/)
+  assert.match(app, /const UpdateAvailableDialog = lazy\(\(\) => import\('\.\/components\/Updates\/UpdateAvailableDialog'\)\)/)
+  assert.match(app, /const ExternalMissingFileDialog = lazy\(\(\) => import\('\.\/components\/ExternalFileConflicts\/ExternalMissingFileDialog'\)\)/)
+  assert.match(app, /const ExternalFileConflictDialog = lazy\(\(\) => import\('\.\/components\/ExternalFileConflicts\/ExternalFileConflictDialog'\)\)/)
+  assert.match(app, /const updateDialogOpen = useUpdateStore\(\(state\) => state\.dialogOpen\)/)
+  assert.match(app, /const externalMissingDialogOpen = useEditorStore\(\(state\) => state\.externalMissingFiles\.length > 0\)/)
+  assert.match(
+    app,
+    /const externalConflictDialogOpen = useEditorStore\(\s*\(state\) => state\.externalMissingFiles\.length === 0 && state\.externalFileConflicts\.length > 0\s*\)/
+  )
   assert.match(app, /import \{ maybeRunAutomaticUpdateCheck \} from '\.\/lib\/updateActions'/)
   assert.match(app, /void maybeRunAutomaticUpdateCheck\(\)/)
-  assert.match(app, /<UpdateAvailableDialog \/>/)
+  assert.match(app, /\{updateDialogOpen && \(\s*<Suspense fallback=\{null\}>\s*<UpdateAvailableDialog \/>\s*<\/Suspense>\s*\)\}/)
+  assert.match(app, /\{externalMissingDialogOpen && \(\s*<Suspense fallback=\{null\}>\s*<ExternalMissingFileDialog \/>\s*<\/Suspense>\s*\)\}/)
+  assert.match(app, /\{externalConflictDialogOpen && \(\s*<Suspense fallback=\{null\}>\s*<ExternalFileConflictDialog \/>\s*<\/Suspense>\s*\)\}/)
 })
 
 test('toolbar mounts dedicated AI and About panels while theme settings stay editor-only', async () => {
@@ -18,12 +28,23 @@ test('toolbar mounts dedicated AI and About panels while theme settings stay edi
   const aboutPanel = await readFile(new URL('../src/components/Updates/AboutPanel.tsx', import.meta.url), 'utf8')
   const updateSection = await readFile(new URL('../src/components/Updates/UpdateSettingsSection.tsx', import.meta.url), 'utf8')
 
-  assert.match(toolbar, /import AISetupPanel from '\.\.\/AI\/AISetupPanel'/)
-  assert.match(toolbar, /import AboutPanel from '\.\.\/Updates\/AboutPanel'/)
+  assert.match(toolbar, /const ThemePanel = lazy\(\(\) => import\('\.\.\/ThemePanel\/ThemePanel'\)\)/)
+  assert.match(toolbar, /const AISetupPanel = lazy\(\(\) => import\('\.\.\/AI\/AISetupPanel'\)\)/)
+  assert.match(toolbar, /const AboutPanel = lazy\(\(\) => import\('\.\.\/Updates\/AboutPanel'\)\)/)
   assert.match(toolbar, /data-toolbar-action="ai-setup"/)
   assert.match(toolbar, /data-toolbar-action="about"/)
-  assert.match(toolbar, /<AISetupPanel onClose=\{\(\) => setShowAISetup\(false\)\} triggerRef=\{aiSetupButtonRef\} \/>/)
-  assert.match(toolbar, /<AboutPanel onClose=\{\(\) => setShowAbout\(false\)\} triggerRef=\{aboutButtonRef\} \/>/)
+  assert.match(
+    toolbar,
+    /\{showTheme && \(\s*<Suspense fallback=\{null\}>\s*<ThemePanel onClose=\{\(\) => setShowTheme\(false\)\} triggerRef=\{themeButtonRef\} \/>\s*<\/Suspense>\s*\)\}/
+  )
+  assert.match(
+    toolbar,
+    /\{showAISetup && \(\s*<Suspense fallback=\{null\}>\s*<AISetupPanel onClose=\{\(\) => setShowAISetup\(false\)\} triggerRef=\{aiSetupButtonRef\} \/>\s*<\/Suspense>\s*\)\}/
+  )
+  assert.match(
+    toolbar,
+    /\{showAbout && \(\s*<Suspense fallback=\{null\}>\s*<AboutPanel onClose=\{\(\) => setShowAbout\(false\)\} triggerRef=\{aboutButtonRef\} \/>\s*<\/Suspense>\s*\)\}/
+  )
   assert.ok(!panel.includes('AISettingsSection'))
   assert.ok(!panel.includes('UpdateSettingsSection'))
 

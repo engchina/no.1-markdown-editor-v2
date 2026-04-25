@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode, type Ref, type RefObject } from 'react'
+import { Suspense, lazy, useState, useRef, useEffect, type ReactNode, type Ref, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useEditorStore, type ViewMode } from '../../store/editor'
@@ -8,12 +8,12 @@ import { useAnchoredOverlayStyle } from '../../hooks/useAnchoredOverlayStyle'
 import { useExport } from '../../hooks/useExport'
 import { formatPrimaryShortcut } from '../../lib/platform'
 import type { FormatAction } from '../Editor/formatCommands'
-import AISetupPanel from '../AI/AISetupPanel'
-import ThemePanel from '../ThemePanel/ThemePanel'
-import AboutPanel from '../Updates/AboutPanel'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const ThemePanel = lazy(() => import('../ThemePanel/ThemePanel'))
+const AISetupPanel = lazy(() => import('../AI/AISetupPanel'))
+const AboutPanel = lazy(() => import('../Updates/AboutPanel'))
 
 type ToolbarButtonVariant = 'square' | 'wide'
 type ToolbarMenuAlign = 'left' | 'right'
@@ -494,7 +494,11 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           <AppIcon name="settings" size={16} />
           </span>
         </ToolbarBtn>
-        {showTheme && <ThemePanel onClose={() => setShowTheme(false)} triggerRef={themeButtonRef} />}
+        {showTheme && (
+          <Suspense fallback={null}>
+            <ThemePanel onClose={() => setShowTheme(false)} triggerRef={themeButtonRef} />
+          </Suspense>
+        )}
       </div>
 
       <div className="relative">
@@ -512,7 +516,11 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           <AppIcon name="sparkles" size={16} />
           </span>
         </ToolbarBtn>
-        {showAISetup && <AISetupPanel onClose={() => setShowAISetup(false)} triggerRef={aiSetupButtonRef} />}
+        {showAISetup && (
+          <Suspense fallback={null}>
+            <AISetupPanel onClose={() => setShowAISetup(false)} triggerRef={aiSetupButtonRef} />
+          </Suspense>
+        )}
       </div>
 
       <div className="relative">
@@ -530,7 +538,11 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           <AppIcon name="infoCircle" size={16} />
           </span>
         </ToolbarBtn>
-        {showAbout && <AboutPanel onClose={() => setShowAbout(false)} triggerRef={aboutButtonRef} />}
+        {showAbout && (
+          <Suspense fallback={null}>
+            <AboutPanel onClose={() => setShowAbout(false)} triggerRef={aboutButtonRef} />
+          </Suspense>
+        )}
       </div>
     </div>
   )

@@ -1,8 +1,8 @@
 import { extractHeadings } from '../outline.ts'
+import { detectDocumentLanguage } from '../documentLanguage.ts'
 import type {
   AIApplySnapshot,
   AIContextPacket,
-  AIDocumentLanguage,
   AIIntent,
   AIOutputTarget,
   AIScope,
@@ -11,10 +11,6 @@ import type {
 
 const DEFAULT_CONTEXT_WINDOW_CHARS = 400
 const FRONT_MATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u
-const HAN_CHARACTER_PATTERN = /\p{Script=Han}/gu
-const HIRAGANA_PATTERN = /\p{Script=Hiragana}/gu
-const KATAKANA_PATTERN = /\p{Script=Katakana}/gu
-const LATIN_PATTERN = /\p{Script=Latin}/gu
 
 export interface AIBuildContextOptions {
   tabId: string
@@ -54,7 +50,7 @@ export function buildAIContextPacket(options: AIBuildContextOptions): AIContextP
     tabId: options.tabId,
     tabPath: options.tabPath,
     fileName,
-    documentLanguage: detectAIDocumentLanguage(content),
+    documentLanguage: detectDocumentLanguage(content),
     intent: options.intent,
     scope,
     outputTarget: options.outputTarget,
@@ -121,19 +117,6 @@ export function buildAIComposerContextPacket(options: {
     ...(baseContext.slashCommandContext ? { slashCommandContext: baseContext.slashCommandContext } : {}),
     explicitContextAttachments: baseContext.explicitContextAttachments,
   }
-}
-
-export function detectAIDocumentLanguage(content: string): AIDocumentLanguage {
-  const hanCount = countMatches(content, HAN_CHARACTER_PATTERN)
-  const hiraganaCount = countMatches(content, HIRAGANA_PATTERN)
-  const katakanaCount = countMatches(content, KATAKANA_PATTERN)
-  const latinCount = countMatches(content, LATIN_PATTERN)
-
-  if (hiraganaCount + katakanaCount > 0) return 'ja'
-  if (hanCount > 0 && latinCount === 0) return 'zh'
-  if (latinCount > 0 && hanCount === 0) return 'en'
-  if (hanCount > 0 || latinCount > 0) return 'mixed'
-  return 'mixed'
 }
 
 export function extractFrontMatter(content: string): string | null {
@@ -282,6 +265,3 @@ function clampOffset(value: number, contentLength: number): number {
   return Math.min(Math.max(Math.trunc(value), 0), contentLength)
 }
 
-function countMatches(content: string, pattern: RegExp): number {
-  return Array.from(content.matchAll(pattern)).length
-}

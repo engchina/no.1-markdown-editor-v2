@@ -8,6 +8,7 @@ import {
   resolveAISlashCommandTrigger,
   type AISlashCommandEntry,
 } from '../../lib/ai/slashCommands.ts'
+import { resolveMarkdownCodeLanguage } from './markdownCodeLanguages'
 
 export interface SearchOptions {
   search: string
@@ -335,13 +336,12 @@ export async function loadAutocompleteExtensions(): Promise<Extension[]> {
 export async function loadMarkdownLanguageExtensions(): Promise<Extension[]> {
   markdownLanguageExtensionsPromise ??= (async () => {
     const { markdown, markdownLanguage } = await import('@codemirror/lang-markdown')
-    const { languages } = await import('@codemirror/language-data')
 
     return [
       markdown({
         base: markdownLanguage,
         addKeymap: true,
-        codeLanguages: languages,
+        codeLanguages: resolveMarkdownCodeLanguage,
       }),
     ]
   })()

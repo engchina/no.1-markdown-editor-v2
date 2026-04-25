@@ -392,6 +392,49 @@ test('buildAIWorkspaceExecutionPreflight routes dependent update tasks to a prod
   })
 })
 
+test('buildAIWorkspaceExecutionPreflight applies explicit target overrides before resolving note references', async () => {
+  const preflight = await buildAIWorkspaceExecutionPreflight({
+    tasks: [
+      {
+        id: 'update-overridden',
+        action: 'update-note',
+        target: 'project',
+        title: 'Project Override',
+        content: '# Overridden target',
+        dependsOn: [],
+        phase: 'Planning',
+      },
+    ],
+    tabs: [
+      {
+        id: 'tab-plan',
+        name: 'project-plan.md',
+        path: 'notes/project-plan.md',
+        content: '# Plan',
+        isDirty: false,
+      },
+      {
+        id: 'tab-retro',
+        name: 'project-retrospective.md',
+        path: 'notes/project-retrospective.md',
+        content: '# Retro',
+        isDirty: false,
+      },
+    ],
+    rootPath: null,
+    targetOverrides: {
+      'update-overridden': 'notes/project-plan.md',
+    },
+  })
+
+  assert.equal(preflight.tasks['update-overridden']?.status, 'ready')
+  assert.equal(preflight.tasks['update-overridden']?.reason, 'update-ready')
+  assert.equal(preflight.tasks['update-overridden']?.overrideTarget, 'notes/project-plan.md')
+  assert.equal(preflight.tasks['update-overridden']?.matchedReference?.path, 'notes/project-plan.md')
+  assert.equal(preflight.tasks['update-overridden']?.matchedReference?.ambiguous, false)
+  assert.equal(preflight.summary.ready, 1)
+})
+
 test('buildAIWorkspaceExecutionPreflight marks update tasks as waiting when an upstream create-note has not produced the draft yet', async () => {
   const preflight = await buildAIWorkspaceExecutionPreflight({
     tasks: [
