@@ -75,7 +75,7 @@ test('wysiwyg math block theme keeps preview-like spacing instead of a code-fram
   assert.match(source, /'\.cm-wysiwyg-math-inline': \{[\s\S]*?cursor: 'text'[\s\S]*?padding: '0 0\.14em'[\s\S]*?borderRadius: '0\.34em'/u)
   assert.match(source, /'\.cm-wysiwyg-math-inline:hover': \{[\s\S]*?backgroundColor:[\s\S]*?boxShadow:/u)
   assert.match(source, /'\.cm-wysiwyg-math-inline:focus-visible': \{[\s\S]*?outline:[\s\S]*?boxShadow:/u)
-  assert.match(source, /'\.cm-wysiwyg-math-block__surface': \{[\s\S]*?margin: '0\.5em 32px'[\s\S]*?padding: '8px 16px'[\s\S]*?borderRadius: '12px'/u)
+  assert.match(source, /'\.cm-wysiwyg-math-block__surface': \{[\s\S]*?margin: `0\.5em \$\{PROSE_BLOCK_INSET\}`[\s\S]*?padding: `8px \$\{CODE_BLOCK_PADDING_INLINE\}`[\s\S]*?borderRadius: '12px'/u)
   assert.match(source, /'\.cm-wysiwyg-math-block:hover \.cm-wysiwyg-math-block__surface': \{[\s\S]*?backgroundColor:/u)
   assert.match(source, /'\.cm-wysiwyg-math-block:focus-visible \.cm-wysiwyg-math-block__surface': \{[\s\S]*?boxShadow:/u)
   assert.match(source, /'\.cm-wysiwyg-math-block__rendered \.katex-display': \{[\s\S]*?margin: '0'[\s\S]*?padding: '8px 0'/u)

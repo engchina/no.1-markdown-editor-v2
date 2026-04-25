@@ -299,7 +299,7 @@ test('wysiwyg table integration keeps the table rendered while exposing an inlin
   assert.match(source, /class TableWidget extends WidgetType/u)
   assert.match(source, /wrapper\.className = 'cm-wysiwyg-table'/u)
   assert.match(source, /wrapper\.dataset\.tableEditStart = String\(table\.editAnchor\)/u)
-  assert.match(source, /new TableWidget\(table, activeTableCellForTable\)/u)
+  assert.match(source, /new TableWidget\(table, activeTableCellForTable, spellcheckConfig\)/u)
   assert.match(source, /function createTableToolbarDom\(\): HTMLDivElement \{/u)
   assert.match(source, /function syncTableToolbarDom\(/u)
   assert.match(source, /function applyTableToolbarAction\(/u)
@@ -346,15 +346,17 @@ test('wysiwyg table integration keeps the table rendered while exposing an inlin
   assert.match(source, /const wysiwygTableDecorationField = StateField\.define<WysiwygTableDecorationState>\(/u)
   assert.match(source, /EditorView\.decorations\.from\(field, \(value\) => value\.decorations\)/u)
   assert.match(source, /export const wysiwygTableDecorations = \[wysiwygTableDecorationField, wysiwygGutterClassField\]/u)
-  assert.match(source, /Decoration\.replace\(\{ widget: new TableWidget\(table, activeTableCellForTable\), block: true \}\)/u)
+  assert.match(source, /Decoration\.replace\(\{ widget: new TableWidget\(table, activeTableCellForTable, spellcheckConfig\), block: true \}\)/u)
   assert.match(source, /view\.dom\.classList\.toggle\(TABLE_EDITING_CLASS, this\.activeTableCell !== null\)/u)
   assert.match(source, /ACTIVE_TABLE_COLUMN_WIDTH_SNAPSHOTS\.set\(resolved\.table\.from, columnWidths\)/u)
   assert.match(source, /queueFocusTableCellInput\(view, nextActiveTableCell\)/u)
+  assert.match(source, /const PROSE_BLOCK_INSET = 'var\(--md-block-shell-inset, 32px\)'/u)
   assert.match(source, /'\.cm-wysiwyg-table-anchor-line': \{[\s\S]*?padding: '0 !important'/u)
   assert.match(source, /'\.cm-wysiwyg-table-hidden-line': \{[\s\S]*?height: '0'[\s\S]*?fontSize: '0'/u)
-  assert.match(source, /'\.cm-wysiwyg-table-gap-line': \{[\s\S]*?minHeight: '1\.15em'[\s\S]*?padding: '0 32px !important'[\s\S]*?lineHeight: '1\.15'[\s\S]*?fontSize: 'inherit'/u)
+  assert.match(source, /'\.cm-wysiwyg-table-gap-line': \{[\s\S]*?minHeight: '1\.15em'[\s\S]*?padding: `0 \$\{PROSE_BLOCK_INSET\} !important`[\s\S]*?lineHeight: '1\.15'[\s\S]*?fontSize: 'inherit'/u)
   assert.match(source, /'\.cm-wysiwyg-table': \{[\s\S]*?display: 'block'[\s\S]*?width: '100%'[\s\S]*?boxSizing: 'border-box'[\s\S]*?pointerEvents: 'none'/u)
-  assert.match(source, /'\.cm-wysiwyg-table__surface': \{[\s\S]*?margin: '0 32px'[\s\S]*?overflowX: 'auto'[\s\S]*?pointerEvents: 'auto'/u)
+  assert.match(source, /'\.cm-wysiwyg-table__surface': \{[\s\S]*?margin: `0 \$\{PROSE_BLOCK_INSET\}`[\s\S]*?overflowX: 'auto'[\s\S]*?pointerEvents: 'auto'/u)
+  assert.match(source, /'\.cm-wysiwyg-table__toolbar': \{[\s\S]*?margin: `0 \$\{PROSE_BLOCK_INSET\} 6px`[\s\S]*?display: 'flex'/u)
   assert.match(source, /'\.cm-wysiwyg-table__grid': \{[\s\S]*?tableLayout: 'auto'[\s\S]*?margin: '0'[\s\S]*?color: 'var\(--preview-text\)'[\s\S]*?fontFamily: 'var\(--font-preview, Inter, system-ui, sans-serif\)'[\s\S]*?fontSize: 'inherit'/u)
   assert.match(source, /'\.cm-wysiwyg-table__head-cell, \.cm-wysiwyg-table__cell': \{[\s\S]*?padding: '8px 16px'[\s\S]*?whiteSpace: 'normal'[\s\S]*?overflowWrap: 'anywhere'[\s\S]*?color: 'var\(--preview-text\)'[\s\S]*?fontFamily: 'var\(--font-preview, Inter, system-ui, sans-serif\)'[\s\S]*?fontSize: 'inherit'/u)
   assert.match(source, /'\.cm-wysiwyg-table__head-cell:empty::before, \.cm-wysiwyg-table__cell:empty::before': \{[\s\S]*?content: '"\\\\00a0"'[\s\S]*?display: 'block'[\s\S]*?visibility: 'hidden'/u)
@@ -397,6 +399,6 @@ test('CodeMirrorEditor restores editor focus when a blank-line selection lands i
   assert.match(source, /const scheduleTableExitFocusRestore = useCallback\(\(viewOverride\?: EditorView \| null\) => \{[\s\S]*?collectMarkdownTableBlocks\(view\.state\.doc\.toString\(\)\)[\s\S]*?isBlankLineBelowTableSelection\(view\.state\.doc, tables, selection\.head\)[\s\S]*?view\.focus\(\)/u)
   assert.match(
     source,
-    /onSelectionChange: \(view, update\) => \{[\s\S]*?const isPointerEvent = update\?\.transactions\.some\(\(tr\) => tr\.isUserEvent\('select\.pointer'\)\)[\s\S]*?syncCursorBottomGap\(view, isPointerEvent\)[\s\S]*?scheduleTableExitFocusRestore\(view\)/u
+    /onSelectionChange: \(view, update\) => \{[\s\S]*?restorePendingDeleteKeyScroll\(view, update\)[\s\S]*?scheduleTableExitFocusRestore\(view\)/u
   )
 })

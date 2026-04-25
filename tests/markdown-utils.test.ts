@@ -705,6 +705,27 @@ test('buildStandaloneHtml inlines highlight.js token colors for exported code bl
   assert.match(html, /\.hljs \{ color: inherit; background: transparent; \}/)
 })
 
+test('buildStandaloneHtml reuses the shared prose rhythm for exported headings, lists, and code blocks', () => {
+  const html = buildStandaloneHtml('Rhythm', '<h2>Title</h2><ul><li>One</li><li>Two</li></ul><pre><code>x</code></pre>')
+
+  assert.match(html, /--md-prose-line-height:\s*1\.8;/)
+  assert.match(html, /--md-heading-line-height:\s*1\.3;/)
+  assert.match(html, /--md-list-indent:\s*1\.75em;/)
+  assert.match(html, /--md-code-block-radius:\s*10px;/)
+  assert.match(html, /body \{[\s\S]*line-height: var\(--md-prose-line-height, 1\.8\);/)
+  assert.match(html, /h1, h2, h3, h4, h5, h6 \{[\s\S]*line-height: var\(--md-heading-line-height, 1\.3\);/)
+  assert.match(html, /ul, ol \{ padding-left: var\(--md-list-indent, 1\.75em\); margin: 0; \}/)
+  assert.match(html, /li \+ li \{ margin-top: var\(--md-list-item-space, 0\.2em\); \}/)
+  assert.match(html, /pre \{[\s\S]*border-radius: var\(--md-code-block-radius, 10px\);[\s\S]*padding: var\(--md-code-block-padding-block, 16px\) var\(--md-code-block-padding-inline, 16px\);/)
+})
+
+test('buildStandaloneHtml disables ligatures for inline code so literal punctuation stays unchanged in exports', () => {
+  const html = buildStandaloneHtml('Code Ligatures', '<p>Entering <code>***</code> or <code>---</code>.</p>')
+
+  assert.match(html, /code \{[\s\S]*font-variant-ligatures: none;/)
+  assert.match(html, /code \{[\s\S]*font-feature-settings: "liga" 0, "calt" 0;/)
+})
+
 test('getInlineKatexCss replaces KaTeX font urls with data urls', async () => {
   const css = await getInlineKatexCss()
 

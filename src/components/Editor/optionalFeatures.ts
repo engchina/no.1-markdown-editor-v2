@@ -9,6 +9,7 @@ import {
   type AISlashCommandEntry,
 } from '../../lib/ai/slashCommands.ts'
 import { resolveMarkdownCodeLanguage } from './markdownCodeLanguages'
+import { buildPairedDelimiterExitExtension } from './pairedDelimiters.ts'
 
 export interface SearchOptions {
   search: string
@@ -293,6 +294,7 @@ export async function loadAutocompleteExtensions(): Promise<Extension[]> {
 
     return [
       autocomplete.closeBrackets(),
+      buildPairedDelimiterExitExtension(),
       autocomplete.autocompletion({
         override: [createMarkdownSnippetSource(autocomplete)],
         activateOnTyping: true,

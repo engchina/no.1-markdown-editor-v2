@@ -785,10 +785,8 @@ class ListBulletWidget extends WidgetType {
 
   toDOM() {
     const el = document.createElement('span')
-    el.className = 'cm-wysiwyg-bullet-simple'
-    if (this.depth === 0) el.textContent = '•'
-    else if (this.depth === 1) el.textContent = '◦'
-    else el.textContent = '▪'
+    el.className = `cm-wysiwyg-bullet-simple cm-wysiwyg-bullet-simple--${resolveUnorderedListMarkerKind(this.depth)}`
+    el.setAttribute('aria-hidden', 'true')
     return el
   }
 
@@ -797,6 +795,94 @@ class ListBulletWidget extends WidgetType {
   eq(other: ListBulletWidget) {
     return this.depth === other.depth
   }
+}
+
+class OrderedListMarkerWidget extends WidgetType {
+  private readonly marker: string
+
+  constructor(marker: string) {
+    super()
+    this.marker = normalizeOrderedListMarker(marker)
+  }
+
+  toDOM() {
+    const el = document.createElement('span')
+    el.className = 'cm-wysiwyg-ordered-number'
+    el.textContent = this.marker
+    el.setAttribute('aria-hidden', 'true')
+    return el
+  }
+
+  ignoreEvent() { return true }
+
+  eq(other: OrderedListMarkerWidget) {
+    return this.marker === other.marker
+  }
+}
+
+function normalizeOrderedListMarker(marker: string): string {
+  const numberMatch = marker.match(/^(\d+)/)
+  return numberMatch ? `${numberMatch[1]}.` : marker
+}
+
+function resolveUnorderedListMarkerKind(depth: number): 'disc' | 'circle' | 'square' {
+  if (depth <= 0) return 'disc'
+  if (depth === 1) return 'circle'
+  return 'square'
+}
+
+function resolveListDepthFromIndent(indent: string): number {
+  return Math.floor(indent.replace(/\t/g, '    ').length / 2)
+}
+
+function buildListIndentTerms(depth: number): string[] {
+  return [
+    PROSE_BLOCK_INSET,
+    ...Array.from({ length: depth + 1 }, () => LIST_INDENT),
+  ]
+}
+
+function buildWysiwygListTextInset(depth: number): string {
+  return `calc(${buildListIndentTerms(depth).join(' + ')})`
+}
+
+type WysiwygListMarkerKind = 'ordered' | 'unordered'
+
+function buildWysiwygListMarkerInset(depth: number, markerKind: WysiwygListMarkerKind): string {
+  const markerGap = markerKind === 'ordered' ? LIST_ORDERED_MARKER_GAP : LIST_MARKER_GAP
+  return `calc(${buildListIndentTerms(depth).join(' + ')} - ${markerGap})`
+}
+
+function buildWysiwygListLineStyle(depth: number, markerKind: WysiwygListMarkerKind): string {
+  return [
+    `--cm-wysiwyg-list-text-inset: ${buildWysiwygListTextInset(depth)}`,
+    `--cm-wysiwyg-list-marker-inset: ${buildWysiwygListMarkerInset(depth, markerKind)}`,
+  ].join('; ')
+}
+
+function parseWysiwygListLine(text: string): { depth: number; ordered: boolean } | null {
+  const taskMatch = text.match(/^(\s*)([-*+]\s+\[(?: |x|X)\])(\s*)/)
+  if (taskMatch) return null
+
+  const listMatch = text.match(/^(\s*)([-*+]|\d+[.)])(\s+)/)
+  if (!listMatch) return null
+
+  return {
+    depth: resolveListDepthFromIndent(listMatch[1]),
+    ordered: /^\d/.test(listMatch[2]),
+  }
+}
+
+function isWysiwygLooseListSpacerLine(doc: CodeMirrorState['doc'], lineNumber: number): boolean {
+  if (lineNumber <= 1 || lineNumber >= doc.lines) return false
+
+  const line = doc.line(lineNumber)
+  if (line.text.trim().length > 0) return false
+
+  return Boolean(
+    parseWysiwygListLine(doc.line(lineNumber - 1).text) &&
+    parseWysiwygListLine(doc.line(lineNumber + 1).text)
+  )
 }
 
 class HardBreakWidget extends WidgetType {
@@ -1123,6 +1209,17 @@ export function buildWysiwygDecorations(
         continue
       }
 
+      if (!onLine && isWysiwygLooseListSpacerLine(doc, line.number)) {
+        queueDecoration(
+          decorations,
+          lineFrom,
+          lineFrom,
+          Decoration.line({ attributes: { class: 'cm-wysiwyg-list-spacer-line' } })
+        )
+        pos = line.to + 1
+        continue
+      }
+
       // ── Headings ──────────────────────────────────────────────────────
       const headingMatch = text.match(/^(#{1,6})\s/)
       if (headingMatch) {
@@ -1238,28 +1335,47 @@ export function buildWysiwygDecorations(
       if (listMatch && !taskMatch) {
         const indentSpan = listMatch[1]
         const marker = listMatch[2]
-        const depth = Math.floor(indentSpan.replace(/\t/g, '    ').length / 2)
+        const depth = resolveListDepthFromIndent(indentSpan)
 
-        const markerStart = lineFrom + indentSpan.length
-        const markerEnd = markerStart + marker.length
+        const prefixEnd = lineFrom + indentSpan.length + marker.length + listMatch[3].length
         const isOrdered = /^\d/.test(marker)
 
         // Obsidian-style live preview: reveal raw marker on the cursor line
         // so it is directly editable; render the decorated form otherwise.
-        if (isOrdered) {
-          if (!onLine) {
-            queueDecoration(
-              decorations,
-              markerStart,
-              markerEnd,
-              Decoration.mark({ class: 'cm-wysiwyg-ordered-number' })
-            )
-          }
+        if (isOrdered && !onLine) {
+          queueDecoration(
+            decorations,
+            lineFrom,
+            lineFrom,
+            Decoration.line({
+              attributes: {
+                class: 'cm-wysiwyg-list-line cm-wysiwyg-list-line--ordered',
+                style: buildWysiwygListLineStyle(depth, 'ordered'),
+              },
+            })
+          )
+          queueDecoration(
+            decorations,
+            lineFrom,
+            prefixEnd,
+            Decoration.replace({ widget: new OrderedListMarkerWidget(marker) })
+          )
         } else if (!onLine) {
           queueDecoration(
             decorations,
-            markerStart,
-            markerEnd,
+            lineFrom,
+            lineFrom,
+            Decoration.line({
+              attributes: {
+                class: 'cm-wysiwyg-list-line cm-wysiwyg-list-line--unordered',
+                style: buildWysiwygListLineStyle(depth, 'unordered'),
+              },
+            })
+          )
+          queueDecoration(
+            decorations,
+            lineFrom,
+            prefixEnd,
             Decoration.replace({ widget: new ListBulletWidget(depth) })
           )
         }
@@ -1404,6 +1520,14 @@ function buildWysiwygGutterClasses(state: CodeMirrorState): RangeSet<GutterMarke
 
     const activeNonTextBlock = nonTextBlockRanges[nonTextBlockIndex]
     if (activeNonTextBlock && line.from >= activeNonTextBlock.from && line.from <= activeNonTextBlock.to) {
+      continue
+    }
+
+    if (
+      isWysiwygLooseListSpacerLine(doc, lineNumber) &&
+      !stateSelectionTouchesRange(state, line.from, line.to)
+    ) {
+      if (!markers.has(line.from)) markers.set(line.from, hiddenGutterMarker)
       continue
     }
 
@@ -2916,26 +3040,42 @@ export const wysiwygTableDecorations = [wysiwygTableDecorationField, wysiwygGutt
 
 const PREVIEW_FONT_FAMILY = 'var(--font-preview, Inter, system-ui, sans-serif)'
 const MONO_FONT_FAMILY = 'var(--font-mono, JetBrains Mono, Cascadia Code, Fira Code, Consolas, monospace)'
+const PROSE_LINE_HEIGHT = 'var(--md-prose-line-height, 1.8)'
+const HEADING_LINE_HEIGHT = 'var(--md-heading-line-height, 1.3)'
+const PROSE_BLOCK_INSET = 'var(--md-block-shell-inset, 32px)'
+const LIST_INDENT = 'var(--md-list-indent, 1.75em)'
+const LIST_MARKER_INLINE_SIZE = 'var(--md-list-marker-inline-size, 1ch)'
+const LIST_MARKER_FONT_WEIGHT = 'var(--md-list-marker-font-weight, 400)'
+const LIST_MARKER_DISC_SIZE = 'var(--md-list-bullet-disc-size, 0.33em)'
+const LIST_MARKER_CIRCLE_SIZE = 'var(--md-list-bullet-circle-size, 0.33em)'
+const LIST_MARKER_SQUARE_SIZE = 'var(--md-list-bullet-square-size, 0.27em)'
+const LIST_MARKER_CIRCLE_STROKE = 'var(--md-list-bullet-circle-stroke, 1px)'
+const LIST_MARKER_GAP = 'var(--md-list-marker-gap, 0.9em)'
+const LIST_ORDERED_MARKER_GAP = 'var(--md-list-ordered-marker-gap, 0.55em)'
+const LIST_MARKER_OFFSET_Y = 'var(--md-list-marker-offset-y, 0em)'
+const CODE_BLOCK_RADIUS = 'var(--md-code-block-radius, 10px)'
+const CODE_BLOCK_PADDING_INLINE = 'var(--md-code-block-padding-inline, 16px)'
 const BLOCKQUOTE_RULE_BACKGROUND =
   'repeating-linear-gradient(to right, var(--md-quote-rule-color) 0, var(--md-quote-rule-color) var(--md-quote-line-width), transparent var(--md-quote-line-width), transparent calc(var(--md-quote-pad-inline-start) + var(--md-quote-line-width)))'
 const ACTIVE_BLOCKQUOTE_RULE_BACKGROUND =
   'repeating-linear-gradient(to right, color-mix(in srgb, var(--text-muted) 22%, transparent) 0, color-mix(in srgb, var(--text-muted) 22%, transparent) var(--md-quote-line-width), transparent var(--md-quote-line-width), transparent calc(var(--md-quote-pad-inline-start) + var(--md-quote-line-width)))'
 const BLOCKQUOTE_LINE_PADDING_LEFT =
-  'calc(32px + var(--md-quote-pad-inline-start) + (var(--cm-wysiwyg-blockquote-depth, 1) - 1) * (var(--md-quote-pad-inline-start) + var(--md-quote-line-width)))'
+  `calc(${PROSE_BLOCK_INSET} + var(--md-quote-pad-inline-start) + (var(--cm-wysiwyg-blockquote-depth, 1) - 1) * (var(--md-quote-pad-inline-start) + var(--md-quote-line-width)))`
 const BLOCKQUOTE_LINE_BACKGROUND_SIZE =
   'calc((var(--md-quote-pad-inline-start) + var(--md-quote-line-width)) * var(--cm-wysiwyg-blockquote-depth, 1)) 100%'
 
 export const wysiwygTheme = EditorView.baseTheme({
   '.cm-content': {
     fontFamily: PREVIEW_FONT_FAMILY,
+    lineHeight: PROSE_LINE_HEIGHT,
   },
   // Headings
-  '.cm-wysiwyg-h1': { fontSize: 'var(--md-heading-1-size, 2em)', fontWeight: '700', lineHeight: '1.3', color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
-  '.cm-wysiwyg-h2': { fontSize: 'var(--md-heading-2-size, 1.5em)', fontWeight: '700', lineHeight: '1.3', color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
-  '.cm-wysiwyg-h3': { fontSize: 'var(--md-heading-3-size, 1.25em)', fontWeight: '600', lineHeight: '1.3', color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
-  '.cm-wysiwyg-h4': { fontSize: 'var(--md-heading-4-size, 1.1em)', fontWeight: '600', lineHeight: '1.3', color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
-  '.cm-wysiwyg-h5': { fontSize: 'var(--md-heading-5-size, 1em)', fontWeight: '600', lineHeight: '1.3', color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
-  '.cm-wysiwyg-h6': { fontSize: 'var(--md-heading-6-size, 0.95em)', fontWeight: '600', lineHeight: '1.3', color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
+  '.cm-wysiwyg-h1': { fontSize: 'var(--md-heading-1-size, 2em)', fontWeight: '700', lineHeight: HEADING_LINE_HEIGHT, color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
+  '.cm-wysiwyg-h2': { fontSize: 'var(--md-heading-2-size, 1.5em)', fontWeight: '700', lineHeight: HEADING_LINE_HEIGHT, color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
+  '.cm-wysiwyg-h3': { fontSize: 'var(--md-heading-3-size, 1.25em)', fontWeight: '600', lineHeight: HEADING_LINE_HEIGHT, color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
+  '.cm-wysiwyg-h4': { fontSize: 'var(--md-heading-4-size, 1.1em)', fontWeight: '600', lineHeight: HEADING_LINE_HEIGHT, color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
+  '.cm-wysiwyg-h5': { fontSize: 'var(--md-heading-5-size, 1em)', fontWeight: '600', lineHeight: HEADING_LINE_HEIGHT, color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
+  '.cm-wysiwyg-h6': { fontSize: 'var(--md-heading-6-size, 0.95em)', fontWeight: '600', lineHeight: HEADING_LINE_HEIGHT, color: 'var(--text-primary) !important', fontFamily: PREVIEW_FONT_FAMILY },
   '.cm-wysiwyg-hr-anchor-line': {
     padding: '0 !important',
     lineHeight: '0',
@@ -2945,7 +3085,7 @@ export const wysiwygTheme = EditorView.baseTheme({
     display: 'block',
     width: '100%',
     boxSizing: 'border-box',
-    padding: '0 32px',
+    padding: `0 ${PROSE_BLOCK_INSET}`,
     pointerEvents: 'none',
   },
   '.cm-wysiwyg-hr__rule': {
@@ -3037,16 +3177,16 @@ export const wysiwygTheme = EditorView.baseTheme({
     position: 'relative',
     minHeight: '1.8em',
     marginTop: '0.65em',
-    marginLeft: '32px',
-    marginRight: '32px',
-    padding: '10px 16px 8px !important',
+    marginLeft: PROSE_BLOCK_INSET,
+    marginRight: PROSE_BLOCK_INSET,
+    padding: `10px ${CODE_BLOCK_PADDING_INLINE} 8px !important`,
     cursor: 'text',
     backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-tertiary))',
     borderTop: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
     borderLeft: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
     borderRight: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
-    borderTopLeftRadius: '10px',
-    borderTopRightRadius: '10px',
+    borderTopLeftRadius: CODE_BLOCK_RADIUS,
+    borderTopRightRadius: CODE_BLOCK_RADIUS,
     boxSizing: 'border-box',
     fontSize: '0',
     lineHeight: '0',
@@ -3068,31 +3208,31 @@ export const wysiwygTheme = EditorView.baseTheme({
     textTransform: 'none',
   },
   '.cm-wysiwyg-codeblock-line': {
-    fontFamily: 'var(--font-mono, monospace)',
+    fontFamily: MONO_FONT_FAMILY,
     fontSize: '0.94em',
-    marginLeft: '32px',
-    marginRight: '32px',
+    marginLeft: PROSE_BLOCK_INSET,
+    marginRight: PROSE_BLOCK_INSET,
     cursor: 'text',
     backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-tertiary))',
     borderLeft: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
     borderRight: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
-    padding: '0 16px !important',
+    padding: `0 ${CODE_BLOCK_PADDING_INLINE} !important`,
     color: 'var(--text-primary)',
     boxSizing: 'border-box',
   },
   '.cm-wysiwyg-codeblock-close-line': {
     minHeight: '12px',
     marginBottom: '0.65em',
-    marginLeft: '32px',
-    marginRight: '32px',
-    padding: '0 16px 10px !important',
+    marginLeft: PROSE_BLOCK_INSET,
+    marginRight: PROSE_BLOCK_INSET,
+    padding: `0 ${CODE_BLOCK_PADDING_INLINE} 10px !important`,
     cursor: 'text',
     backgroundColor: 'color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-tertiary))',
     borderLeft: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
     borderRight: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
     borderBottom: '1px solid color-mix(in srgb, var(--border) 82%, transparent)',
-    borderBottomLeftRadius: '10px',
-    borderBottomRightRadius: '10px',
+    borderBottomLeftRadius: CODE_BLOCK_RADIUS,
+    borderBottomRightRadius: CODE_BLOCK_RADIUS,
     boxSizing: 'border-box',
     fontSize: '0',
     lineHeight: '0',
@@ -3110,7 +3250,7 @@ export const wysiwygTheme = EditorView.baseTheme({
   },
   '.cm-wysiwyg-table-gap-line': {
     minHeight: '1.15em',
-    padding: '0 32px !important',
+    padding: `0 ${PROSE_BLOCK_INSET} !important`,
     lineHeight: '1.15',
     fontSize: 'inherit',
   },
@@ -3122,7 +3262,7 @@ export const wysiwygTheme = EditorView.baseTheme({
     pointerEvents: 'none',
   },
   '.cm-wysiwyg-table__surface': {
-    margin: '0 32px',
+    margin: `0 ${PROSE_BLOCK_INSET}`,
     overflowX: 'auto',
     borderRadius: '0',
     border: 'none',
@@ -3131,7 +3271,7 @@ export const wysiwygTheme = EditorView.baseTheme({
     pointerEvents: 'auto',
   },
   '.cm-wysiwyg-table__toolbar': {
-    margin: '0 32px 6px',
+    margin: `0 ${PROSE_BLOCK_INSET} 6px`,
     display: 'flex',
     flexWrap: 'wrap',
     gap: '4px',
@@ -3265,9 +3405,9 @@ export const wysiwygTheme = EditorView.baseTheme({
     boxSizing: 'border-box',
     minHeight: '1.45em',
     paddingLeft: `${BLOCKQUOTE_LINE_PADDING_LEFT} !important`,
-    paddingRight: 'calc(32px + var(--md-quote-pad-inline-end)) !important',
+    paddingRight: `calc(${PROSE_BLOCK_INSET} + var(--md-quote-pad-inline-end)) !important`,
     backgroundImage: BLOCKQUOTE_RULE_BACKGROUND,
-    backgroundPosition: '32px 0',
+    backgroundPosition: `${PROSE_BLOCK_INSET} 0`,
     backgroundRepeat: 'no-repeat',
     backgroundSize: BLOCKQUOTE_LINE_BACKGROUND_SIZE,
     color: 'var(--md-blockquote-text-color, var(--text-secondary)) !important',
@@ -3279,6 +3419,19 @@ export const wysiwygTheme = EditorView.baseTheme({
     color: 'var(--md-blockquote-text-color, var(--text-secondary)) !important',
     fontStyle: 'normal',
   },
+  '.cm-wysiwyg-list-spacer-line': {
+    height: '0',
+    minHeight: '0',
+    padding: '0 !important',
+    lineHeight: '0',
+    fontSize: '0',
+    overflow: 'hidden',
+  },
+  '.cm-wysiwyg-list-line': {
+    position: 'relative',
+    paddingLeft: 'var(--cm-wysiwyg-list-text-inset) !important',
+    paddingRight: `${PROSE_BLOCK_INSET} !important`,
+  },
   '.cm-wysiwyg-task-completed': {
     color: 'var(--md-task-completed-color, color-mix(in srgb, var(--preview-text) 68%, var(--text-muted))) !important',
     transition: 'color 0.2s ease',
@@ -3289,16 +3442,58 @@ export const wysiwygTheme = EditorView.baseTheme({
   },
   '.cm-wysiwyg-bullet-simple': {
     display: 'inline-block',
-    textAlign: 'center',
-    width: '1ch',
+    position: 'absolute',
+    top: '0',
+    insetInlineStart: 'var(--cm-wysiwyg-list-marker-inset)',
+    transform: 'translateX(-50%)',
+    width: LIST_MARKER_INLINE_SIZE,
+    height: 'calc(1em * var(--md-prose-line-height, 1.8))',
     color: 'var(--md-list-marker-color, var(--preview-text)) !important',
-    fontFamily: PREVIEW_FONT_FAMILY,
-    fontWeight: '400',
+    fontWeight: LIST_MARKER_FONT_WEIGHT,
+    lineHeight: PROSE_LINE_HEIGHT,
+    verticalAlign: 'top',
+    pointerEvents: 'none',
+  },
+  '.cm-wysiwyg-bullet-simple::before': {
+    content: '""',
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    display: 'block',
+    boxSizing: 'border-box',
+    transform: `translate(-50%, calc(-50% + ${LIST_MARKER_OFFSET_Y}))`,
+  },
+  '.cm-wysiwyg-bullet-simple--disc::before': {
+    width: LIST_MARKER_DISC_SIZE,
+    height: LIST_MARKER_DISC_SIZE,
+    borderRadius: '999px',
+    backgroundColor: 'currentColor',
+  },
+  '.cm-wysiwyg-bullet-simple--circle::before': {
+    width: LIST_MARKER_CIRCLE_SIZE,
+    height: LIST_MARKER_CIRCLE_SIZE,
+    borderRadius: '999px',
+    border: `${LIST_MARKER_CIRCLE_STROKE} solid currentColor`,
+    backgroundColor: 'transparent',
+  },
+  '.cm-wysiwyg-bullet-simple--square::before': {
+    width: LIST_MARKER_SQUARE_SIZE,
+    height: LIST_MARKER_SQUARE_SIZE,
+    backgroundColor: 'currentColor',
   },
   '.cm-wysiwyg-ordered-number': {
+    display: 'inline-block',
+    position: 'absolute',
+    top: '0',
+    insetInlineStart: 'var(--cm-wysiwyg-list-marker-inset)',
+    transform: 'translateX(-100%)',
     fontFamily: PREVIEW_FONT_FAMILY,
     color: 'var(--md-list-marker-color, var(--preview-text)) !important',
-    fontWeight: '400',
+    fontWeight: LIST_MARKER_FONT_WEIGHT,
+    lineHeight: PROSE_LINE_HEIGHT,
+    textAlign: 'right',
+    whiteSpace: 'nowrap',
+    pointerEvents: 'none',
   },
   '.cm-wysiwyg-checkbox': {
     display: 'inline-flex',
@@ -3374,8 +3569,8 @@ export const wysiwygTheme = EditorView.baseTheme({
     cursor: 'text',
   },
   '.cm-wysiwyg-math-block__surface': {
-    margin: '0.5em 32px',
-    padding: '8px 16px',
+    margin: `0.5em ${PROSE_BLOCK_INSET}`,
+    padding: `8px ${CODE_BLOCK_PADDING_INLINE}`,
     borderRadius: '12px',
     border: '1px solid transparent',
     backgroundColor: 'transparent',

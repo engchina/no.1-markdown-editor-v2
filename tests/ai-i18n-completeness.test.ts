@@ -61,11 +61,13 @@ test('AI copy is structurally complete across en, ja, and zh locales', async () 
 })
 
 test('AI composer prompt placeholder follows the suggestion chip order across locales', async () => {
-  const [enRaw, jaRaw, zhRaw, composerRaw] = await Promise.all([
+  const [enRaw, jaRaw, zhRaw, composerRaw, coreViewRaw, templateLibraryRaw] = await Promise.all([
     readFile(new URL('../src/i18n/locales/en.json', import.meta.url), 'utf8'),
     readFile(new URL('../src/i18n/locales/ja.json', import.meta.url), 'utf8'),
     readFile(new URL('../src/i18n/locales/zh.json', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/lib/ai/templateLibrary.ts', import.meta.url), 'utf8'),
   ])
 
   const en = JSON.parse(enRaw) as Record<string, unknown>
@@ -73,7 +75,8 @@ test('AI composer prompt placeholder follows the suggestion chip order across lo
   const zh = JSON.parse(zhRaw) as Record<string, unknown>
 
   assert.match(composerRaw, /buildAIComposerPromptPlaceholder\(t\)/)
-  assert.match(composerRaw, /AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER/)
+  assert.match(coreViewRaw, /AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER/)
+  assert.match(templateLibraryRaw, /AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER/)
 
   assert.equal(
     buildAIComposerPromptPlaceholder(createLocaleTranslate(en)),

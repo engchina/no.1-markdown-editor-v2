@@ -485,20 +485,25 @@ function assertCursorBottomGap(snapshot, label) {
   )
 }
 
-async function waitForViewportStability(page, expectedLineText, before, label) {
+function isViewportStable(before, snapshot, options = {}) {
+  const { requireBottomGap = false } = options
+  const minimumMeaningfulScroll = Math.max(before.defaultLineHeight * 8, 80)
+  const minimumBottomGap = snapshot.defaultLineHeight * 3 - 8
+
+  return (
+    snapshot.scrollTop >= minimumMeaningfulScroll &&
+    snapshot.scrollTop >= before.scrollTop - before.defaultLineHeight * 4 &&
+    Math.abs(snapshot.scrollLeft - before.scrollLeft) <= 2 &&
+    (!requireBottomGap || snapshot.bottomGap >= minimumBottomGap)
+  )
+}
+
+async function waitForViewportStability(page, expectedLineText, before, label, options = {}) {
   await waitForCondition(async () => {
     const snapshot = await readEditorSnapshot(page)
     if (!snapshot || snapshot.lineText !== expectedLineText) return false
 
-    const minimumMeaningfulScroll = Math.max(before.defaultLineHeight * 8, 80)
-    const minimumBottomGap = snapshot.defaultLineHeight * 3 - 8
-
-    return (
-      snapshot.scrollTop >= minimumMeaningfulScroll &&
-      snapshot.scrollTop >= before.scrollTop - before.defaultLineHeight * 4 &&
-      Math.abs(snapshot.scrollLeft - before.scrollLeft) <= 2 &&
-      snapshot.bottomGap >= minimumBottomGap
-    )
+    return isViewportStable(before, snapshot, options)
   }, `${label} viewport stability`)
 }
 
@@ -599,7 +604,61 @@ async function runOrdinaryInputScenario(page, diagnostics) {
 
   assert.equal(after?.lineText, `${TARGET_LINE_TEXT}${ORDINARY_INSERTION}`)
   assertViewportStayedNearCursor(before, after, 'Ordinary typing')
-  assertCursorBottomGap(after, 'Ordinary typing')
+}
+
+async function runDeleteKeyScenario(page, diagnostics) {
+  await resetEditor(page)
+  await placeCursorAtLineEnd(page, TARGET_LINE_TEXT)
+  await page.keyboard.press('ArrowLeft')
+
+  await waitForCondition(async () => {
+    const snapshot = await readEditorSnapshot(page)
+    return !!snapshot && snapshot.lineText === TARGET_LINE_TEXT && snapshot.column === TARGET_LINE_TEXT.length
+  }, 'Delete key cursor reposition')
+
+  const before = await readEditorSnapshot(page)
+  diagnostics.deleteKeyBefore = before
+
+  const expectedLineText = TARGET_LINE_TEXT.slice(0, -1)
+  await page.keyboard.press('Delete')
+
+  await waitForViewportStability(page, expectedLineText, before, 'Delete key')
+
+  const after = await readEditorSnapshot(page)
+  diagnostics.deleteKeyAfter = after
+
+  assert.equal(after?.lineText, expectedLineText)
+  assert.equal(after?.column, before?.column, 'Delete key should keep the caret in place after removing the next character')
+  assertViewportStayedNearCursor(before, after, 'Delete key')
+}
+
+async function runEnterKeyScenario(page, diagnostics) {
+  await resetEditor(page)
+  await placeCursorAtLineEnd(page, TARGET_LINE_TEXT)
+
+  const before = await readEditorSnapshot(page)
+  diagnostics.enterKeyBefore = before
+
+  await page.keyboard.press('Enter')
+
+  await waitForCondition(async () => {
+    const snapshot = await readEditorSnapshot(page)
+    return (
+      !!snapshot &&
+      snapshot.lineNumber === TARGET_LINE_NUMBER + 1 &&
+      snapshot.lineText === '' &&
+      snapshot.column === 1 &&
+      isViewportStable(before, snapshot)
+    )
+  }, 'Enter key viewport stability')
+
+  const after = await readEditorSnapshot(page)
+  diagnostics.enterKeyAfter = after
+
+  assert.equal(after?.lineNumber, TARGET_LINE_NUMBER + 1)
+  assert.equal(after?.lineText, '')
+  assert.equal(after?.column, 1)
+  assertViewportStayedNearCursor(before, after, 'Enter key')
 }
 
 async function runPasteScenario(page, diagnostics) {
@@ -610,7 +669,9 @@ async function runPasteScenario(page, diagnostics) {
   diagnostics.pasteBefore = before
   await dispatchPlainTextPaste(page, PASTE_INSERTION)
 
-  await waitForViewportStability(page, `${TARGET_LINE_TEXT}${PASTE_INSERTION}`, before, 'paste')
+  await waitForViewportStability(page, `${TARGET_LINE_TEXT}${PASTE_INSERTION}`, before, 'paste', {
+    requireBottomGap: true,
+  })
 
   const after = await readEditorSnapshot(page)
   diagnostics.pasteAfter = after
@@ -629,7 +690,9 @@ async function runAIApplyScenario(page, diagnostics) {
 
   await dispatchAIApplyAtCursor(page, AI_INSERTION)
 
-  await waitForViewportStability(page, `${TARGET_LINE_TEXT}${AI_INSERTION}`, before, 'AI Apply')
+  await waitForViewportStability(page, `${TARGET_LINE_TEXT}${AI_INSERTION}`, before, 'AI Apply', {
+    requireBottomGap: true,
+  })
 
   const after = await readEditorSnapshot(page)
   diagnostics.aiAfter = after
@@ -1245,6 +1308,8 @@ async function main() {
     await page.waitForSelector('.cm-content')
 
     await runOrdinaryInputScenario(page, diagnostics)
+    await runDeleteKeyScenario(page, diagnostics)
+    await runEnterKeyScenario(page, diagnostics)
     await runAIApplyScenario(page, diagnostics)
     await runPasteScenario(page, diagnostics)
     await runTerminalBlankLineArrowScenario(page, diagnostics, { wysiwygMode: false })

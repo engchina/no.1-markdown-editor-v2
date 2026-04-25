@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
+import { renderMarkdown } from '../src/lib/markdown.ts'
 
 function getNestedValue(locale: Record<string, unknown>, key: string): unknown {
   return key.split('.').reduce<unknown>((current, segment) => {
@@ -44,7 +45,27 @@ test('theme panel surfaces the preview line break toggle and preview binds the v
   assert.match(panel, /themePanel\.previewLineBreakModes\.visualSoftBreaks/)
   assert.match(preview, /const previewLineBreakMode = useEditorStore\(\(state\) => state\.previewLineBreakMode\)/)
   assert.match(preview, /markdown-preview--visual-soft-breaks/)
-  assert.match(css, /\.markdown-preview--visual-soft-breaks :is\(p, li, td, th\)\s*\{[\s\S]*white-space:\s*pre-line;/u)
+  assert.match(css, /\.markdown-preview--visual-soft-breaks :is\(p, td, th\)\s*\{[\s\S]*white-space:\s*pre-line;/u)
+  assert.match(
+    css,
+    /\.markdown-preview--visual-soft-breaks li:not\(:has\(> :is\(p, ul, ol, pre, blockquote, table, hr, img, h1, h2, h3, h4, h5, h6, div, section, \.front-matter\)\)\)\s*\{[\s\S]*white-space:\s*pre-line;/u
+  )
+  assert.doesNotMatch(css, /\.markdown-preview--visual-soft-breaks :is\(p, li, td, th\)\s*\{/u)
+})
+
+test('visual soft break preview keeps loose markdown list wrappers from turning into visible blank lines', async () => {
+  const html = await renderMarkdown([
+    '- [Overview](#overview)',
+    '- Block Elements',
+    '',
+    '  - [Paragraph and line breaks](#paragraph-and-line-breaks)',
+    '  - [Headings](#headings)',
+  ].join('\n'))
+
+  assert.match(
+    html,
+    /<li>\s*<p><a href="#overview">Overview<\/a><\/p>\s*<\/li>\s*<li>\s*<p>Block Elements<\/p>\s*<ul>/u
+  )
 })
 
 test('preview line break locale copy exists across en, ja, and zh', async () => {

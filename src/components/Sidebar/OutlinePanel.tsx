@@ -76,7 +76,7 @@ export default function OutlinePanel() {
                   ? resolvePreviewAnchorTarget(previewElement, heading.id)
                   : null
                 if (previewElement && element) {
-                  scrollPreviewToTarget(previewElement, element)
+                  scrollPreviewToTarget(previewElement, element, { behavior: 'auto' })
                   flashPreviewTarget(element)
                 }
               }}

@@ -27,6 +27,16 @@ test('source-mode inline rendering integrates literal escape hiding after inline
     source,
     /function processLiteralEscapes\([\s\S]*?collectInlineLiteralEscapeRanges\(text, excludedRanges\)[\s\S]*?Decoration\.replace\(\{\}\)/u
   )
-  assert.match(source, /while \(\(m = imgRe\.exec\(text\)\) !== null\) \{[\s\S]*?if \(hasOddTrailingBackslashes\(text, matchStart\)\) continue/u)
-  assert.match(source, /while \(\(m = linkRe\.exec\(text\)\) !== null\) \{[\s\S]*?if \(hasOddTrailingBackslashes\(text, matchStart\)\) continue/u)
+  assert.match(
+    source,
+    /const inlineMediaRanges = collectInlineMediaRanges\(text, \{\s*referenceDefinitionsMarkdown: documentContext\.referenceDefinitionsMarkdown,\s*\}\)/u
+  )
+  assert.match(
+    source,
+    /for \(const range of inlineMediaRanges\.renderedFragments\) \{[\s\S]*?InlineRenderedFragmentWidget/u
+  )
+  assert.match(
+    source,
+    /for \(const range of inlineMediaRanges\.links\) \{[\s\S]*?Decoration\.mark\(\{ class: 'cm-wysiwyg-link' \}\)/u
+  )
 })

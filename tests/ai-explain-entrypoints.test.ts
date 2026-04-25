@@ -10,8 +10,8 @@ import {
 const t = (key: string) => key
 
 test('AI keeps explain prompt entry points but removes explain from the reply result view', async () => {
-  const [composer, bubble] = await Promise.all([
-    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+  const [coreView, bubble] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/AI/AISelectionBubble.tsx', import.meta.url), 'utf8'),
   ])
 
@@ -31,8 +31,8 @@ test('AI keeps explain prompt entry points but removes explain from the reply re
   })
 
   assert.match(bubble, /const ACTIONS: AIQuickAction\[] = \['ask', 'translate', 'summarize', 'explain', 'rewrite'\]/)
-  assert.match(composer, /view: 'draft', label: t\('ai\.result\.draft'\)/)
-  assert.match(composer, /view: 'diff', label: t\('ai\.result\.diff'\)/)
-  assert.doesNotMatch(composer, /view: 'explain', label: t\('ai\.result\.explain'\)/)
-  assert.doesNotMatch(composer, /AIExplainView/)
+  assert.match(coreView, /view: 'draft', label: t\('ai\.result\.draft'\)/)
+  assert.match(coreView, /view: 'diff', label: t\('ai\.result\.diff'\)/)
+  assert.doesNotMatch(coreView, /view: 'explain', label: t\('ai\.result\.explain'\)/)
+  assert.doesNotMatch(coreView, /AIExplainView/)
 })

@@ -20,6 +20,26 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
 
+## 0.18.4 - 2026-04-25
+
+### Added
+
+### Changed
+
+- Preview, WYSIWYG, and standalone HTML now share more of the same prose rhythm for headings, lists, code blocks, math blocks, tables, thematic breaks, and block insets, so switching surfaces keeps Markdown structure visually steadier.
+- WYSIWYG unordered-list bullets now use the same disc, circle, and square marker progression as preview while keeping marker sizing aligned with the shared prose line height.
+
+### Fixed
+
+- Source editing now preserves the viewport more reliably for `Delete` and `Enter` edits near an off-screen cursor instead of snapping unexpectedly.
+- Preview outline jumps now compensate for app zoom and use an immediate scroll path from the outline, so selected headings land more accurately.
+- Visual soft-break preview no longer turns loose Markdown list wrapper whitespace into visible blank gaps.
+- Preview and exported inline code now disable font ligatures so literal punctuation such as `***` and `---` stays unchanged.
+
+### Internal
+
+- Added regression coverage for source scroll stability, preview navigation scaling, loose-list soft breaks, inline-code ligatures, and typography token parity across preview, WYSIWYG, and standalone HTML.
+
 ## 0.18.3 - 2026-04-25
 
 ### Added

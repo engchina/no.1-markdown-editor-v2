@@ -208,15 +208,20 @@ test('AI composer template resolution prefers selection, falls back to current b
 })
 
 test('AI Composer suggestion chips expose reusable template entry points directly', async () => {
-  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+  const [composer, coreView] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
+  ])
 
   assert.match(composer, /getAITemplateModels\(t\)/)
-  assert.match(composer, /<AIQuickChips/)
-  assert.match(composer, /function AIQuickChips\(/)
-  assert.match(composer, /AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER/)
-  assert.match(composer, /data-ai-template=\{template\.id\}/)
-  assert.match(composer, /t\('ai\.mode\.suggestions'\)/)
-  assert.doesNotMatch(composer, /data-ai-template-target=/)
-  assert.doesNotMatch(composer, /t\('ai\.mode\.target'\)/)
-  assert.doesNotMatch(composer, /t\('ai\.templateLibrary\.title'\)/)
+  assert.match(composer, /templateModels=\{templateModels\}/)
+  assert.match(composer, /onSelectTemplate=\{applyTemplate\}/)
+  assert.match(coreView, /<AIQuickChips/)
+  assert.match(coreView, /function AIQuickChips\(/)
+  assert.match(coreView, /AI_COMPOSER_SUGGESTION_TEMPLATE_ORDER/)
+  assert.match(coreView, /data-ai-template=\{template\.id\}/)
+  assert.match(coreView, /t\('ai\.mode\.suggestions'\)/)
+  assert.doesNotMatch(coreView, /data-ai-template-target=/)
+  assert.doesNotMatch(coreView, /t\('ai\.mode\.target'\)/)
+  assert.doesNotMatch(coreView, /t\('ai\.templateLibrary\.title'\)/)
 })

@@ -13,6 +13,25 @@ export function normalizeVersion(value) {
   return String(value ?? '').replace(/^v/u, '').trim()
 }
 
+export function extractHtmlCommentLines(source) {
+  return source
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => /^<!--.*-->$/u.test(line))
+}
+
+export function assertNoReleaseScaffoldComments(section, version) {
+  const commentLines = extractHtmlCommentLines(section)
+
+  if (commentLines.length > 0) {
+    throw new Error(
+      `CHANGELOG entry for v${normalizeVersion(version)} still contains HTML comment placeholders. Remove scaffold hints before release.`
+    )
+  }
+
+  return section
+}
+
 export function extractCargoVersion(source) {
   const lines = source.split(/\r?\n/u)
   let inPackageSection = false
@@ -102,7 +121,8 @@ export async function validateRelease({
 
   if (requireChangelogSection) {
     const changelogSource = await readFile(path.join(cwd, CHANGELOG_PATH), 'utf8')
-    assertChangelogSectionExists(changelogSource, validatedVersions.version)
+    const section = assertChangelogSectionExists(changelogSource, validatedVersions.version)
+    assertNoReleaseScaffoldComments(section, validatedVersions.version)
   }
 
   return validatedVersions
@@ -127,7 +147,7 @@ export function formatReleaseValidationSummary(
   ]
 
   if (requireChangelogSection) {
-    lines.push(`- CHANGELOG.md: found matching v${version} section`)
+    lines.push(`- CHANGELOG.md: found matching v${version} section with no scaffold placeholders`)
   }
 
   return lines.join('\n')

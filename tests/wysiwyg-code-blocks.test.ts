@@ -76,9 +76,12 @@ test('wysiwyg code block theme keeps preview-like horizontal insets instead of s
     readFile(new URL('../src/components/Editor/wysiwygCodeBlock.ts', import.meta.url), 'utf8'),
   ])
 
-  assert.match(source, /'\.cm-wysiwyg-codeblock-meta-line': \{[\s\S]*?marginLeft: '32px'[\s\S]*?marginRight: '32px'[\s\S]*?padding: '10px 16px 8px !important'[\s\S]*?cursor: 'text'/u)
-  assert.match(source, /'\.cm-wysiwyg-codeblock-line': \{[\s\S]*?marginLeft: '32px'[\s\S]*?marginRight: '32px'[\s\S]*?cursor: 'text'[\s\S]*?padding: '0 16px !important'/u)
-  assert.match(source, /'\.cm-wysiwyg-codeblock-close-line': \{[\s\S]*?marginLeft: '32px'[\s\S]*?marginRight: '32px'[\s\S]*?padding: '0 16px 10px !important'[\s\S]*?cursor: 'text'/u)
+  assert.match(source, /const PROSE_BLOCK_INSET = 'var\(--md-block-shell-inset, 32px\)'/u)
+  assert.match(source, /const CODE_BLOCK_PADDING_INLINE = 'var\(--md-code-block-padding-inline, 16px\)'/u)
+  assert.match(source, /const CODE_BLOCK_RADIUS = 'var\(--md-code-block-radius, 10px\)'/u)
+  assert.match(source, /'\.cm-wysiwyg-codeblock-meta-line': \{[\s\S]*?marginLeft: PROSE_BLOCK_INSET[\s\S]*?marginRight: PROSE_BLOCK_INSET[\s\S]*?padding: `10px \$\{CODE_BLOCK_PADDING_INLINE\} 8px !important`[\s\S]*?borderTopLeftRadius: CODE_BLOCK_RADIUS[\s\S]*?cursor: 'text'/u)
+  assert.match(source, /'\.cm-wysiwyg-codeblock-line': \{[\s\S]*?fontFamily: MONO_FONT_FAMILY[\s\S]*?marginLeft: PROSE_BLOCK_INSET[\s\S]*?marginRight: PROSE_BLOCK_INSET[\s\S]*?cursor: 'text'[\s\S]*?padding: `0 \$\{CODE_BLOCK_PADDING_INLINE\} !important`/u)
+  assert.match(source, /'\.cm-wysiwyg-codeblock-close-line': \{[\s\S]*?marginLeft: PROSE_BLOCK_INSET[\s\S]*?marginRight: PROSE_BLOCK_INSET[\s\S]*?padding: `0 \$\{CODE_BLOCK_PADDING_INLINE\} 10px !important`[\s\S]*?borderBottomRightRadius: CODE_BLOCK_RADIUS[\s\S]*?cursor: 'text'/u)
   assert.match(codeBlockSource, /if \(!selectionTouchesFencedCodeBlock\(view, fencedCodeBlock\)\) \{/u)
   assert.doesNotMatch(codeBlockSource, /WidgetType/u)
   assert.doesNotMatch(codeBlockSource, /tabIndex/u)

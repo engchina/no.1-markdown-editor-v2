@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Compartment, EditorState, EditorSelection, type Extension, type StateEffect } from '@codemirror/state'
 import { isolateHistory, redo, undo } from '@codemirror/commands'
-import { EditorView } from '@codemirror/view'
+import { EditorView, type ViewUpdate } from '@codemirror/view'
 import {
   buildCoreExtensions,
   buildInvisibleCharacterExtensions,
@@ -83,7 +83,15 @@ import {
 import { prepareImageMarkdownInsertion } from '../../lib/imageMarkdownInsertion'
 import { prepareMarkdownInsertion } from '../../lib/markdownInsertion'
 import { resolveSafeEditorInsertion } from '../../lib/editorInsertion.ts'
-import { appendEditorSelectionScrollEffect, keepEditorCursorBottomGap } from '../../lib/editorScroll.ts'
+import {
+  appendEditorSelectionScrollEffect,
+  captureEditorScrollSnapshot,
+  createEditorNavigationScrollEffect,
+  keepEditorCursorBottomGap,
+  restoreEditorScrollSnapshot,
+  scheduleEditorNavigationScroll,
+  type EditorScrollSnapshot,
+} from '../../lib/editorScroll.ts'
 import {
   hasTerminalBlankLine,
   shouldInsertTerminalBlankLineOnArrowDown,
@@ -132,8 +140,9 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   const previousAIComposerOpenRef = useRef(aiComposerOpen)
   const aiComposerRestoreSnapshotRef = useRef<AIComposerRestoreSnapshot | null>(null)
   const isUpdatingRef = useRef(false)
+  const pendingDeleteKeyScrollSnapshotRef = useRef<EditorScrollSnapshot | null>(null)
+  const pendingDeleteKeyScrollClearRafRef = useRef<number | null>(null)
   const onChangeRef = useRef(onChange)
-  const typewriterModeRef = useRef(typewriterMode)
   const ghostTextRequestIdRef = useRef<string | null>(null)
   const ghostTextRunIdRef = useRef(0)
   const ghostTextSnapshotRef = useRef<{ docText: string; anchor: number } | null>(null)
@@ -270,6 +279,53 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     }
   }, [])
 
+  const clearPendingDeleteKeyScrollCapture = useCallback(() => {
+    pendingDeleteKeyScrollSnapshotRef.current = null
+
+    if (pendingDeleteKeyScrollClearRafRef.current !== null) {
+      cancelAnimationFrame(pendingDeleteKeyScrollClearRafRef.current)
+      pendingDeleteKeyScrollClearRafRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      clearPendingDeleteKeyScrollCapture()
+    }
+  }, [clearPendingDeleteKeyScrollCapture])
+
+  const capturePendingDeleteKeyScroll = useCallback((viewOverride?: EditorView | null) => {
+    const view = viewOverride ?? viewRef.current
+    if (!view || !view.hasFocus) return
+
+    pendingDeleteKeyScrollSnapshotRef.current = captureEditorScrollSnapshot(view)
+
+    if (pendingDeleteKeyScrollClearRafRef.current !== null) {
+      cancelAnimationFrame(pendingDeleteKeyScrollClearRafRef.current)
+    }
+
+    pendingDeleteKeyScrollClearRafRef.current = requestAnimationFrame(() => {
+      pendingDeleteKeyScrollClearRafRef.current = null
+      pendingDeleteKeyScrollSnapshotRef.current = null
+    })
+  }, [])
+
+  const restorePendingDeleteKeyScroll = useCallback(
+    (viewOverride?: EditorView | null, update?: ViewUpdate) => {
+      const view = viewOverride ?? viewRef.current
+      const snapshot = pendingDeleteKeyScrollSnapshotRef.current
+
+      if (!view || !snapshot) return false
+      if (!update?.docChanged) return false
+      if (!update.transactions.some((transaction) => transaction.isUserEvent('delete'))) return false
+
+      clearPendingDeleteKeyScrollCapture()
+      restoreEditorScrollSnapshot(view, snapshot)
+      return true
+    },
+    [clearPendingDeleteKeyScrollCapture]
+  )
+
   const handleSelectionBubbleSizeChange = useCallback(
     (nextSize: SelectionBubbleSize) => {
       const previousSize = selectionBubbleSizeRef.current
@@ -307,10 +363,6 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
-
-  useEffect(() => {
-    typewriterModeRef.current = typewriterMode
-  }, [typewriterMode])
 
   const clearGhostTextState = useCallback((viewOverride?: EditorView | null) => {
     const view = viewOverride ?? viewRef.current
@@ -361,15 +413,6 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       setProvenanceMarks(tabId, readAIProvenanceMarks(view))
     },
     [activeTab?.id, setProvenanceMarks]
-  )
-
-  const syncCursorBottomGap = useCallback(
-    (viewOverride?: EditorView | null, isPointerEvent?: boolean) => {
-      const view = viewOverride ?? viewRef.current
-      if (!view || !view.hasFocus || typewriterModeRef.current || isPointerEvent) return
-      keepEditorCursorBottomGap(view)
-    },
-    []
   )
 
   const scheduleTableExitFocusRestore = useCallback((viewOverride?: EditorView | null) => {
@@ -535,8 +578,7 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
         onSelectionChange: (view, update) => {
           syncGhostTextState(view)
           syncProvenanceState(view)
-          const isPointerEvent = update?.transactions.some((tr) => tr.isUserEvent('select.pointer'))
-          syncCursorBottomGap(view, isPointerEvent)
+          restorePendingDeleteKeyScroll(view, update)
           scheduleSelectionBubbleUpdate(view)
           scheduleTableExitFocusRestore(view)
         },
@@ -622,15 +664,27 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
     const view = viewRef.current
     if (!view) return
 
+    const handleDeleteKeyScrollCapture = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete') return
+      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+
+      const target = event.target
+      if (!(target instanceof Node) || !view.contentDOM.contains(target)) return
+
+      capturePendingDeleteKeyScroll(view)
+    }
+
     const handleFocus = () => {
       void ensureAutocompleteExtensions()
     }
 
+    view.dom.addEventListener('keydown', handleDeleteKeyScrollCapture, true)
     view.dom.addEventListener('focusin', handleFocus)
     return () => {
+      view.dom.removeEventListener('keydown', handleDeleteKeyScrollCapture, true)
       view.dom.removeEventListener('focusin', handleFocus)
     }
-  }, [ensureAutocompleteExtensions])
+  }, [capturePendingDeleteKeyScroll, ensureAutocompleteExtensions])
 
   useEffect(() => {
     void ensureMarkdownLanguageExtensions()
@@ -897,11 +951,9 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
 
     view.dispatch({
       selection: { anchor },
-      effects: EditorView.scrollIntoView(anchor, {
-        y: align,
-        yMargin: align === 'start' ? 20 : 5,
-      }),
+      effects: createEditorNavigationScrollEffect(anchor, { align }),
     })
+    scheduleEditorNavigationScroll(view, anchor, { align })
     view.focus()
     setPendingNavigation(null)
   }, [activeTab?.id, pendingNavigation, setPendingNavigation])

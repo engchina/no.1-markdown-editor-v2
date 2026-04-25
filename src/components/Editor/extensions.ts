@@ -60,8 +60,8 @@ export const lightTheme = EditorView.theme(
     '.cm-activeLine': { backgroundColor: 'var(--editor-line-active)' },
     '.cm-selectionMatch': { backgroundColor: 'rgba(59, 130, 246, 0.1)' },
     '.cm-matchingBracket, .cm-nonmatchingBracket': {
-      backgroundColor: 'rgba(59, 130, 246, 0.15)',
-      outline: '1px solid rgba(59, 130, 246, 0.4)',
+      backgroundColor: 'transparent !important',
+      outline: 'none !important',
     },
     '.cm-gutters': {
       backgroundColor: 'var(--editor-bg)',

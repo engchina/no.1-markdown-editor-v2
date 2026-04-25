@@ -113,16 +113,16 @@ Install latest package from [releases](https://github.com/engchina/no.1-markdown
 - Run `npm run test:ai:i18n:smoke` to verify the AI-related UI labels and layout in English, Japanese, and Chinese against a built local preview.
 - Run `npm run test:ai:keyboard:smoke` to verify the keyboard-only `Ctrl/Cmd+J -> Run -> Apply` path, streamed draft preview isolation before apply, and editor focus return against a built local preview.
 - Run `npm run test:ai:manual:qa:capture` to regenerate the locale/mode QA artifact set under `output/playwright/ai-manual-qa/`.
-- Run `npm run test:source:smoke` to verify source-editor ordinary typing, plain-text paste, and AI Apply keep the viewport near the active cursor instead of snapping back to the top.
+- Run `npm run test:source:smoke` to verify source-editor ordinary typing, `Enter`, `Delete`, plain-text paste, and AI Apply keep the viewport near the active cursor instead of snapping back to the top.
 
 ## Release
 
 GitHub release automation is defined in `.github/workflows/release.yml`.
 
-- Run `npm run release:prepare -- 0.18.0` to sync `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and promote `CHANGELOG.md` `## Unreleased` into a dated `## 0.18.0 - YYYY-MM-DD` section before tagging.
-- Run `npm run release:validate` after bumping the release version to confirm `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `CHANGELOG.md` are ready for the same tag. Use `npm run release:validate -- 0.18.0` if you want to validate an explicit target before committing the version bump.
-- Run `npm run release:notes:preview -- 0.18.0` to print the GitHub release body locally before pushing `v0.18.0`.
-- After the release is published, run `npm run release:draft:advance -- 0.18.0` to reset `docs/release-notes-draft.md` and normalize `CHANGELOG.md` `## Unreleased` into the next-cycle suggested scaffold after `v0.18.0`.
+- Run `npm run release:prepare -- 0.18.4` to sync `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and promote `CHANGELOG.md` `## Unreleased` into a dated `## 0.18.4 - YYYY-MM-DD` section before tagging.
+- Run `npm run release:validate` after bumping the release version to confirm `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `CHANGELOG.md` are ready for the same tag, and that the release changelog section no longer contains scaffold comment placeholders. Use `npm run release:validate -- 0.18.4` if you want to validate an explicit target before committing the version bump.
+- Run `npm run release:notes:preview -- 0.18.4` to print the GitHub release body locally before pushing `v0.18.4`.
+- After the release is published, run `npm run release:draft:advance -- 0.18.4` to reset `docs/release-notes-draft.md` and normalize `CHANGELOG.md` `## Unreleased` into the next-cycle suggested scaffold after `v0.18.4`.
 - Keep the version aligned in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
 - Create and push a version tag such as `v0.14.0`. The workflow fails early if the tag does not match the app version.
 - Pushing the tag builds Windows x64, a single universal macOS release bundle for both Apple Silicon and Intel Macs, and Linux x64 release bundles on GitHub-hosted runners and uploads them to GitHub Releases automatically.

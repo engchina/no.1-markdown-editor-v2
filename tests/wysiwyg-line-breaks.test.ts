@@ -92,7 +92,7 @@ test('wysiwyg live preview routes supported hard-break syntaxes through the shar
   assert.match(source, /function processInlineHardBreaks\(/u)
   assert.match(source, /collectInlineHardBreakTokens\(text, excludedRanges, \{ hasFollowingLine \}\)/u)
   assert.match(source, /token\.renderWidget\s*\?\s*Decoration\.replace\(\{ widget: new HardBreakWidget\(\) \}\)\s*:\s*Decoration\.replace\(\{\}\)/u)
-  assert.match(source, /processInline\(decorations, text, lineFrom, line\.number < doc\.lines, footnoteIndices\)/u)
+  assert.match(source, /processInline\(decorations, text, lineFrom, line\.number < doc\.lines, footnoteIndices, documentContext\)/u)
 })
 
 test('wysiwyg task checkbox keyboard toggles only on plain Enter or Space so Shift+Enter remains available for line breaks', async () => {

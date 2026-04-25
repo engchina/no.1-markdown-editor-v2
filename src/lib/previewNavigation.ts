@@ -9,7 +9,12 @@ export interface PreviewNavigationScrollTopInput {
   previewScrollHeight: number
   previewScrollTop: number
   targetTop: number
+  coordinateScale?: number
   topOffset?: number
+}
+
+export interface PreviewScrollToTargetOptions {
+  behavior?: ScrollBehavior
 }
 
 export function getPreviewInternalAnchorId(
@@ -52,10 +57,15 @@ export function resolvePreviewNavigationScrollTop({
   previewScrollHeight,
   previewScrollTop,
   targetTop,
+  coordinateScale = 1,
   topOffset = PREVIEW_NAVIGATION_TOP_OFFSET_PX,
 }: PreviewNavigationScrollTopInput) {
   const maxScrollTop = Math.max(0, previewScrollHeight - previewHeight)
-  const nextScrollTop = previewScrollTop + (targetTop - previewTop) - topOffset
+  const normalizedScale =
+    Number.isFinite(coordinateScale) && coordinateScale > 0
+      ? coordinateScale
+      : 1
+  const nextScrollTop = previewScrollTop + (targetTop - previewTop) / normalizedScale - topOffset
   return clamp(nextScrollTop, 0, maxScrollTop)
 }
 
@@ -89,19 +99,30 @@ export function resolvePreviewAnchorTarget(preview: HTMLElement, rawTargetId: st
   return null
 }
 
-export function scrollPreviewToTarget(preview: HTMLElement, target: HTMLElement) {
+export function scrollPreviewToTarget(
+  preview: HTMLElement,
+  target: HTMLElement,
+  options: PreviewScrollToTargetOptions = {}
+) {
+  const previewRect = preview.getBoundingClientRect()
+  const coordinateScale =
+    preview.clientHeight > 0
+      ? previewRect.height / preview.clientHeight
+      : 1
   const top = resolvePreviewNavigationScrollTop({
-    previewTop: preview.getBoundingClientRect().top,
+    previewTop: previewRect.top,
     previewHeight: preview.clientHeight,
     previewScrollHeight: preview.scrollHeight,
     previewScrollTop: preview.scrollTop,
     targetTop: target.getBoundingClientRect().top,
+    coordinateScale,
   })
 
+  const behavior = prefersReducedMotion() ? 'auto' : (options.behavior ?? 'smooth')
   if (typeof preview.scrollTo === 'function') {
     preview.scrollTo({
       top,
-      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      behavior,
     })
     return
   }

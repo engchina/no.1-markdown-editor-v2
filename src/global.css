@@ -38,12 +38,15 @@
   /* Preview */
   --preview-bg: transparent;
   --preview-text: #1A1A1A;
+  --md-prose-line-height: 1.8;
+  --md-heading-line-height: 1.3;
   --md-heading-1-size: 2em;
   --md-heading-2-size: 1.5em;
   --md-heading-3-size: 1.25em;
   --md-heading-4-size: 1.1em;
   --md-heading-5-size: 1em;
   --md-heading-6-size: 0.95em;
+  --md-block-space: 0.75em;
   --md-link-text-decoration: none;
   --md-link-hover-text-decoration: underline;
   --md-hr-rule-color: var(--border);
@@ -54,7 +57,19 @@
   --md-quote-pad-inline-start: 1.1em;
   --md-quote-line-width: 4px;
   --md-quote-rule-color: color-mix(in srgb, var(--text-muted) 42%, transparent);
+  --md-list-indent: 1.75em;
+  --md-list-item-space: 0.2em;
+  --md-list-nested-space: 0.2em;
   --md-list-marker-color: var(--preview-text);
+  --md-list-marker-font-weight: 400;
+  --md-list-marker-inline-size: 1ch;
+  --md-list-bullet-disc-size: 0.33em;
+  --md-list-bullet-circle-size: 0.33em;
+  --md-list-bullet-square-size: 0.27em;
+  --md-list-bullet-circle-stroke: 1px;
+  --md-list-marker-gap: 0.9em;
+  --md-list-ordered-marker-gap: 0.55em;
+  --md-list-marker-offset-y: 0em;
   --md-inline-mark-bg: color-mix(in srgb, #FACC15 52%, transparent);
   --md-inline-mark-radius: 0.28em;
   --md-inline-mark-padding-inline: 0.18em;
@@ -68,6 +83,10 @@
   --md-task-checkbox-radius: 4px;
   --md-task-checkbox-gap: 8px;
   --md-task-completed-color: color-mix(in srgb, var(--preview-text) 68%, var(--text-muted));
+  --md-block-shell-inset: 32px;
+  --md-code-block-radius: 10px;
+  --md-code-block-padding-inline: 16px;
+  --md-code-block-padding-block: 16px;
   --md-footnotes-font-size: 0.875em;
   --md-footnote-ref-color: var(--accent);
   --md-footnote-ref-weight: 600;
@@ -397,7 +416,7 @@ a:focus-visible {
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
   font-size: inherit;
-  line-height: 1.8;
+  line-height: var(--md-prose-line-height, 1.8);
   background-color: transparent !important;
 }
 
@@ -418,7 +437,7 @@ a:focus-visible {
 }
 
 .cm-line {
-  padding: 0 32px !important;
+  padding: 0 var(--md-block-shell-inset, 32px) !important;
 }
 
 .cm-cursor {
@@ -665,16 +684,10 @@ a:focus-visible {
   background-color: transparent;
   color: var(--preview-text);
   font-family: var(--font-preview, Inter, system-ui, sans-serif);
+  line-height: var(--md-prose-line-height, 1.8);
   padding: 32px 48px var(--document-bottom-buffer);
   overflow-y: auto;
   height: 100%;
-  --md-block-space: 0.75em;
-  --md-quote-space: 0.9em;
-  --md-quote-pad-block: 0.15em;
-  --md-quote-pad-inline-end: 0.15em;
-  --md-quote-pad-inline-start: 1.1em;
-  --md-quote-line-width: 4px;
-  --md-quote-rule-color: color-mix(in srgb, var(--text-muted) 42%, transparent);
 }
 
 .markdown-preview p {
@@ -682,7 +695,14 @@ a:focus-visible {
   margin-bottom: 0;
 }
 
-.markdown-preview--visual-soft-breaks :is(p, li, td, th) {
+.markdown-preview--visual-soft-breaks :is(p, td, th) {
+  white-space: pre-line;
+}
+
+/* Only preserve soft breaks on tight list items. Loose markdown lists render
+   block children (`<p>`, nested lists, etc.), and inheriting `pre-line` on the
+   `<li>` itself turns formatter whitespace into visible gaps. */
+.markdown-preview--visual-soft-breaks li:not(:has(> :is(p, ul, ol, pre, blockquote, table, hr, img, h1, h2, h3, h4, h5, h6, div, section, .front-matter))) {
   white-space: pre-line;
 }
 
@@ -693,7 +713,7 @@ a:focus-visible {
 .markdown-preview h5,
 .markdown-preview h6 {
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: var(--md-heading-line-height, 1.3);
   margin: 0;
 }
 
@@ -774,6 +794,8 @@ a:focus-visible {
   padding: var(--md-inline-code-padding, 0.125em 0.375em);
   border-radius: var(--md-inline-code-radius, 4px);
   font-family: var(--font-mono, JetBrains Mono, Cascadia Code, Fira Code, Consolas, monospace);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
   font-size: var(--md-inline-code-font-size, 0.875em);
   transition: background 0.2s ease;
 }
@@ -782,9 +804,9 @@ a:focus-visible {
   position: relative;
   background: var(--bg-secondary) !important;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--md-code-block-radius, 10px);
   margin: 0;
-  padding: 16px;
+  padding: var(--md-code-block-padding-block, 16px) var(--md-code-block-padding-inline, 16px);
   overflow-x: auto;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
 }
@@ -862,7 +884,7 @@ a:focus-visible {
 
 .markdown-preview ul,
 .markdown-preview ol {
-  padding-left: 2em;
+  padding-left: var(--md-list-indent, 1.75em);
   margin: 0;
 }
 
@@ -883,7 +905,16 @@ a:focus-visible {
 }
 
 .markdown-preview li {
-  margin-bottom: 0.5em;
+  margin: 0;
+}
+
+.markdown-preview li + li {
+  margin-top: var(--md-list-item-space, 0.2em);
+}
+
+.markdown-preview li::marker {
+  color: var(--md-list-marker-color, var(--preview-text));
+  font-weight: var(--md-list-marker-font-weight, 400);
 }
 
 .markdown-preview ul.contains-task-list,
@@ -908,7 +939,7 @@ a:focus-visible {
 
 .markdown-preview li>ul,
 .markdown-preview li>ol {
-  margin-top: 0.5em;
+  margin-top: var(--md-list-nested-space, 0.2em);
   margin-bottom: 0;
 }
 

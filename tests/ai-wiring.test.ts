@@ -3,12 +3,12 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 test('AIComposer wires request ids and backend cancellation through the desktop client', async () => {
-  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+  const runtime = await readFile(new URL('../src/components/AI/useAIComposerRuntime.ts', import.meta.url), 'utf8')
   const client = await readFile(new URL('../src/lib/ai/client.ts', import.meta.url), 'utf8')
   const rust = await readFile(new URL('../src-tauri/src/ai.rs', import.meta.url), 'utf8')
 
-  assert.match(composer, /const requestId = `\$\{activeTab\?\.id \?\? 'ai'\}-\$\{runId\}-\$\{Date\.now\(\)\}`/)
-  assert.match(composer, /await cancelAICompletion\(requestId\)/)
+  assert.match(runtime, /const requestId = `\$\{activeTab\?\.id \?\? 'ai'\}-\$\{runId\}-\$\{Date\.now\(\)\}`/)
+  assert.match(runtime, /await cancelAICompletion\(requestId\)/)
   assert.match(client, /invoke<boolean>\('ai_cancel_completion', \{ requestId \}\)/)
   assert.match(rust, /pub fn ai_cancel_completion/)
   assert.match(rust, /pub request_id: String/)

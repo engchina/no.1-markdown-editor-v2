@@ -26,12 +26,12 @@ test('view commands reserve the primary zoom shortcuts for app zoom and leave fo
 test('command palette prioritizes and badges zoom commands ahead of font size commands', async () => {
   const palette = await readFile(new URL('../src/components/CommandPalette/CommandPalette.tsx', import.meta.url), 'utf8')
 
-  assert.match(palette, /\['view\.zoomIn', 219]/)
-  assert.match(palette, /\['view\.zoomOut', 220]/)
-  assert.match(palette, /\['view\.zoomReset', 221]/)
-  assert.match(palette, /\['view\.fontSizeIncrease', 222]/)
-  assert.match(palette, /\['view\.fontSizeDecrease', 223]/)
-  assert.match(palette, /\['view\.fontSizeReset', 224]/)
+  assert.match(palette, /\['view\.zoomIn', 226]/)
+  assert.match(palette, /\['view\.zoomOut', 227]/)
+  assert.match(palette, /\['view\.zoomReset', 228]/)
+  assert.match(palette, /\['view\.fontSizeIncrease', 229]/)
+  assert.match(palette, /\['view\.fontSizeDecrease', 230]/)
+  assert.match(palette, /\['view\.fontSizeReset', 231]/)
   assert.match(palette, /case 'view\.zoomIn':\s+return <TextBadge label="Z\+" \/>/)
   assert.match(palette, /case 'view\.zoomOut':\s+return <TextBadge label="Z-" \/>/)
   assert.match(palette, /case 'view\.zoomReset':\s+return <TextBadge label="Z" \/>/)

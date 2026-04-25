@@ -9,3 +9,11 @@ test('CodeMirror source editor disables ligatures so markdown punctuation stays 
   assert.match(source, /\.cm-editor \{[\s\S]*?font-variant-ligatures: none;/u)
   assert.match(source, /\.cm-editor \{[\s\S]*?font-feature-settings: "liga" 0, "calt" 0;/u)
 })
+
+test('preview inline code also disables ligatures so literal punctuation like `***` stays unchanged', async () => {
+  const source = await readFile(new URL('../src/global.css', import.meta.url), 'utf8')
+
+  assert.match(source, /\.markdown-preview code \{[\s\S]*?font-family: var\(--font-mono, JetBrains Mono, Cascadia Code, Fira Code, Consolas, monospace\);/u)
+  assert.match(source, /\.markdown-preview code \{[\s\S]*?font-variant-ligatures: none;/u)
+  assert.match(source, /\.markdown-preview code \{[\s\S]*?font-feature-settings: "liga" 0, "calt" 0;/u)
+})

@@ -3,15 +3,19 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 test('AI Composer binds document font size to content text while keeping the widened dialog shell bounded', async () => {
-  const composer = await readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8')
+  const [composer, coreView] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
+  ])
 
   assert.match(composer, /const fontSize = useEditorStore\(\(state\) => state\.fontSize\)/)
   assert.match(composer, /function buildAIComposerContentTypography\(fontSize: number\)/)
-  assert.match(composer, /data-ai-composer-prompt="true"[\s\S]*style=\{\{\s*\.\.\.composerContentTypography\.text,/)
-  assert.match(composer, /<AIDiffPreview[\s\S]*typography=\{composerContentTypography\}/)
-  assert.match(composer, /<AIInsertionPreview[\s\S]*typography=\{composerContentTypography\}/)
-  assert.match(composer, /maxWidth: 'min\(960px, calc\(100vw - 4rem\)\)'/)
-  assert.doesNotMatch(composer, /data-ai-composer="true"[\s\S]{0,260}fontSize:/)
+  assert.match(composer, /<AIComposerCoreView[\s\S]*composerContentTypography=\{composerContentTypography\}/)
+  assert.match(coreView, /data-ai-composer-prompt="true"[\s\S]*style=\{\{\s*\.\.\.composerContentTypography\.text,/)
+  assert.match(coreView, /<AIDiffPreview[\s\S]*typography=\{composerContentTypography\}/)
+  assert.match(coreView, /<AIInsertionPreview[\s\S]*typography=\{composerContentTypography\}/)
+  assert.match(coreView, /maxWidth: 'min\(960px, calc\(100vw - 4rem\)\)'/)
+  assert.doesNotMatch(coreView, /data-ai-composer="true"[\s\S]{0,260}fontSize:/)
 })
 
 test('sidebar stays width-driven while app-level zoom remains separate from document font size', async () => {
@@ -22,7 +26,7 @@ test('sidebar stays width-driven while app-level zoom remains separate from docu
   ])
 
   assert.match(sidebar, /export default function Sidebar\(\{ width \}: Props\)/)
-  assert.match(sidebar, /className="sidebar-surface flex h-full min-h-0 flex-shrink-0 flex-col"[\s\S]*style=\{\{\s*[\s\S]*width,/)
+  assert.match(sidebar, /className="sidebar-surface flex h-full min-h-0 flex-shrink-0 flex-col"[\s\S]*style=\{\{\s*width\s*,?\s*\}\}/)
   assert.doesNotMatch(sidebar, /useEditorStore\(\(state\) => state\.fontSize\)/)
   assert.match(app, /const \{\s*[\s\S]*zoom,[\s\S]*\} = useEditorStore\(\)/)
   assert.match(app, /zoom: `\$\{zoom\}%`/)

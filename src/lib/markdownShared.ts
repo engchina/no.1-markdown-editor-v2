@@ -96,12 +96,14 @@ export function buildStandaloneHtml(
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
       font-size: 16px;
-      line-height: 1.75;
+      line-height: var(--md-prose-line-height, 1.8);
       color: #1a1a1a;
       background: #fff;
       max-width: 800px;
       margin: 0 auto;
       padding: 48px 32px;
+      --md-prose-line-height: 1.8;
+      --md-heading-line-height: 1.3;
       --md-block-space: 0.75em;
       --md-quote-space: 0.9em;
       --md-quote-pad-block: 0.15em;
@@ -109,9 +111,17 @@ export function buildStandaloneHtml(
       --md-quote-pad-inline-start: 1.1em;
       --md-quote-line-width: 4px;
       --md-quote-rule-color: rgba(161, 161, 170, 0.42);
+      --md-list-indent: 1.75em;
+      --md-list-item-space: 0.2em;
+      --md-list-nested-space: 0.2em;
+      --md-list-marker-color: #1a1a1a;
+      --md-list-marker-font-weight: 400;
+      --md-code-block-radius: 10px;
+      --md-code-block-padding-inline: 16px;
+      --md-code-block-padding-block: 16px;
     }
     h1, h2, h3, h4, h5, h6 {
-      line-height: 1.3;
+      line-height: var(--md-heading-line-height, 1.3);
       margin: 0;
     }
     h1, h2 { font-weight: 700; }
@@ -142,17 +152,19 @@ export function buildStandaloneHtml(
     p { margin: 0; }
     code {
       font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
       font-size: 0.875em;
       background: #f4f4f5;
       border-radius: 4px;
-      padding: 0.15em 0.4em;
+      padding: 0.125em 0.375em;
     }
     pre {
       background: #18181b;
       color: #d4d4d8;
-      border-radius: 8px;
+      border-radius: var(--md-code-block-radius, 10px);
       margin: 0;
-      padding: 20px;
+      padding: var(--md-code-block-padding-block, 16px) var(--md-code-block-padding-inline, 16px);
       overflow-x: auto;
     }
     pre code { background: none; padding: 0; color: inherit; }
@@ -187,9 +199,12 @@ export function buildStandaloneHtml(
     tr:nth-child(even) td { background: #f9fafb; }
     img { max-width: 100%; border-radius: 4px; }
     hr { border: none; border-top: 1px solid #e5e7eb; margin: 0; }
-    ul, ol { padding-left: 2em; margin: 0; }
-    li { margin: 0.25em 0; }
-    input[type="checkbox"] { margin-right: 6px; }
+    ul, ol { padding-left: var(--md-list-indent, 1.75em); margin: 0; }
+    li { margin: 0; }
+    li + li { margin-top: var(--md-list-item-space, 0.2em); }
+    li > ul, li > ol { margin-top: var(--md-list-nested-space, 0.2em); margin-bottom: 0; }
+    li::marker { color: var(--md-list-marker-color, #1a1a1a); font-weight: var(--md-list-marker-font-weight, 400); }
+    input[type="checkbox"] { margin-right: 8px; }
     a[data-footnote-ref] {
       color: #2563eb;
       text-decoration: none;

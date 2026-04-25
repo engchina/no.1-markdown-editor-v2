@@ -68,9 +68,10 @@ test('wysiwyg blockquotes render quote structure on the source line while keepin
     source,
     /const BLOCKQUOTE_RULE_BACKGROUND =[\s\S]*const ACTIVE_BLOCKQUOTE_RULE_BACKGROUND =[\s\S]*const BLOCKQUOTE_LINE_PADDING_LEFT =[\s\S]*const BLOCKQUOTE_LINE_BACKGROUND_SIZE =/u,
   )
+  assert.match(source, /const PROSE_BLOCK_INSET = 'var\(--md-block-shell-inset, 32px\)'/u)
   assert.match(
     source,
-    /'\.cm-wysiwyg-blockquote-line': \{[\s\S]*?minHeight: '1\.45em'[\s\S]*?paddingLeft: `\$\{BLOCKQUOTE_LINE_PADDING_LEFT\} !important`[\s\S]*?backgroundImage: BLOCKQUOTE_RULE_BACKGROUND[\s\S]*?backgroundSize: BLOCKQUOTE_LINE_BACKGROUND_SIZE/u,
+    /'\.cm-wysiwyg-blockquote-line': \{[\s\S]*?minHeight: '1\.45em'[\s\S]*?paddingLeft: `\$\{BLOCKQUOTE_LINE_PADDING_LEFT\} !important`[\s\S]*?paddingRight: `calc\(\$\{PROSE_BLOCK_INSET\} \+ var\(--md-quote-pad-inline-end\)\) !important`[\s\S]*?backgroundImage: BLOCKQUOTE_RULE_BACKGROUND[\s\S]*?backgroundPosition: `\$\{PROSE_BLOCK_INSET\} 0`[\s\S]*?backgroundSize: BLOCKQUOTE_LINE_BACKGROUND_SIZE/u,
   )
   assert.match(
     source,

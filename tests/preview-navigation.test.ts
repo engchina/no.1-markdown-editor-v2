@@ -60,6 +60,32 @@ test('resolvePreviewNavigationScrollTop clamps preview jumps inside the scrollab
   )
 })
 
+test('resolvePreviewNavigationScrollTop compensates for app zoom when DOM coordinates are scaled', () => {
+  assert.equal(
+    resolvePreviewNavigationScrollTop({
+      previewTop: 100,
+      previewHeight: 480,
+      previewScrollHeight: 2200,
+      previewScrollTop: 320,
+      targetTop: 580,
+      coordinateScale: 0.8,
+    }),
+    904
+  )
+
+  assert.equal(
+    resolvePreviewNavigationScrollTop({
+      previewTop: 100,
+      previewHeight: 480,
+      previewScrollHeight: 2200,
+      previewScrollTop: 320,
+      targetTop: 580,
+      coordinateScale: 1.25,
+    }),
+    688
+  )
+})
+
 test('MarkdownPreview intercepts same-document anchors and scrolls the preview shell directly', async () => {
   const source = await readFile(new URL('../src/components/Preview/MarkdownPreview.tsx', import.meta.url), 'utf8')
 
@@ -73,6 +99,6 @@ test('OutlinePanel reuses the shared preview navigation helper for heading jumps
   const source = await readFile(new URL('../src/components/Sidebar/OutlinePanel.tsx', import.meta.url), 'utf8')
 
   assert.match(source, /resolvePreviewAnchorTarget\(previewElement, heading\.id\)/)
-  assert.match(source, /scrollPreviewToTarget\(previewElement, element\)/)
+  assert.match(source, /scrollPreviewToTarget\(previewElement, element, \{ behavior: 'auto' \}\)/)
   assert.match(source, /flashPreviewTarget\(element\)/)
 })

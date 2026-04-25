@@ -10,7 +10,9 @@ import {
   extractReleaseNotesDraftBody,
 } from '../scripts/build-release-body.mjs'
 import {
+  assertNoReleaseScaffoldComments,
   assertReleaseVersionMatches,
+  extractHtmlCommentLines,
   extractCargoVersion,
   validateRelease,
 } from '../scripts/validate-release.mjs'
@@ -228,6 +230,22 @@ test('buildSuggestedUnreleasedScaffold creates a reusable next-cycle template th
   assert.match(scaffold, /### Fixed/u)
   assert.match(scaffold, /Markdown editing, workspace, export, or AI improvements/u)
   assert.equal(hasMeaningfulUnreleasedContent(scaffold), false)
+})
+
+test('extractHtmlCommentLines and assertNoReleaseScaffoldComments catch placeholder comments in a release section', () => {
+  const section = [
+    '### Added',
+    '',
+    '<!-- Placeholder hint -->',
+    '',
+    '- Real release note',
+  ].join('\n')
+
+  assert.deepEqual(extractHtmlCommentLines(section), ['<!-- Placeholder hint -->'])
+  assert.throws(
+    () => assertNoReleaseScaffoldComments(section, '0.18.5'),
+    /CHANGELOG entry for v0\.18\.5 still contains HTML comment placeholders/u
+  )
 })
 
 test('stripUnreleasedScaffoldHints removes template comments before a real release section is cut', () => {
@@ -527,6 +545,41 @@ test('validateRelease falls back to package.json version and requires a matching
   )
 })
 
+test('validateRelease fails when the target changelog section still contains scaffold comments', async () => {
+  await withTempReleaseFixture(
+    {
+      'package.json': JSON.stringify({ version: '0.18.0' }),
+      'src-tauri/tauri.conf.json': JSON.stringify({ version: '0.18.0' }),
+      'src-tauri/Cargo.toml': [
+        '[package]',
+        'name = "no1-markdown-editor"',
+        'version = "0.18.0"',
+      ].join('\n'),
+      'CHANGELOG.md': [
+        '# Changelog',
+        '',
+        '## 0.18.0 - 2026-05-01',
+        '',
+        '### Added',
+        '',
+        '<!-- Placeholder hint -->',
+        '',
+        '- Release note',
+      ].join('\n'),
+    },
+    async (cwd) => {
+      await assert.rejects(
+        () =>
+          validateRelease({
+            cwd,
+            requireChangelogSection: true,
+          }),
+        /CHANGELOG entry for v0\.18\.0 still contains HTML comment placeholders/u
+      )
+    }
+  )
+})
+
 test('validateRelease reports version drift clearly', () => {
   assert.throws(
     () =>
@@ -549,6 +602,7 @@ test('release workflow builds releaseBody from repository docs before invoking t
     readFile(new URL('../package.json', import.meta.url), 'utf8'),
   ])
   const pkg = JSON.parse(packageJson)
+  const currentVersionPattern = String(pkg.version).replace(/\./g, '\\.')
 
   assert.match(workflow, /name: Validate release metadata/)
   assert.match(workflow, /node scripts\/validate-release\.mjs "\$\{GITHUB_REF_NAME#v\}" --require-changelog/)
@@ -564,15 +618,17 @@ test('release workflow builds releaseBody from repository docs before invoking t
 
   assert.match(readme, /User-facing change history lives in `CHANGELOG\.md`\./)
   assert.match(readme, /The next public release summary draft lives in `docs\/release-notes-draft\.md`\./)
-  assert.match(readme, /npm run release:prepare -- 0\.18\.0/)
+  assert.match(readme, new RegExp(`npm run release:prepare -- ${currentVersionPattern}`))
   assert.match(readme, /npm run release:validate/)
-  assert.match(readme, /npm run release:draft:advance -- 0\.18\.0/)
-  assert.match(readme, /npm run release:notes:preview -- 0\.18\.0/)
+  assert.match(readme, /scaffold comment placeholders/u)
+  assert.match(readme, new RegExp(`npm run release:draft:advance -- ${currentVersionPattern}`))
+  assert.match(readme, new RegExp(`npm run release:notes:preview -- ${currentVersionPattern}`))
   assert.match(changelog, /## Unreleased/)
   assert.match(draft, /## Suggested GitHub Release Body/)
-  assert.match(draft, /npm run release:prepare -- 0\.18\.0/)
+  assert.match(draft, new RegExp(`npm run release:prepare -- ${currentVersionPattern}`))
   assert.match(draft, /npm run release:validate/)
-  assert.match(draft, /npm run release:draft:advance -- 0\.18\.0/)
+  assert.match(draft, /scaffold-placeholder checks fail before CI/u)
+  assert.match(draft, new RegExp(`npm run release:draft:advance -- ${currentVersionPattern}`))
   assert.match(draft, /CHANGELOG\.md` `## Unreleased`/u)
   assert.equal(pkg.scripts['release:prepare'], 'node scripts/prepare-release.mjs')
   assert.equal(pkg.scripts['release:draft:advance'], 'node scripts/advance-release-draft.mjs')
