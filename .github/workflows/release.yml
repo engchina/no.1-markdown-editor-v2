@@ -65,7 +65,7 @@ jobs:
         shell: bash
         run: |
           node scripts/build-release-body.mjs "${GITHUB_REF_NAME#v}" > release-body.md
-          delimiter="release-body-$(node -e 'process.stdout.write(require(\"node:crypto\").randomUUID())')"
+          delimiter="release-body-$(node -e "process.stdout.write(require('node:crypto').randomUUID())")"
           {
             printf 'body<<%s\n' "$delimiter"
             cat release-body.md

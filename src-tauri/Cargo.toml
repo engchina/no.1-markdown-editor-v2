@@ -1,6 +1,6 @@
 [package]
 name = "no1-markdown-editor"
-version = "0.18.0"
+version = "0.18.1"
 description = "No.1 Markdown Editor — Free Forever"
 authors = []
 edition = "2021"
@@ -51,4 +51,5 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
 

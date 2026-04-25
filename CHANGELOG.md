@@ -20,6 +20,20 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
 
+## 0.18.1 - 2026-04-25
+
+### Added
+
+### Changed
+
+- This tag republishes the Markdown workspace release as `v0.18.1` after fixing the GitHub release automation path that failed on `v0.18.0`.
+
+### Fixed
+
+### Internal
+
+- Fixed GitHub Actions release-body output quoting and multiline delimiter handling so tagged releases publish successfully.
+
 ## 0.18.0 - 2026-04-25
 
 ### Added
