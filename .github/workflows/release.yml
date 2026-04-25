@@ -65,10 +65,11 @@ jobs:
         shell: bash
         run: |
           node scripts/build-release-body.mjs "${GITHUB_REF_NAME#v}" > release-body.md
+          delimiter="release-body-$(node -e 'process.stdout.write(require(\"node:crypto\").randomUUID())')"
           {
-            echo 'body<<EOF'
+            printf 'body<<%s\n' "$delimiter"
             cat release-body.md
-            echo 'EOF'
+            printf '\n%s\n' "$delimiter"
           } >> "$GITHUB_OUTPUT"
 
       - name: Build app and upload release assets

@@ -20,7 +20,7 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
 
-## 0.17.10 - 2026-04-25
+## 0.18.0 - 2026-04-25
 
 ### Added
 

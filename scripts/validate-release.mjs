@@ -56,7 +56,7 @@ export function assertReleaseVersionMatches({
   }
 
   if (!normalized.version) {
-    throw new Error('Expected a version argument such as "0.17.10" or GITHUB_REF_NAME like "v0.17.10".')
+    throw new Error('Expected a version argument such as "0.18.0" or GITHUB_REF_NAME like "v0.18.0".')
   }
 
   if (

@@ -151,7 +151,7 @@ test('build-release-body can require a matching changelog version block', () => 
   assert.throws(
     () =>
       buildReleaseBody({
-        version: '0.17.10',
+        version: '0.18.0',
         requireChangelogSection: true,
         releaseNotesDraftSource: [
           '# Draft',
@@ -172,7 +172,7 @@ test('build-release-body can require a matching changelog version block', () => 
           '- Older version',
         ].join('\n'),
       }),
-    /Missing CHANGELOG entry for v0\.17\.10/u
+    /Missing CHANGELOG entry for v0\.18\.0/u
   )
 
   assert.equal(
@@ -180,13 +180,13 @@ test('build-release-body can require a matching changelog version block', () => 
       [
         '# Changelog',
         '',
-        '## 0.17.10 - 2026-05-01',
+        '## 0.18.0 - 2026-05-01',
         '',
         '### Added',
         '',
         '- Release body',
       ].join('\n'),
-      '0.17.10'
+      '0.18.0'
     ),
     ['### Added', '', '- Release body'].join('\n')
   )
@@ -555,6 +555,11 @@ test('release workflow builds releaseBody from repository docs before invoking t
   assert.match(workflow, /name: Build release body from repository docs/)
   assert.match(workflow, /id: release_notes/)
   assert.match(workflow, /node scripts\/build-release-body\.mjs "\$\{GITHUB_REF_NAME#v\}" > release-body\.md/)
+  assert.match(workflow, /delimiter="release-body-\$\(node -e 'process\.stdout\.write\(require\(/)
+  assert.match(workflow, /randomUUID\(\)\)'\)"/)
+  assert.match(workflow, /printf 'body<<%s\\n' "\$delimiter"/)
+  assert.match(workflow, /printf '\\n%s\\n' "\$delimiter"/)
+  assert.doesNotMatch(workflow, /body<<EOF/)
   assert.match(workflow, /releaseBody: \$\{\{ steps\.release_notes\.outputs\.body \}\}/)
   assert.match(workflow, /generateReleaseNotes: true/)
 
