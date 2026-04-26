@@ -25,7 +25,7 @@ import { collectMathBlocks, type MathBlock } from './mathBlockRanges.ts'
 import { buildSortedRangeSet, type RangeSpec } from './sortedRangeSet.ts'
 import { getTaskCheckboxChange } from './taskCheckbox.ts'
 import { collectMarkdownTableBlocks, type MarkdownTableBlock } from './tableBlockRanges.ts'
-import { parseWysiwygBlockquoteLine } from './wysiwygBlockquote.ts'
+import { collectWysiwygBlockquoteLines } from './wysiwygBlockquote.ts'
 import { collectInlineCodeRanges, findContainingTextRange, type TextRange } from './wysiwygInlineCode.ts'
 import {
   findInlineBoldItalicRanges,
@@ -1349,7 +1349,9 @@ export function buildWysiwygDecorations(
   // Collect first, then sort by CodeMirror's range ordering rules.
   const decorations: DecorationSpec[] = [...collectWysiwygCodeBlockDecorations(view, fencedCodeBlocks)]
   const { doc } = view.state
-  const documentContext = resolveWysiwygDocumentContext(doc.toString())
+  const docText = doc.toString()
+  const documentContext = resolveWysiwygDocumentContext(docText)
+  const blockquoteLines = collectWysiwygBlockquoteLines(docText)
   let fenceIndex = 0
   let mathIndex = 0
   let tableIndex = 0
@@ -1564,7 +1566,7 @@ export function buildWysiwygDecorations(
       }
 
       // ── Blockquote decoration ─────────────────────────────────────────
-      const blockquoteLine = parseWysiwygBlockquoteLine(text)
+      const blockquoteLine = blockquoteLines.get(line.number)
       if (blockquoteLine) {
         const blockquoteLineClass = onLine
           ? 'cm-wysiwyg-blockquote-line cm-wysiwyg-blockquote-line-active'
@@ -1588,7 +1590,7 @@ export function buildWysiwygDecorations(
             Decoration.mark({ class: 'cm-wysiwyg-blockquote' })
           )
         }
-        if (!onLine) {
+        if (!onLine && blockquoteLine.prefix.length > 0) {
           queueDecoration(
             decorations,
             lineFrom,

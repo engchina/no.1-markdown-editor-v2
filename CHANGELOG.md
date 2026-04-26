@@ -20,6 +20,21 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
 
+## 0.19.1 - 2026-04-26
+
+### Added
+
+### Changed
+
+### Fixed
+
+- WYSIWYG blockquotes now keep lazy paragraph continuation lines visually quoted, so source editing follows Markdown blockquote structure more closely.
+- The update available dialog now keeps release notes scrollable and action buttons reachable in compact window heights.
+
+### Internal
+
+- Added regression coverage for lazy blockquote continuations and compact update dialog layout.
+
 ## 0.19.0 - 2026-04-26
 
 ### Added

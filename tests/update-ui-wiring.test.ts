@@ -136,3 +136,14 @@ test('UpdateAvailableDialog renders a modal with download, skip, and cancel acti
   assert.match(dialog, /t\('updates\.skipVersion'\)/)
   assert.match(dialog, /t\('updates\.cancel'\)/)
 })
+
+test('UpdateAvailableDialog keeps actions reachable in compact window heights', async () => {
+  const dialog = await readFile(new URL('../src/components/Updates/UpdateAvailableDialog.tsx', import.meta.url), 'utf8')
+
+  assert.match(dialog, /maxHeight:\s*'calc\(100dvh - 2rem\)'/)
+  assert.match(dialog, /className="flex flex-shrink-0 items-start gap-4 px-5 py-4"/)
+  assert.match(dialog, /className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5"/)
+  assert.match(dialog, /scrollbarGutter:\s*'stable'/)
+  assert.match(dialog, /maxHeight:\s*'clamp\(120px, 32dvh, 240px\)'/)
+  assert.match(dialog, /className="flex flex-shrink-0 flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-end"/)
+})

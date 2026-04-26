@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { parseWysiwygBlockquoteLine } from '../src/components/Editor/wysiwygBlockquote.ts'
+import {
+  collectWysiwygBlockquoteLines,
+  parseWysiwygBlockquoteLine,
+} from '../src/components/Editor/wysiwygBlockquote.ts'
 
 test('parseWysiwygBlockquoteLine recognizes canonical blockquote lines', () => {
   assert.deepEqual(parseWysiwygBlockquoteLine('> quoted text'), {
@@ -48,6 +51,41 @@ test('parseWysiwygBlockquoteLine preserves nested quote prefixes', () => {
   })
 })
 
+test('collectWysiwygBlockquoteLines keeps lazy paragraph continuations visually quoted', () => {
+  const lines = collectWysiwygBlockquoteLines('> a\nb')
+
+  assert.deepEqual(lines.get(1), {
+    prefix: '> ',
+    content: 'a',
+    depth: 1,
+    isEmpty: false,
+    isLazyContinuation: false,
+  })
+  assert.deepEqual(lines.get(2), {
+    prefix: '',
+    content: 'b',
+    depth: 1,
+    isEmpty: false,
+    isLazyContinuation: true,
+  })
+})
+
+test('collectWysiwygBlockquoteLines stops lazy quote styling at blank lines and new blocks', () => {
+  assert.equal(collectWysiwygBlockquoteLines('> a\n\nb').has(3), false)
+  assert.equal(collectWysiwygBlockquoteLines('> a\n# b').has(2), false)
+  assert.equal(collectWysiwygBlockquoteLines('> a\n- b').has(2), false)
+})
+
+test('collectWysiwygBlockquoteLines preserves nested lazy continuation depth', () => {
+  const unmarkedContinuation = collectWysiwygBlockquoteLines('> > a\nb')
+  const partiallyMarkedContinuation = collectWysiwygBlockquoteLines('> > a\n> b')
+
+  assert.equal(unmarkedContinuation.get(2)?.depth, 2)
+  assert.equal(unmarkedContinuation.get(2)?.isLazyContinuation, true)
+  assert.equal(partiallyMarkedContinuation.get(2)?.depth, 2)
+  assert.equal(partiallyMarkedContinuation.get(2)?.isLazyContinuation, true)
+})
+
 test('wysiwyg blockquotes render quote structure on the source line while keeping active syntax editable', async () => {
   const [source, css] = await Promise.all([
     readFile(new URL('../src/components/Editor/wysiwyg.ts', import.meta.url), 'utf8'),
@@ -63,6 +101,8 @@ test('wysiwyg blockquotes render quote structure on the source line while keepin
     /Decoration\.line\(\{[\s\S]*attributes: \{[\s\S]*class: blockquoteLineClass,[\s\S]*style: `--cm-wysiwyg-blockquote-depth: \$\{blockquoteLine\.depth\};`,[\s\S]*\}[\s\S]*\}\)/u,
   )
   assert.match(source, /Decoration\.mark\(\{ class: 'cm-wysiwyg-blockquote' \}\)/u)
+  assert.match(source, /const blockquoteLines = collectWysiwygBlockquoteLines\(docText\)/u)
+  assert.match(source, /const blockquoteLine = blockquoteLines\.get\(line\.number\)/u)
   assert.doesNotMatch(source, /BlockquoteSpacerWidget/u)
   assert.match(
     source,

@@ -1,6 +1,6 @@
 {
   "productName": "No.1 Markdown Editor",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "identifier": "com.no1.markdown-editor",
   "build": {
     "frontendDist": "../dist",
@@ -39,7 +39,10 @@
     ],
     "fileAssociations": [
       {
-        "ext": ["md", "markdown"],
+        "ext": [
+          "md",
+          "markdown"
+        ],
         "name": "Markdown Document",
         "description": "Markdown document",
         "role": "Editor",
@@ -47,7 +50,9 @@
         "rank": "Default"
       },
       {
-        "ext": ["mdx"],
+        "ext": [
+          "mdx"
+        ],
         "name": "MDX Document",
         "description": "MDX document",
         "role": "Editor",
@@ -55,7 +60,9 @@
         "rank": "Default"
       },
       {
-        "ext": ["txt"],
+        "ext": [
+          "txt"
+        ],
         "name": "Plain Text Document",
         "description": "Plain text document",
         "role": "Editor",

@@ -57,12 +57,13 @@ export default function UpdateAvailableDialog() {
         aria-label={t('updates.dialogTitle')}
         className="glass-panel animate-in flex w-full max-w-[min(640px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[1.5rem] shadow-2xl"
         style={{
+          maxHeight: 'calc(100dvh - 2rem)',
           background: 'color-mix(in srgb, var(--bg-primary) 96%, transparent)',
           borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
         }}
       >
         <div
-          className="flex items-start gap-4 px-5 py-4"
+          className="flex flex-shrink-0 items-start gap-4 px-5 py-4"
           style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 78%, transparent)' }}
         >
           <div
@@ -84,7 +85,10 @@ export default function UpdateAvailableDialog() {
           </div>
         </div>
 
-        <div className="space-y-4 px-5 py-5">
+        <div
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-5"
+          style={{ scrollbarGutter: 'stable' }}
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <UpdateVersionCard
               label={t('updates.currentVersion')}
@@ -119,13 +123,13 @@ export default function UpdateAvailableDialog() {
               background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
             }}
           >
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+              <h3 className="flex-shrink-0 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {t('updates.releaseNotes')}
               </h3>
               {release.assetName && (
                 <span
-                  className="rounded-full px-2.5 py-1 text-[11px] font-medium"
+                  className="min-w-0 max-w-[65%] truncate rounded-full px-2.5 py-1 text-[11px] font-medium"
                   style={{
                     background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
                     color: 'var(--accent)',
@@ -138,7 +142,7 @@ export default function UpdateAvailableDialog() {
             <div
               className="overflow-y-auto rounded-xl px-3 py-3 text-sm leading-6"
               style={{
-                maxHeight: '240px',
+                maxHeight: 'clamp(120px, 32dvh, 240px)',
                 background: 'color-mix(in srgb, var(--bg-primary) 72%, transparent)',
                 color: 'var(--text-secondary)',
                 whiteSpace: 'pre-wrap',
@@ -150,7 +154,7 @@ export default function UpdateAvailableDialog() {
         </div>
 
         <div
-          className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-end"
+          className="flex flex-shrink-0 flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-end"
           style={{ borderTop: '1px solid color-mix(in srgb, var(--border) 78%, transparent)' }}
         >
           <button
