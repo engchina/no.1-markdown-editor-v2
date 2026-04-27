@@ -183,7 +183,8 @@
     "html": "Export as HTML",
     "pdf": "Export as PDF",
     "markdown": "Export Markdown",
-    "copyHtml": "Copy as HTML",
+    "copyRichHtml": "Copy Rich HTML",
+    "copyHtmlSource": "Copy HTML Source",
     "copied": "Copied!"
   },
   "preview": {
@@ -259,7 +260,7 @@
     "wordWrap": "Word Wrap",
     "showInvisibleCharacters": "Show Invisible Characters",
     "typewriterMode": "Typewriter Mode",
-    "showInvisibleCharactersHint": "Shows tabs, trailing spaces, and special whitespace in source mode. In WYSIWYG, inactive lines stay preview-clean.",
+    "showInvisibleCharactersHint": "Shows tabs, trailing spaces, and special whitespace in source mode. In WYSIWYG, only the focused cursor line shows markers.",
     "spellcheck": "SPELLCHECK",
     "spellcheckModes": {
       "document-language": "Document",
@@ -761,7 +762,8 @@
     "exportHtml": "Export as HTML",
     "exportPdf": "Export as PDF",
     "exportMarkdown": "Export Markdown",
-    "copyPreviewAsHtml": "Copy Preview as HTML",
+    "copyRichHtml": "Copy Preview as Rich HTML",
+    "copyHtmlSource": "Copy HTML Source",
     "aiAsk": "AI: Ask",
     "aiEditSelection": "AI: Edit Selection",
     "aiContinueWriting": "AI: Continue Writing",
@@ -920,8 +922,10 @@
     "assetPathPropagationPartialMessage": "Updated {{references}} references across {{documents}} documents, but {{failed}} documents still need manual repair.",
     "assetPathPropagationFailedTitle": "Couldn't update asset references",
     "assetPathPropagationFailedMessage": "The editor couldn't safely rewrite the affected documents after the asset move.",
-    "copyHtmlSuccessTitle": "HTML copied",
-    "copyHtmlSuccessMessage": "The rendered HTML is now on the clipboard.",
+    "copyHtmlSuccessTitle": "Rich HTML copied",
+    "copyHtmlSuccessMessage": "Rendered HTML is on the rich clipboard. Plain-text paste still uses Markdown.",
+    "copyHtmlSourceSuccessTitle": "HTML source copied",
+    "copyHtmlSourceSuccessMessage": "Rendered HTML source was copied as plain text.",
     "collapsedDetailsPasteTitle": "Collapsed details body was not copied",
     "collapsedDetailsPasteMessage": "When a webpage copies a closed <details> block, the browser only puts the summary on the clipboard. Expand that block on the webpage and copy again.",
     "dismissLabel": "Dismiss notification"

@@ -76,6 +76,7 @@ const COMMAND_PRIORITY = new Map<string, number>([
   ['export.pdf', 311],
   ['export.markdown', 312],
   ['export.copyHtml', 313],
+  ['export.copyHtmlSource', 314],
 ])
 
 function fuzzyMatch(query: string, text: string): boolean {
@@ -273,6 +274,8 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
       return <SvgBadge name="file" />
     case 'export.copyHtml':
       return <SvgBadge name="copy" />
+    case 'export.copyHtmlSource':
+      return <SvgBadge name="code" />
     default:
       return <SvgBadge name="outline" />
   }

@@ -181,7 +181,8 @@
     "html": "导出为 HTML",
     "pdf": "导出为 PDF",
     "markdown": "导出 Markdown",
-    "copyHtml": "复制为 HTML",
+    "copyRichHtml": "复制富文本 HTML",
+    "copyHtmlSource": "复制 HTML 源码",
     "copied": "已复制"
   },
   "preview": {
@@ -254,7 +255,7 @@
     "wordWrap": "自动换行",
     "showInvisibleCharacters": "显示不可见字符",
     "typewriterMode": "打字机模式",
-    "showInvisibleCharactersHint": "在源码模式下显示 Tab、行尾空格和特殊空白。WYSIWYG 中非当前行保持接近预览的干净效果。",
+    "showInvisibleCharactersHint": "在源码模式下显示 Tab、行尾空格和特殊空白。WYSIWYG 中仅在编辑器聚焦的光标行显示标记。",
     "spellcheck": "拼写检查",
     "spellcheckModes": {
       "document-language": "文档语言",
@@ -756,7 +757,8 @@
     "exportHtml": "导出为 HTML",
     "exportPdf": "导出为 PDF",
     "exportMarkdown": "导出 Markdown",
-    "copyPreviewAsHtml": "复制预览为 HTML",
+    "copyRichHtml": "复制预览为富文本 HTML",
+    "copyHtmlSource": "复制 HTML 源码",
     "aiAsk": "AI：提问",
     "aiEditSelection": "AI：编辑选区",
     "aiContinueWriting": "AI：继续写",
@@ -914,8 +916,10 @@
     "assetPathPropagationPartialMessage": "已在 {{documents}} 个文档中更新 {{references}} 处引用，但还有 {{failed}} 个文档需要手动修复。",
     "assetPathPropagationFailedTitle": "无法更新资源引用",
     "assetPathPropagationFailedMessage": "资源移动后，编辑器无法安全改写受影响的文档。",
-    "copyHtmlSuccessTitle": "HTML 已复制",
-    "copyHtmlSuccessMessage": "渲染后的 HTML 已复制到剪贴板。",
+    "copyHtmlSuccessTitle": "富文本 HTML 已复制",
+    "copyHtmlSuccessMessage": "渲染后的 HTML 已写入富文本剪贴板；纯文本粘贴仍会使用 Markdown。",
+    "copyHtmlSourceSuccessTitle": "HTML 源码已复制",
+    "copyHtmlSourceSuccessMessage": "渲染后的 HTML 源码已作为纯文本复制。",
     "collapsedDetailsPasteTitle": "折叠内容没有包含在剪贴板中",
     "collapsedDetailsPasteMessage": "网页在折叠状态下复制 <details> 时，浏览器只会提供标题。请先在网页中展开该块，再复制。",
     "dismissLabel": "关闭通知"

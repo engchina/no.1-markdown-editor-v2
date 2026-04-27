@@ -287,26 +287,37 @@ function ExportMenu({
   zoom: number
 }) {
   const { t } = useTranslation()
-  const { exportHtml, exportPdf, exportMarkdown, copyAsHtml } = useExport()
-  const [copied, setCopied] = useState(false)
+  const { exportHtml, exportPdf, exportMarkdown, copyAsHtml, copyHtmlSource } = useExport()
+  const [copiedItem, setCopiedItem] = useState<'rich-html' | 'html-source' | null>(null)
+
+  const markCopied = (item: 'rich-html' | 'html-source') => {
+    setCopiedItem(item)
+    setTimeout(() => setCopiedItem(null), 1500)
+  }
 
   const items: ToolbarMenuItem[] = [
     { id: 'html', label: t('export.html'), icon: 'code', action: exportHtml },
     { id: 'pdf', label: t('export.pdf'), icon: 'print', action: exportPdf },
     { id: 'markdown', label: t('export.markdown'), icon: 'file', action: exportMarkdown },
     {
-      id: 'copy-html',
-      label: copied ? t('export.copied') : t('export.copyHtml'),
+      id: 'copy-rich-html',
+      label: copiedItem === 'rich-html' ? t('export.copied') : t('export.copyRichHtml'),
       icon: 'copy',
       action: async () => {
-        await copyAsHtml()
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
+        if (await copyAsHtml()) markCopied('rich-html')
+      },
+    },
+    {
+      id: 'copy-html-source',
+      label: copiedItem === 'html-source' ? t('export.copied') : t('export.copyHtmlSource'),
+      icon: 'code',
+      action: async () => {
+        if (await copyHtmlSource()) markCopied('html-source')
       },
     },
   ]
 
-  return <ToolbarMenu items={items} onClose={onClose} triggerRef={triggerRef} label={t('toolbar.export')} width={200} zoom={zoom} />
+  return <ToolbarMenu items={items} onClose={onClose} triggerRef={triggerRef} label={t('toolbar.export')} width={230} zoom={zoom} />
 }
 
 export default function Toolbar({

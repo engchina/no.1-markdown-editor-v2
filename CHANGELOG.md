@@ -20,6 +20,26 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
 
+## 0.19.4 - 2026-04-27
+
+### Added
+
+- Added Copy HTML Source as a separate export action in the toolbar and command palette, so users can copy rendered HTML markup as plain text without using the rich clipboard path.
+
+### Changed
+
+- Copy Preview as HTML is now labeled as Copy Rich HTML across the toolbar, command palette, notices, and English, Japanese, and Chinese locales to make the clipboard behavior explicit.
+- WYSIWYG invisible-character markers now appear only on the focused cursor line and clear when the editor loses focus, keeping inactive lines closer to Preview.
+
+### Fixed
+
+- WYSIWYG inline Markdown now normalizes Windows absolute and UNC image paths before sanitization, so local images can enter the same Preview hydration path instead of losing their `src`.
+
+### Internal
+
+- Added Qiita implementation notes for export and clipboard behavior, image handling, Mermaid rendering, syntax highlighting, and WYSIWYG editing.
+- Added regression coverage for rich HTML vs HTML source copy, WYSIWYG invisible-character focus behavior, and Windows local-image hydration in inline Markdown.
+
 ## 0.19.3 - 2026-04-27
 
 ### Added

@@ -1,6 +1,6 @@
 # Upcoming Release Notes Draft
 
-This document is a draft for the next public release after `v0.19.2`.
+This document is a draft for the next public release after `v0.19.3`.
 
 It is intentionally written in release-note language rather than implementation language.
 
@@ -8,56 +8,43 @@ Start from `CHANGELOG.md` `## Unreleased`, then rewrite the user-visible changes
 
 ## Suggested Release Title
 
-`No.1 Markdown Editor v0.19.3`
+`No.1 Markdown Editor v0.19.4`
 
 ## Short Summary
 
-No.1 Markdown Editor v0.19.3 improves keyboard discoverability, search ergonomics, layout resizing, and Mermaid preview rendering. It is a focused desktop-writing update for users who want faster shortcut access, clearer editor controls, and less manual diagram rendering while keeping the writing surface quiet.
+No.1 Markdown Editor v0.19.4 clarifies export clipboard behavior and tightens WYSIWYG image and invisible-character handling. It separates rich HTML copy from plain-text HTML source copy, keeps WYSIWYG whitespace markers focused on the active writing point, and improves Windows local image preservation in inline Markdown rendering.
 
 ## Suggested GitHub Release Body
 
 ### Highlights
 
-- A new Keyboard Shortcuts dialog is available from the toolbar, command palette, and `Ctrl/Cmd+/`.
-- Search and replace now use labeled, grouped controls with a more compact responsive layout.
-- Visible Mermaid diagrams can render automatically in Preview, with manual Render All still available.
-- Resize dividers now show pointer-following hints for clearer drag affordance.
-- `Ctrl/Cmd+W` now closes the active file through the shared unsaved-changes flow.
+- Export now includes a dedicated Copy HTML Source action for rendered HTML markup as plain text.
+- Copy Preview as HTML is now labeled Copy Rich HTML to clarify that it uses the rich clipboard path.
+- WYSIWYG invisible-character markers now appear only on the focused cursor line.
+- Windows absolute and UNC image paths in WYSIWYG inline Markdown are normalized before sanitization so local images can hydrate like Preview images.
+- New implementation notes document export, clipboard, image handling, Mermaid, syntax highlighting, and WYSIWYG behavior.
 
 ### Why This Release Matters
 
-The editor has accumulated powerful keyboard and layout behavior, but those controls need to stay discoverable and predictable. This release brings shortcut help into the app, cleans up common editing controls, and reduces manual Preview work without changing the core Markdown model.
+Copying rendered content can mean two different things: placing rich HTML on the clipboard for apps that accept formatted paste, or copying the literal HTML source for publishing and debugging. This release makes that distinction explicit while also smoothing WYSIWYG writing details around whitespace and local image rendering.
 
 ### User-Facing Improvements
 
-#### Writing and Editing
+#### Export and Clipboard
 
-- Keyboard Shortcuts now lists command registry shortcuts plus editor navigation shortcuts in a bounded modal.
-- Additional Markdown formatting shortcuts are surfaced in the toolbar and command palette.
-- Source-editor `Ctrl/Cmd+/` now opens shortcut help instead of inserting Markdown comment syntax.
-- WYSIWYG invisible-character markers now appear only on the active edit line.
+- Copy Rich HTML keeps the existing rich clipboard behavior for formatted paste targets.
+- Copy HTML Source copies rendered HTML as plain text.
+- Toolbar, command palette, notices, and English, Japanese, and Chinese labels now use explicit wording for both copy paths.
 
-#### Markdown Workspace
+#### WYSIWYG Editing
 
-- `Ctrl/Cmd+W` closes the active file and reuses the existing dirty-tab save, discard, and cancel handling.
-- Resize dividers now keep visual hints separate from the layout track while retaining keyboard resize and reset support.
+- Invisible tabs, trailing spaces, and special whitespace markers now stay limited to the focused cursor line.
+- Markers clear when the editor loses focus, keeping inactive WYSIWYG lines visually closer to Preview.
+- Windows local image paths in inline Markdown are preserved for local image hydration instead of being dropped by sanitization.
 
-#### Performance and Reliability
+#### Documentation
 
-- Preview can auto-render visible Mermaid diagrams after the document settles.
-- Manual Mermaid rendering remains available, and automatic/manual paths share busy state to avoid duplicate rendering.
-- Primary shortcut matching now requires the platform's actual primary modifier, reducing cross-platform collisions.
-
-#### AI and Writing Quality
-
-- Keyboard Shortcuts, Mermaid auto-rendering, search UI, and invisible-character copy are updated across English, Japanese, and Chinese locales.
-
-### Recommended Screenshots For Release Page
-
-- Keyboard Shortcuts dialog showing grouped shortcut columns.
-- Search and replace bar with grouped find, replace, and option controls.
-- Preview with Mermaid diagrams auto-rendering in view.
-- Resize divider hint while dragging between editor and preview.
+- Added Qiita implementation notes for export and clipboard behavior, image handling, Mermaid rendering, syntax highlighting, and WYSIWYG editing.
 
 ### Suggested "Upgrade Notes" Section
 
@@ -68,21 +55,21 @@ The editor has accumulated powerful keyboard and layout behavior, but those cont
 
 This release is especially relevant for users who:
 
-- rely on keyboard shortcuts for editing and navigation
-- use Find and Replace frequently
-- write documents with Mermaid diagrams
-- tune sidebar or editor/preview widths often
+- copy rendered Markdown into other applications
+- need literal HTML source for publishing workflows
+- use WYSIWYG mode with invisible-character markers enabled
+- work with local images on Windows paths
 
 ## Packaging Checklist Before Release
 
 - Fill this draft using the current `CHANGELOG.md` `## Unreleased` section.
-- Run `npm run release:prepare -- 0.19.3` to sync the app version files and roll the current `## Unreleased` notes into a dated changelog section.
+- Run `npm run release:prepare -- 0.19.4 --date 2026-04-27` to sync the app version files and roll the current `## Unreleased` notes into a dated changelog section.
 - Confirm the final version in:
   - `package.json`
   - `src-tauri/tauri.conf.json`
   - `src-tauri/Cargo.toml`
 - Run `npm run release:validate` after the version bump so local metadata checks, changelog checks, and scaffold-placeholder checks fail before CI does.
-- Run `npm run release:notes:preview -- 0.19.3` if you want to inspect the generated GitHub release body before pushing the tag.
-- Review the `0.19.3` release notes before tagging.
+- Run `npm run release:notes:preview -- 0.19.4` if you want to inspect the generated GitHub release body before pushing the tag.
+- Review the `0.19.4` release notes before tagging.
 - Capture fresh screenshots for the product surfaces this release highlights.
-- After the release is published, run `npm run release:draft:advance -- 0.19.3` to reset this file and refresh `CHANGELOG.md` `## Unreleased` for the next release cycle.
+- After the release is published, run `npm run release:draft:advance -- 0.19.4` to reset this file and refresh `CHANGELOG.md` `## Unreleased` for the next release cycle.

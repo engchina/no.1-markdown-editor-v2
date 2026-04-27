@@ -181,7 +181,8 @@
     "html": "HTML として書き出し",
     "pdf": "PDF として書き出し",
     "markdown": "Markdown を書き出し",
-    "copyHtml": "HTML としてコピー",
+    "copyRichHtml": "リッチ HTML をコピー",
+    "copyHtmlSource": "HTML ソースをコピー",
     "copied": "コピーしました"
   },
   "preview": {
@@ -254,7 +255,7 @@
     "wordWrap": "折り返し",
     "showInvisibleCharacters": "不可視文字を表示",
     "typewriterMode": "タイプライターモード",
-    "showInvisibleCharactersHint": "ソースモードで Tab、行末空白、特殊な空白文字を表示します。WYSIWYG では非アクティブ行をプレビューに近いすっきりした表示に保ちます。",
+    "showInvisibleCharactersHint": "ソースモードで Tab、行末空白、特殊な空白文字を表示します。WYSIWYG ではフォーカス中のカーソル行だけにマーカーを表示します。",
     "spellcheck": "スペルチェック",
     "spellcheckModes": {
       "document-language": "文書言語",
@@ -756,7 +757,8 @@
     "exportHtml": "HTML として書き出し",
     "exportPdf": "PDF として書き出し",
     "exportMarkdown": "Markdown を書き出し",
-    "copyPreviewAsHtml": "プレビューを HTML としてコピー",
+    "copyRichHtml": "プレビューをリッチ HTML としてコピー",
+    "copyHtmlSource": "HTML ソースをコピー",
     "aiAsk": "AI: 質問",
     "aiEditSelection": "AI: 選択範囲を編集",
     "aiContinueWriting": "AI: 続きを書く",
@@ -914,8 +916,10 @@
     "assetPathPropagationPartialMessage": "{{documents}} 件の文書で {{references}} 件の参照を更新しましたが、{{failed}} 件の文書はまだ手動修復が必要です。",
     "assetPathPropagationFailedTitle": "アセット参照を更新できませんでした",
     "assetPathPropagationFailedMessage": "アセット移動後に対象文書を安全に書き換えられませんでした。",
-    "copyHtmlSuccessTitle": "HTML をコピーしました",
-    "copyHtmlSuccessMessage": "レンダリング済み HTML をクリップボードにコピーしました。",
+    "copyHtmlSuccessTitle": "リッチ HTML をコピーしました",
+    "copyHtmlSuccessMessage": "レンダリング済み HTML をリッチクリップボードにコピーしました。プレーンテキスト貼り付けでは Markdown が使われます。",
+    "copyHtmlSourceSuccessTitle": "HTML ソースをコピーしました",
+    "copyHtmlSourceSuccessMessage": "レンダリング済み HTML ソースをプレーンテキストとしてコピーしました。",
     "collapsedDetailsPasteTitle": "折りたたみ内の本文はクリップボードに含まれていません",
     "collapsedDetailsPasteMessage": "Web ページ上で閉じた <details> をコピーすると、ブラウザーは見出しだけを渡します。元のページでそのブロックを開いてからコピーしてください。",
     "dismissLabel": "通知を閉じる"

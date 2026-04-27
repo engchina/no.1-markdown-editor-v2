@@ -143,7 +143,7 @@ Rules:
 
 - the mode is off by default
 - when enabled, source mode shows tabs, trailing whitespace, and special whitespace characters
-- when WYSIWYG live preview is enabled, invisible whitespace is limited to the active edit line so inactive lines stay visually consistent with Preview
+- when WYSIWYG live preview is enabled, invisible whitespace is limited to the focused cursor line so inactive lines stay visually consistent with Preview
 - line-ending spaces must be more prominent than other invisible characters because they can carry Markdown hard-break intent
 - the mode must not change saved Markdown, preview HTML, export HTML, or clipboard HTML
 - the mode must not hide backslash hard-break syntax; explicit source remains explicit
@@ -165,7 +165,7 @@ Rules:
 - `Show invisible characters`
   - Off by default
   - Source-editor visual aid
-  - In WYSIWYG live preview, limited to the active edit line
+  - In WYSIWYG live preview, limited to the focused cursor line
 
 ### Not Planned
 
@@ -190,7 +190,7 @@ Rules:
   - `strict`
   - `visual-soft-breaks`
 - Preview visual soft-break mode is isolated from Markdown parsing, clipboard HTML, and export HTML paths by regression tests.
-- Source editor can optionally reveal tabs, trailing whitespace, and special whitespace characters; WYSIWYG live preview limits those markers to the active edit line so inactive lines remain preview-clean. Line-ending spaces are emphasized so Markdown hard breaks are easier to debug.
+- Source editor can optionally reveal tabs, trailing whitespace, and special whitespace characters; WYSIWYG live preview limits those markers to the focused cursor line so inactive lines remain preview-clean. Line-ending spaces are emphasized so Markdown hard breaks are easier to debug.
 - WYSIWYG live preview now treats `<br>` / `<br />`, backslash hard breaks, and trailing-space hard breaks as real hard breaks when the cursor is off the line, instead of exposing raw syntax.
 - Task-list checkbox keyboard toggles are limited to plain `Enter` / `Space`, so `Shift+Enter` is not consumed by checkbox widgets.
 - Markdown structural `Enter` continuation for unordered lists, ordered lists, task lists, and blockquotes is currently provided by the CodeMirror Markdown keymap.

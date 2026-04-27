@@ -8,6 +8,7 @@ import rehypeStringify from 'rehype-stringify'
 import rehypeKatex from 'rehype-katex'
 import { sanitizeSchema } from '../../lib/markdownShared.ts'
 import { rehypeHighlightMarkers } from '../../lib/rehypeHighlightMarkers.ts'
+import { rehypeNormalizeImageSources } from '../../lib/rehypeNormalizeImageSources.ts'
 import { rehypeSubscriptMarkers } from '../../lib/rehypeSubscriptMarkers.ts'
 import { rehypeSuperscriptMarkers } from '../../lib/rehypeSuperscriptMarkers.ts'
 import { buildReferenceAwareMarkdownSource } from './wysiwygReferenceLinks.ts'
@@ -36,6 +37,7 @@ const inlineMarkdownProcessor = unified()
   .use(rehypeSubscriptMarkers)
   .use(rehypeSuperscriptMarkers)
   .use(rehypeHighlightMarkers)
+  .use(rehypeNormalizeImageSources)
   .use(rehypeSanitize, sanitizeSchema)
   .use(rehypeKatex)
   .use(rehypeStringify)

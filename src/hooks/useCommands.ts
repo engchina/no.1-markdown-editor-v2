@@ -40,7 +40,7 @@ export function useCommands(): Command[] {
   const { t } = useTranslation()
   const store = useEditorStore()
   const { newFile, openFile, saveFile, saveFileAs, closeActiveFile } = useFileOps()
-  const { exportHtml, exportPdf, exportMarkdown, copyAsHtml } = useExport()
+  const { exportHtml, exportPdf, exportMarkdown, copyAsHtml, copyHtmlSource } = useExport()
   const { recentFiles, openRecent, clearRecent } = useRecentFiles()
   const newShortcut = formatPrimaryShortcut('N')
   const openShortcut = formatPrimaryShortcut('O')
@@ -564,11 +564,20 @@ export function useCommands(): Command[] {
       },
       {
         id: 'export.copyHtml',
-        label: t('commands.copyPreviewAsHtml'),
+        label: t('commands.copyRichHtml'),
         icon: '📋',
         category: 'export',
         action: () => {
           void copyAsHtml()
+        },
+      },
+      {
+        id: 'export.copyHtmlSource',
+        label: t('commands.copyHtmlSource'),
+        icon: '<>',
+        category: 'export',
+        action: () => {
+          void copyHtmlSource()
         },
       },
       ...THEMES.map((theme) => ({
@@ -614,6 +623,7 @@ export function useCommands(): Command[] {
     closeActiveFile,
     closeFileShortcut,
     copyAsHtml,
+    copyHtmlSource,
     exportHtml,
     exportMarkdown,
     exportPdf,

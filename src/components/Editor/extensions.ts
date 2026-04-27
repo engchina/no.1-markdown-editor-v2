@@ -128,7 +128,7 @@ const activeLineTrailingSpaceDecorator = createTrailingSpaceDecorator({ activeLi
 const activeLineSpecialCharDecorator = new MatchDecorator({
   regexp: INVISIBLE_MARKDOWN_SPECIAL_CHARS,
   decorate(add, from, to, match, view) {
-    if (!rangeStartsOnSelectionLine(view, from)) return
+    if (!rangeStartsOnFocusedCursorLine(view, from)) return
 
     if (match[0] === '\t') {
       const line = view.state.doc.lineAt(from)
@@ -147,7 +147,7 @@ function createTrailingSpaceDecorator(options: { activeLineOnly?: boolean } = {}
     regexp: / +(?=[\t ]*$)/g,
     // Decorate each trailing space separately so CSS can render exactly one dot per space.
     decorate(add, from, to, _match, view) {
-      if (options.activeLineOnly && !rangeStartsOnSelectionLine(view, from)) return
+      if (options.activeLineOnly && !rangeStartsOnFocusedCursorLine(view, from)) return
 
       for (let pos = from; pos < to; pos += 1) {
         add(pos, pos + 1, trailingSpaceMark)
@@ -156,12 +156,13 @@ function createTrailingSpaceDecorator(options: { activeLineOnly?: boolean } = {}
   })
 }
 
-function rangeStartsOnSelectionLine(view: EditorView, from: number): boolean {
+function rangeStartsOnFocusedCursorLine(view: EditorView, from: number): boolean {
+  if (!view.hasFocus) return false
+
   const lineNumber = view.state.doc.lineAt(from).number
   return view.state.selection.ranges.some((range) => {
-    const selectionFromLine = view.state.doc.lineAt(range.from).number
-    const selectionToLine = view.state.doc.lineAt(range.to).number
-    return lineNumber >= selectionFromLine && lineNumber <= selectionToLine
+    const cursorLine = view.state.doc.lineAt(range.head).number
+    return lineNumber === cursorLine
   })
 }
 
@@ -366,7 +367,7 @@ function buildMatchDecoratorExtension(
       }
 
       update(update: ViewUpdate) {
-        this.decorations = options.refreshOnSelectionSet && update.selectionSet
+        this.decorations = options.refreshOnSelectionSet && (update.selectionSet || update.focusChanged)
           ? decorator.createDeco(update.view)
           : decorator.updateDeco(update, this.decorations)
       }

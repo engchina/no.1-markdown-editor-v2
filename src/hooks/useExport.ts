@@ -2,7 +2,11 @@ import { useCallback } from 'react'
 import i18n from '../i18n'
 import { useActiveTab } from '../store/editor'
 import { useExportStatusStore, type ExportActivityKind } from '../store/exportStatus'
-import { buildRichClipboardPayload, writeClipboardPayload } from '../lib/clipboardHtml'
+import {
+  buildRichClipboardPayload,
+  renderClipboardHtmlFromMarkdown,
+  writeClipboardPayload,
+} from '../lib/clipboardHtml'
 import { ensureFsPathAccess } from '../lib/fsAccess'
 import { pushErrorNotice, pushSuccessNotice } from '../lib/notices'
 
@@ -28,6 +32,30 @@ function downloadBlob(blob: Blob, fileName: string) {
     URL.revokeObjectURL(url)
     document.body.removeChild(anchor)
   }, 1000)
+}
+
+async function copyPlainTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.clipboard?.writeText === 'function') {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // Fall back to the selection-based clipboard path below.
+  }
+
+  if (typeof document === 'undefined') return false
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  return copied
 }
 
 function getErrorMessage(error: unknown): string {
@@ -290,7 +318,7 @@ export function useExport() {
   }, [activeTab])
 
   const copyAsHtml = useCallback(async () => {
-    if (!activeTab) return
+    if (!activeTab) return false
 
     try {
       const mermaidTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'default'
@@ -322,11 +350,34 @@ export function useExport() {
       }
 
       pushSuccessNotice('notices.copyHtmlSuccessTitle', 'notices.copyHtmlSuccessMessage')
+      return true
     } catch (error) {
       console.error('Copy HTML error:', error)
       pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')
+      return false
     }
   }, [activeTab])
 
-  return { exportHtml, exportPdf, exportMarkdown, copyAsHtml }
+  const copyHtmlSource = useCallback(async () => {
+    if (!activeTab) return false
+
+    try {
+      const mermaidTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'default'
+      const html = await renderClipboardHtmlFromMarkdown(activeTab.content, mermaidTheme)
+      const copied = await copyPlainTextToClipboard(html)
+
+      if (!copied) {
+        throw new Error('Clipboard copy failed')
+      }
+
+      pushSuccessNotice('notices.copyHtmlSourceSuccessTitle', 'notices.copyHtmlSourceSuccessMessage')
+      return true
+    } catch (error) {
+      console.error('Copy HTML source error:', error)
+      pushErrorNotice('notices.exportErrorTitle', 'notices.exportErrorMessage')
+      return false
+    }
+  }, [activeTab])
+
+  return { exportHtml, exportPdf, exportMarkdown, copyAsHtml, copyHtmlSource }
 }
