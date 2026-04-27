@@ -528,6 +528,20 @@ function setMermaidShellStatus(shell: HTMLElement, message: string, kind: 'error
   status.setAttribute('role', kind === 'error' ? 'alert' : 'status')
 }
 
+function setMermaidShellRendering(shell: HTMLElement, rendering: boolean): void {
+  const button = shell.querySelector<HTMLButtonElement>('[data-mermaid-action="render"]')
+  if (rendering) {
+    shell.dataset.mermaidRendering = 'true'
+    shell.setAttribute('aria-busy', 'true')
+    if (button) button.disabled = true
+    return
+  }
+
+  delete shell.dataset.mermaidRendering
+  shell.removeAttribute('aria-busy')
+  if (button) button.disabled = false
+}
+
 export function getMermaidErrorMessage(error: unknown, fallbackMessage: string): string {
   const detail =
     error instanceof Error ? error.message
@@ -694,6 +708,7 @@ export async function renderMermaidShells(
 
   for (const [index, shell] of shells.entries()) {
     if (options.isCancelled?.()) return false
+    if (shell.dataset.mermaidRendering === 'true') continue
 
     const encodedSource = shell.dataset.mermaidSource
     if (!encodedSource) continue
@@ -717,6 +732,7 @@ export async function renderMermaidShells(
     }
 
     try {
+      setMermaidShellRendering(shell, true)
       clearMermaidShellStatus(shell)
       const svg = await renderMermaidToSvg(source, theme, `mermaid-${index}`)
       if (options.isCancelled?.()) return false
@@ -746,6 +762,8 @@ export async function renderMermaidShells(
       )
       if (button) button.textContent = getMermaidActionLabel(shell)
       if (code) code.hidden = false
+    } finally {
+      setMermaidShellRendering(shell, false)
     }
   }
 

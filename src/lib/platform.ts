@@ -1,7 +1,11 @@
 type ShortcutEvent = Pick<
   KeyboardEvent,
   'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'
->
+> & {
+  isComposing?: boolean
+}
+
+export type PrimaryModifierEvent = Pick<KeyboardEvent, 'ctrlKey' | 'metaKey'>
 
 export function isMacPlatform(): boolean {
   if (typeof navigator === 'undefined') return false
@@ -9,21 +13,27 @@ export function isMacPlatform(): boolean {
   return /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent)
 }
 
-export function getPrimaryModifierLabel(): string {
-  return isMacPlatform() ? '⌘' : 'Ctrl'
+export function hasPrimaryModifier(event: PrimaryModifierEvent, mac = isMacPlatform()): boolean {
+  return mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
+}
+
+export function getPrimaryModifierLabel(mac = isMacPlatform()): string {
+  return mac ? '⌘' : 'Ctrl'
 }
 
 export function formatPrimaryShortcut(
   key: string,
   options: {
+    alt?: boolean
     shift?: boolean
-  } = {}
+  } = {},
+  mac = isMacPlatform()
 ): string {
-  if (isMacPlatform()) {
-    return `${getPrimaryModifierLabel()}${options.shift ? '⇧' : ''}${key}`
+  if (mac) {
+    return `${getPrimaryModifierLabel(mac)}${options.alt ? '⌥' : ''}${options.shift ? '⇧' : ''}${key}`
   }
 
-  return [getPrimaryModifierLabel(), options.shift ? 'Shift' : '', key]
+  return [getPrimaryModifierLabel(mac), options.alt ? 'Alt' : '', options.shift ? 'Shift' : '', key]
     .filter(Boolean)
     .join('+')
 }
@@ -35,9 +45,11 @@ export function matchesPrimaryShortcut(
     code?: string
     shift?: boolean
     alt?: boolean
-  }
+  },
+  mac = isMacPlatform()
 ): boolean {
-  if (!(event.ctrlKey || event.metaKey)) return false
+  if (event.isComposing) return false
+  if (!hasPrimaryModifier(event, mac)) return false
   if ((options.shift ?? false) !== event.shiftKey) return false
   if ((options.alt ?? false) !== event.altKey) return false
 

@@ -6,9 +6,11 @@ import { LANGUAGES, type Language } from '../../i18n'
 import { useFileOps } from '../../hooks/useFileOps'
 import { useAnchoredOverlayStyle } from '../../hooks/useAnchoredOverlayStyle'
 import { useExport } from '../../hooks/useExport'
-import { formatPrimaryShortcut } from '../../lib/platform'
+import { formatPrimaryShortcut, matchesPrimaryShortcut } from '../../lib/platform'
 import { EDITOR_AI_SETUP_OPEN_EVENT } from '../../lib/ai/events'
+import { getKeyboardShortcutsShortcutLabel } from '../../lib/keyboardShortcuts'
 import type { FormatAction } from '../Editor/formatCommands'
+import { getFormatShortcutLabel } from '../Editor/formatShortcuts'
 import AppIcon, { type IconName } from '../Icons/AppIcon'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -24,6 +26,7 @@ interface ToolbarMenuItem {
   label: string
   icon?: IconName
   textIcon?: string
+  shortcut?: string
   action: () => void | Promise<void>
 }
 
@@ -241,7 +244,7 @@ function ToolbarMenu({
         borderColor: 'var(--glass-border)',
       }}
     >
-      {items.map(({ id, label: itemLabel, icon, textIcon, action }, index) => (
+      {items.map(({ id, label: itemLabel, icon, textIcon, shortcut, action }, index) => (
         <button
           key={id}
           ref={(element) => {
@@ -261,7 +264,12 @@ function ToolbarMenu({
           onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
         >
           <ToolbarMenuGlyph icon={icon} textIcon={textIcon} />
-          <span>{itemLabel}</span>
+          <span className="min-w-0 flex-1 truncate">{itemLabel}</span>
+          {shortcut && (
+            <span className="ml-2 flex-shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {shortcut}
+            </span>
+          )}
         </button>
       ))}
     </div>,
@@ -301,7 +309,17 @@ function ExportMenu({
   return <ToolbarMenu items={items} onClose={onClose} triggerRef={triggerRef} label={t('toolbar.export')} width={200} zoom={zoom} />
 }
 
-export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () => void; saving?: boolean }) {
+export default function Toolbar({
+  onOpenPalette,
+  onOpenShortcuts,
+  shortcutsOpen = false,
+  saving,
+}: {
+  onOpenPalette?: () => void
+  onOpenShortcuts?: () => void
+  shortcutsOpen?: boolean
+  saving?: boolean
+}) {
   const { t } = useTranslation()
   const {
     viewMode,
@@ -338,25 +356,27 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
   const openShortcut = formatPrimaryShortcut('O')
   const saveShortcut = formatPrimaryShortcut('S')
   const commandPaletteShortcut = formatPrimaryShortcut('P', { shift: true })
+  const shortcutsShortcut = getKeyboardShortcutsShortcutLabel()
   const sidebarShortcut = formatPrimaryShortcut('\\')
+  const headingShortcut = getFormatShortcutLabel('heading')
+  const boldShortcut = getFormatShortcutLabel('bold')
+  const italicShortcut = getFormatShortcutLabel('italic')
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      const mod = event.ctrlKey || event.metaKey
-      const key = event.key.toLowerCase()
-      if (mod && key === 'n') {
+      if (matchesPrimaryShortcut(event, { key: 'n' })) {
         event.preventDefault()
         newFile()
       }
-      if (mod && key === 'o') {
+      if (matchesPrimaryShortcut(event, { key: 'o' })) {
         event.preventDefault()
         void openFile()
       }
-      if (mod && event.shiftKey && key === 's') {
+      if (matchesPrimaryShortcut(event, { key: 's', shift: true })) {
         event.preventDefault()
         void saveFileAs()
       }
-      if (mod && !event.shiftKey && key === 's') {
+      if (matchesPrimaryShortcut(event, { key: 's' })) {
         event.preventDefault()
         void saveFile()
       }
@@ -389,18 +409,24 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
 
   const formatItems: ToolbarMenuItem[] = [
     { id: 'quote', label: t('toolbar.quote'), icon: 'quote', action: () => emitFormat('quote') },
-    { id: 'ul', label: t('toolbar.ul'), icon: 'list', action: () => emitFormat('ul') },
-    { id: 'ol', label: t('toolbar.ol'), icon: 'orderedList', action: () => emitFormat('ol') },
-    { id: 'task', label: t('toolbar.task'), icon: 'task', action: () => emitFormat('task') },
-    { id: 'underline', label: t('toolbar.underline'), icon: 'underline', action: () => emitFormat('underline') },
-    { id: 'strikethrough', label: t('toolbar.strikethrough'), icon: 'strikethrough', action: () => emitFormat('strikethrough') },
+    { id: 'ul', label: t('toolbar.ul'), icon: 'list', shortcut: getFormatShortcutLabel('ul'), action: () => emitFormat('ul') },
+    { id: 'ol', label: t('toolbar.ol'), icon: 'orderedList', shortcut: getFormatShortcutLabel('ol'), action: () => emitFormat('ol') },
+    { id: 'task', label: t('toolbar.task'), icon: 'task', shortcut: getFormatShortcutLabel('task'), action: () => emitFormat('task') },
+    { id: 'underline', label: t('toolbar.underline'), icon: 'underline', shortcut: getFormatShortcutLabel('underline'), action: () => emitFormat('underline') },
+    {
+      id: 'strikethrough',
+      label: t('toolbar.strikethrough'),
+      icon: 'strikethrough',
+      shortcut: getFormatShortcutLabel('strikethrough'),
+      action: () => emitFormat('strikethrough'),
+    },
     { id: 'highlight', label: t('toolbar.highlight'), icon: 'highlight', action: () => emitFormat('highlight') },
-    { id: 'link', label: t('toolbar.link'), icon: 'link', action: () => emitFormat('link') },
-    { id: 'code', label: t('toolbar.code'), icon: 'code', action: () => emitFormat('code') },
-    { id: 'codeblock', label: t('toolbar.codeBlock'), icon: 'codeBlock', action: () => emitFormat('codeblock') },
+    { id: 'link', label: t('toolbar.link'), icon: 'link', shortcut: getFormatShortcutLabel('link'), action: () => emitFormat('link') },
+    { id: 'code', label: t('toolbar.code'), icon: 'code', shortcut: getFormatShortcutLabel('code'), action: () => emitFormat('code') },
+    { id: 'codeblock', label: t('toolbar.codeBlock'), icon: 'codeBlock', shortcut: getFormatShortcutLabel('codeblock'), action: () => emitFormat('codeblock') },
     { id: 'table', label: t('toolbar.table'), icon: 'table', action: () => emitFormat('table') },
     { id: 'hr', label: t('toolbar.hr'), icon: 'hr', action: () => emitFormat('hr') },
-    { id: 'image', label: t('toolbar.image'), icon: 'image', action: () => emitFormat('image') },
+    { id: 'image', label: t('toolbar.image'), icon: 'image', shortcut: getFormatShortcutLabel('image'), action: () => emitFormat('image') },
   ]
 
   return (
@@ -450,7 +476,7 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
       <ToolbarGroup label={t('toolbar.format')}>
         <div className="relative">
           <ToolbarBtn
-            title={t('toolbar.headings')}
+            title={`${t('toolbar.headings')} (${headingShortcut})`}
             buttonRef={headingButtonRef}
             onClick={() => setShowHeadings((open) => !open)}
             active={showHeadings}
@@ -473,10 +499,10 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
           )}
         </div>
 
-        <ToolbarBtn title={t('toolbar.bold')} onClick={() => emitFormat('bold')}>
+        <ToolbarBtn title={`${t('toolbar.bold')} (${boldShortcut})`} onClick={() => emitFormat('bold')}>
           <AppIcon name="bold" size={16} />
         </ToolbarBtn>
-        <ToolbarBtn title={t('toolbar.italic')} onClick={() => emitFormat('italic')}>
+        <ToolbarBtn title={`${t('toolbar.italic')} (${italicShortcut})`} onClick={() => emitFormat('italic')}>
           <AppIcon name="italic" size={16} />
         </ToolbarBtn>
 
@@ -497,7 +523,7 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
               onClose={() => setShowMoreActions(false)}
               triggerRef={moreActionsButtonRef}
               label={t('toolbar.moreActions')}
-              width={236}
+              width={272}
               zoom={zoom}
             />
           )}
@@ -550,6 +576,22 @@ export default function Toolbar({ onOpenPalette, saving }: { onOpenPalette?: () 
       <ToolbarBtn title={`${t('toolbar.commandPalette')} (${commandPaletteShortcut})`} onClick={() => onOpenPalette?.()}>
         <span data-toolbar-action="command-palette" className="contents">
         <AppIcon name="command" size={16} />
+        </span>
+      </ToolbarBtn>
+
+      <ToolbarBtn
+        title={`${t('shortcuts.open')} (${shortcutsShortcut})`}
+        onClick={() => {
+          setShowTheme(false)
+          setShowAISetup(false)
+          setShowAbout(false)
+          onOpenShortcuts?.()
+        }}
+        active={shortcutsOpen}
+        pressed={shortcutsOpen}
+      >
+        <span data-toolbar-action="keyboard-shortcuts" className="contents">
+        <AppIcon name="shortcuts" size={17} />
         </span>
       </ToolbarBtn>
 

@@ -40,6 +40,7 @@ export type IconName =
   | 'save'
   | 'settings'
   | 'search'
+  | 'shortcuts'
   | 'sparkles'
   | 'split'
   | 'strikethrough'
@@ -51,9 +52,12 @@ export type IconName =
   | 'underline'
   | 'wrap'
   | 'wysiwyg'
+  | 'x'
   | 'chevronRight'
   | 'chevronDown'
   | 'alertCircle'
+  | 'arrowDown'
+  | 'arrowUp'
   | 'checkCircle'
 
 const PATHS: Record<IconName, string> = {
@@ -96,6 +100,7 @@ const PATHS: Record<IconName, string> = {
   save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z M7 3v5h8 M7 21v-8h10v8',
   settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z',
   search: 'M21 21l-4.3-4.3 M17 10a7 7 0 1 1-14 0a7 7 0 0 1 14 0',
+  shortcuts: 'M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z M7.5 9.5h2v2h-2z M11 9.5h2v2h-2z M14.5 9.5h2v2h-2z M7.5 14.5h6 M17.5 14l-2.2 2.5 M18.5 16.5h-3.2',
   sparkles: 'm12 3 1.9 5.8a2 2 0 0 0 1.2 1.2L21 12l-5.8 1.9a2 2 0 0 0-1.2 1.2L12 21l-1.9-5.8a2 2 0 0 0-1.2-1.2L3 12l5.8-1.9a2 2 0 0 0 1.2-1.2L12 3Z M5 3l.4 1.1a1 1 0 0 0 .5.5L7 5 M19 17l.4 1.1a1 1 0 0 0 .5.5L21 19',
   split: 'M3 5h18v14H3z M12 5v14',
   strikethrough: 'M16 4H9a3 3 0 0 0-2.8 4 M14 12a4 4 0 0 1 0 8H6 M4 12h16',
@@ -107,9 +112,12 @@ const PATHS: Record<IconName, string> = {
   underline: 'M8 4v8a4 4 0 0 0 8 0V4 M5 20h14',
   wrap: 'm3 11 3-3-3-3 M7 11h7a5 5 0 0 0 5-5v0a5 5 0 0 0-5-5H7',
   wysiwyg: 'M4 5h16v14H4z M12 5v14 M7 9h3 M7 13h2 M14 12c1.2-1.7 3.8-1.7 5 0-1.2 1.7-3.8 1.7-5 0z M16.5 12h.01',
+  x: 'M18 6L6 18 M6 6l12 12',
   chevronRight: 'M9 6l6 6-6 6',
   chevronDown: 'M6 9l6 6 6-6',
   alertCircle: 'M12 8v5 M12 16h.01 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
+  arrowDown: 'M12 5v14 M5 12l7 7 7-7',
+  arrowUp: 'M12 19V5 M5 12l7-7 7 7',
   checkCircle: 'M9 12l2 2 4-4 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0',
 }
 

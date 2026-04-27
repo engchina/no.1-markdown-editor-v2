@@ -8,6 +8,7 @@ test('App lazily mounts rare dialogs while still triggering the automatic update
   assert.match(app, /const UpdateAvailableDialog = lazy\(\(\) => import\('\.\/components\/Updates\/UpdateAvailableDialog'\)\)/)
   assert.match(app, /const ExternalMissingFileDialog = lazy\(\(\) => import\('\.\/components\/ExternalFileConflicts\/ExternalMissingFileDialog'\)\)/)
   assert.match(app, /const ExternalFileConflictDialog = lazy\(\(\) => import\('\.\/components\/ExternalFileConflicts\/ExternalFileConflictDialog'\)\)/)
+  assert.match(app, /const KeyboardShortcutsDialog = lazy\(\(\) => import\('\.\/components\/KeyboardShortcuts\/KeyboardShortcutsDialog'\)\)/)
   assert.match(app, /const updateDialogOpen = useUpdateStore\(\(state\) => state\.dialogOpen\)/)
   assert.match(app, /const externalMissingDialogOpen = useEditorStore\(\(state\) => state\.externalMissingFiles\.length > 0\)/)
   assert.match(
@@ -17,6 +18,7 @@ test('App lazily mounts rare dialogs while still triggering the automatic update
   assert.match(app, /import \{ maybeRunAutomaticUpdateCheck \} from '\.\/lib\/updateActions'/)
   assert.match(app, /void maybeRunAutomaticUpdateCheck\(\)/)
   assert.match(app, /\{updateDialogOpen && \(\s*<Suspense fallback=\{null\}>\s*<UpdateAvailableDialog \/>\s*<\/Suspense>\s*\)\}/)
+  assert.match(app, /\{keyboardShortcutsOpen && \(\s*<Suspense fallback=\{null\}>\s*<KeyboardShortcutsDialog onClose=\{\(\) => setKeyboardShortcutsOpen\(false\)\} \/>\s*<\/Suspense>\s*\)\}/)
   assert.match(app, /\{externalMissingDialogOpen && \(\s*<Suspense fallback=\{null\}>\s*<ExternalMissingFileDialog \/>\s*<\/Suspense>\s*\)\}/)
   assert.match(app, /\{externalConflictDialogOpen && \(\s*<Suspense fallback=\{null\}>\s*<ExternalFileConflictDialog \/>\s*<\/Suspense>\s*\)\}/)
 })
@@ -73,6 +75,7 @@ test('toolbar right-side utility controls follow the approved order', async () =
   const focusIndex = toolbar.indexOf('data-toolbar-action="focus-mode"')
   const sourceIndex = toolbar.indexOf('data-view-mode={mode}')
   const commandPaletteIndex = toolbar.indexOf('data-toolbar-action="command-palette"')
+  const shortcutsIndex = toolbar.indexOf('data-toolbar-action="keyboard-shortcuts"')
   const languageIndex = toolbar.indexOf('data-language-select="true"')
   const settingsIndex = toolbar.indexOf('data-toolbar-action="settings"')
   const aiSetupIndex = toolbar.indexOf('data-toolbar-action="ai-setup"')
@@ -81,6 +84,7 @@ test('toolbar right-side utility controls follow the approved order', async () =
   assert.notEqual(focusIndex, -1)
   assert.notEqual(sourceIndex, -1)
   assert.notEqual(commandPaletteIndex, -1)
+  assert.notEqual(shortcutsIndex, -1)
   assert.notEqual(languageIndex, -1)
   assert.notEqual(settingsIndex, -1)
   assert.notEqual(aiSetupIndex, -1)
@@ -88,7 +92,8 @@ test('toolbar right-side utility controls follow the approved order', async () =
 
   assert.ok(focusIndex < sourceIndex)
   assert.ok(sourceIndex < commandPaletteIndex)
-  assert.ok(commandPaletteIndex < languageIndex)
+  assert.ok(commandPaletteIndex < shortcutsIndex)
+  assert.ok(shortcutsIndex < languageIndex)
   assert.ok(languageIndex < settingsIndex)
   assert.ok(settingsIndex < aiSetupIndex)
   assert.ok(aiSetupIndex < aboutIndex)
@@ -109,7 +114,23 @@ test('toolbar AI entry and setup panel locale copy exist across en, ja, and zh',
   ])
 
   const locales = [JSON.parse(enRaw), JSON.parse(jaRaw), JSON.parse(zhRaw)] as Array<Record<string, unknown>>
-  const keys = ['toolbar.aiSetup', 'toolbar.format', 'toolbar.wysiwyg', 'ai.setup.title', 'ai.setup.open']
+  const keys = [
+    'toolbar.aiSetup',
+    'toolbar.format',
+    'toolbar.wysiwyg',
+    'ai.setup.title',
+    'ai.setup.open',
+    'shortcuts.title',
+    'shortcuts.open',
+    'shortcuts.subtitle',
+    'shortcuts.count',
+    'shortcuts.switchFile',
+    'shortcuts.categories.file',
+    'shortcuts.categories.edit',
+    'shortcuts.categories.view',
+    'shortcuts.categories.ai',
+    'shortcuts.categories.help',
+  ]
 
   for (const locale of locales) {
     for (const key of keys) {

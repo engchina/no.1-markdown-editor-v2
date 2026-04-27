@@ -23,6 +23,7 @@ import {
 import AISelectionBubble from '../AI/AISelectionBubble'
 import { applyFormat } from './formatCommands'
 import { getFormatActionFromShortcut } from './formatShortcuts'
+import { matchesPrimaryShortcut } from '../../lib/platform.ts'
 import {
   cancelAICompletion,
   isAIRuntimeAvailable,
@@ -616,7 +617,9 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
       }),
       lineNumbersCompartmentRef.current.of(lineNumbers ? buildLineNumberExtensions() : []),
       wordWrapCompartmentRef.current.of(buildWordWrapExtensions(wordWrap)),
-      invisibleCharactersCompartmentRef.current.of(buildInvisibleCharacterExtensions(showInvisibleCharacters)),
+      invisibleCharactersCompartmentRef.current.of(
+        buildInvisibleCharacterExtensions(showInvisibleCharacters, { activeLineOnly: wysiwygMode })
+      ),
       placeholderCompartmentRef.current.of(buildPlaceholderExtensions(t('placeholder'))),
       languageCompartmentRef.current.of(markdownLanguageExtensions),
       searchCompartmentRef.current.of(searchSupport?.extensions ?? []),
@@ -698,8 +701,11 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
   }, [reconfigure, wordWrap])
 
   useEffect(() => {
-    reconfigure(invisibleCharactersCompartmentRef.current, buildInvisibleCharacterExtensions(showInvisibleCharacters))
-  }, [reconfigure, showInvisibleCharacters])
+    reconfigure(
+      invisibleCharactersCompartmentRef.current,
+      buildInvisibleCharacterExtensions(showInvisibleCharacters, { activeLineOnly: wysiwygMode })
+    )
+  }, [reconfigure, showInvisibleCharacters, wysiwygMode])
 
   useEffect(() => {
     reconfigure(placeholderCompartmentRef.current, buildPlaceholderExtensions(t('placeholder')))
@@ -869,13 +875,12 @@ export default function CodeMirrorEditor({ content, onChange }: Props) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const mod = event.ctrlKey || event.metaKey
-      if (mod && event.key === 'f') {
+      if (matchesPrimaryShortcut(event, { key: 'f' })) {
         event.preventDefault()
         openSearchPanel(false)
         return
       }
-      if (mod && event.key === 'h') {
+      if (matchesPrimaryShortcut(event, { key: 'h' })) {
         event.preventDefault()
         openSearchPanel(true)
         return

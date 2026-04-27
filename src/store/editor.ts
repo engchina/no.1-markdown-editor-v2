@@ -162,6 +162,8 @@ interface EditorState {
   previewLineBreakMode: PreviewLineBreakMode
   setPreviewLineBreakMode: (mode: PreviewLineBreakMode) => void
   hasExplicitPreviewLineBreakModePreference: boolean
+  previewAutoRenderMermaid: boolean
+  setPreviewAutoRenderMermaid: (enabled: boolean) => void
 }
 
 function generateId() {
@@ -248,6 +250,8 @@ export const useEditorStore = create<EditorState>()(
         hasExplicitPreviewLineBreakModePreference: true,
       }),
       hasExplicitPreviewLineBreakModePreference: false,
+      previewAutoRenderMermaid: true,
+      setPreviewAutoRenderMermaid: (previewAutoRenderMermaid) => set({ previewAutoRenderMermaid }),
 
       // Tabs
       tabs: [initialTab],
@@ -600,6 +604,7 @@ export const useEditorStore = create<EditorState>()(
         syntaxHighlightEngine: s.syntaxHighlightEngine,
         previewLineBreakMode: s.previewLineBreakMode,
         hasExplicitPreviewLineBreakModePreference: s.hasExplicitPreviewLineBreakModePreference,
+        previewAutoRenderMermaid: s.previewAutoRenderMermaid,
         zoom: s.zoom,
         tabs: s.tabs.filter(isRestorableDraftTab),
         activeTabId: s.tabs.some((tab) => tab.id === s.activeTabId && isRestorableDraftTab(tab))
@@ -639,6 +644,7 @@ export const useEditorStore = create<EditorState>()(
               : 'visual-soft-breaks',
           hasExplicitPreviewLineBreakModePreference:
             persistedState?.hasExplicitPreviewLineBreakModePreference === true,
+          previewAutoRenderMermaid: persistedState?.previewAutoRenderMermaid !== false,
         }
       },
       onRehydrateStorage: () => (state) => {

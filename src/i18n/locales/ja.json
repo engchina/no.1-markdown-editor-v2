@@ -194,7 +194,7 @@
     "refreshDiagram": "図を再描画",
     "diagramError": "図を描画できませんでした",
     "packetPlaceholderError": "Packet 図では 0-15: \"Field\" や +8: \"Field\" のような数値ビット位置が必要です。",
-    "diagramsPending": "描画待ちの図が {{count}} 件あります",
+    "diagramsPending": "未描画の図が {{count}} 件あります",
     "renderAllDiagrams": "すべて描画",
     "renderingDiagrams": "描画中...",
     "copyCode": "コピー",
@@ -254,7 +254,7 @@
     "wordWrap": "折り返し",
     "showInvisibleCharacters": "不可視文字を表示",
     "typewriterMode": "タイプライターモード",
-    "showInvisibleCharactersHint": "ソースモードで Tab、行末空白、特殊な空白文字を表示します。Markdown のハード改行に使う行末空白を見つけやすくします。",
+    "showInvisibleCharactersHint": "ソースモードで Tab、行末空白、特殊な空白文字を表示します。WYSIWYG では非アクティブ行をプレビューに近いすっきりした表示に保ちます。",
     "spellcheck": "スペルチェック",
     "spellcheckModes": {
       "document-language": "文書言語",
@@ -265,6 +265,8 @@
     "spellcheckHintSystem": "文書言語は固定せず、システムのスペルチェックを使います。",
     "spellcheckHintOff": "ソースエディターと WYSIWYG テーブル入力のスペルチェックを無効にします。",
     "previewOptions": "プレビュー設定",
+    "previewAutoRenderMermaid": "Mermaid 図を自動描画",
+    "previewAutoRenderMermaidHint": "標準ではオンです。表示範囲に入った図を自動描画します。大きな文書で手動描画にしたい場合はオフにしてください。",
     "previewLineBreaks": "プレビュー改行表示",
     "previewLineBreakModes": {
       "strict": "厳密",
@@ -291,6 +293,33 @@
     "downloadLatest": "最新版をダウンロード",
     "skipVersion": "このバージョンをスキップ",
     "cancel": "キャンセル"
+  },
+  "shortcuts": {
+    "title": "キーボードショートカット",
+    "open": "キーボードショートカット",
+    "subtitle": "ファイル、編集、表示、AI のショートカットをまとめて確認できます。",
+    "count": "{{count}} 件",
+    "switchFile": "開いているファイルを切り替え",
+    "editor": {
+      "findNextMatch": "次を検索",
+      "findPreviousMatch": "前を検索",
+      "selectNextMatch": "次の一致を選択",
+      "goToLine": "行へ移動",
+      "indentLess": "インデントを減らす",
+      "indentMore": "インデントを増やす",
+      "insertBlankLine": "空行を挿入",
+      "moveLineUp": "行を上へ移動",
+      "moveLineDown": "行を下へ移動",
+      "copyLineUp": "行を上へコピー",
+      "copyLineDown": "行を下へコピー"
+    },
+    "categories": {
+      "file": "ファイル",
+      "edit": "Markdown と編集",
+      "view": "表示",
+      "ai": "AI",
+      "help": "ヘルプ"
+    }
   },
   "ai": {
     "setup": {

@@ -28,12 +28,16 @@ import { resolveActiveHeadingId, updateVisibleHeadingIds } from '../../lib/previ
 import { useMarkdown } from '../../hooks/useMarkdown'
 import { useActiveTab, useEditorStore } from '../../store/editor'
 
+const MERMAID_AUTO_RENDER_DELAY_MS = 650
+const MERMAID_AUTO_RENDER_ROOT_MARGIN = '240px 0px'
+
 export default function MarkdownPreview() {
   const { t, i18n } = useTranslation()
   const activeTab = useActiveTab()
   const activeThemeId = useEditorStore((state) => state.activeThemeId)
   const fontSize = useEditorStore((state) => state.fontSize)
   const previewLineBreakMode = useEditorStore((state) => state.previewLineBreakMode)
+  const previewAutoRenderMermaid = useEditorStore((state) => state.previewAutoRenderMermaid)
   const content = activeTab?.content ?? ''
   const documentPath = activeTab?.path ?? null
   const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -113,6 +117,10 @@ export default function MarkdownPreview() {
 
   const warmPendingMermaidSources = (preview: HTMLElement) => {
     warmMermaidTask(warmMermaidForSources(getPendingMermaidSources(preview)))
+  }
+
+  const updatePendingMermaidCount = (preview = previewRef.current) => {
+    setPendingMermaidCount(preview ? countPendingMermaidShells(preview) : 0)
   }
 
   const openExternalPreviewLink = useCallback(
@@ -265,8 +273,76 @@ export default function MarkdownPreview() {
 
     prepareMermaidShells(preview, mermaidLabels, getMermaidTheme())
     updateMermaidShellLabels(preview, mermaidLabels)
-    setPendingMermaidCount(countPendingMermaidShells(preview))
+    updatePendingMermaidCount(preview)
   }, [previewHtml, mermaidLabels])
+
+  useEffect(() => {
+    const preview = previewRef.current
+    if (!preview || !previewAutoRenderMermaid) return
+
+    let cancelled = false
+    let observer: IntersectionObserver | null = null
+    const renderingShells = new WeakSet<HTMLElement>()
+
+    const renderVisibleShell = (shell: HTMLElement) => {
+      if (
+        cancelled ||
+        !shell.isConnected ||
+        shell.dataset.mermaidRendered === 'true' ||
+        shell.dataset.mermaidRendering === 'true' ||
+        renderingShells.has(shell)
+      ) {
+        return
+      }
+
+      renderingShells.add(shell)
+      warmMermaidShell(shell)
+      const mermaidTheme = getMermaidTheme()
+      void renderMermaidShells(preview, mermaidTheme, {
+        targets: [shell],
+        isCancelled: () => cancelled,
+      }).finally(() => {
+        renderingShells.delete(shell)
+        if (!cancelled) updatePendingMermaidCount(preview)
+      })
+    }
+
+    const startAutoRender = () => {
+      if (cancelled || !preview.isConnected) return
+
+      const pendingShells = Array.from(
+        preview.querySelectorAll<HTMLElement>('.mermaid-shell[data-mermaid-rendered="false"]')
+      )
+      if (pendingShells.length === 0) return
+
+      if (typeof IntersectionObserver === 'undefined') {
+        pendingShells.forEach(renderVisibleShell)
+        return
+      }
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue
+            const shell = entry.target as HTMLElement
+            observer?.unobserve(shell)
+            renderVisibleShell(shell)
+          }
+        },
+        { root: preview, rootMargin: MERMAID_AUTO_RENDER_ROOT_MARGIN, threshold: 0 }
+      )
+
+      pendingShells.forEach((shell) => observer?.observe(shell))
+    }
+
+    const timer = window.setTimeout(startAutoRender, MERMAID_AUTO_RENDER_DELAY_MS)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      observer?.disconnect()
+    }
+  }, [previewAutoRenderMermaid, previewHtml])
 
   useEffect(() => {
     if (!previewHtml.includes('class="katex"')) return
@@ -449,7 +525,7 @@ export default function MarkdownPreview() {
       const mermaidTheme = getMermaidTheme()
       void renderMermaidShells(preview, mermaidTheme, { targets: [shell] }).finally(() => {
         button.disabled = false
-        setPendingMermaidCount(countPendingMermaidShells(preview))
+        updatePendingMermaidCount(preview)
       })
     }
 
@@ -604,7 +680,7 @@ export default function MarkdownPreview() {
     setRenderingAll(true)
     void renderMermaidShells(preview, mermaidTheme).finally(() => {
       setRenderingAll(false)
-      setPendingMermaidCount(countPendingMermaidShells(preview))
+      updatePendingMermaidCount(preview)
     })
   }
 

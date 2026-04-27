@@ -20,6 +20,32 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
 
+## 0.19.3 - 2026-04-27
+
+### Added
+
+- Added a Keyboard Shortcuts dialog reachable from the toolbar, command palette, and `Ctrl/Cmd+/`, grouping file, editing, view, AI, export, theme, language, and help shortcuts in one place.
+- Added `Ctrl/Cmd+W` close-file handling through the shared dirty-tab save, discard, and cancel flow.
+- Preview can now auto-render visible Mermaid diagrams while keeping the manual Render All fallback available for large documents.
+
+### Changed
+
+- Search and replace now use labeled fields, grouped controls, icon navigation, and responsive layout styling.
+- Command Palette rows, shortcut badges, and the search field now use a quieter desktop surface with clearer selected-state styling.
+- Resize dividers now show pointer-following hints while preserving keyboard resize and reset behavior.
+- Toolbar and command palette now expose more Markdown formatting shortcuts, including heading cycling, lists, links, images, and code blocks.
+- Invisible character rendering in WYSIWYG now stays limited to the active edit line so inactive lines remain visually closer to Preview.
+
+### Fixed
+
+- Source-editor `Ctrl/Cmd+/` now opens Keyboard Shortcuts instead of triggering CodeMirror Markdown comment commands.
+- Primary-modifier shortcut matching is stricter across Windows, macOS, and Linux, reducing accidental shortcut collisions.
+- Mermaid automatic and manual rendering now share rendering state so the same diagram is not rendered twice at the same time.
+
+### Internal
+
+- Added Qiita implementation notes and regression coverage for keyboard shortcuts, command palette layout, search UI, close-file shortcuts, platform shortcut matching, Mermaid auto-rendering, layout divider hints, and WYSIWYG invisible character behavior.
+
 ## 0.19.2 - 2026-04-27
 
 ### Added

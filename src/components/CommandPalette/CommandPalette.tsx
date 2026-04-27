@@ -16,13 +16,14 @@ interface Props {
   onClose: () => void
 }
 
-const CATEGORY_ORDER = ['file', 'edit', 'ai', 'view', 'export', 'theme', 'language'] as const
+const CATEGORY_ORDER = ['file', 'edit', 'ai', 'view', 'help', 'export', 'theme', 'language'] as const
 const COMMAND_PRIORITY = new Map<string, number>([
   ['file.new', 10],
   ['file.open', 11],
   ['file.save', 12],
   ['file.saveAs', 13],
-  ['file.checkUpdates', 14],
+  ['file.close', 14],
+  ['file.checkUpdates', 15],
   ['file.recent.clear', 19],
   ['edit.undo', 100],
   ['edit.redo', 101],
@@ -41,6 +42,7 @@ const COMMAND_PRIORITY = new Map<string, number>([
   ['edit.table', 122],
   ['edit.hr', 123],
   ['edit.image', 124],
+  ['edit.heading', 125],
   ['edit.h1', 130],
   ['edit.h2', 131],
   ['edit.h3', 132],
@@ -69,6 +71,7 @@ const COMMAND_PRIORITY = new Map<string, number>([
   ['view.fontSizeIncrease', 229],
   ['view.fontSizeDecrease', 230],
   ['view.fontSizeReset', 231],
+  ['help.keyboardShortcuts', 240],
   ['export.html', 310],
   ['export.pdf', 311],
   ['export.markdown', 312],
@@ -138,13 +141,7 @@ function compareCommands(a: Command, b: Command, query: string): number {
 
 function IconBadge({ children }: { children: ReactNode }) {
   return (
-    <span
-      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md"
-      style={{
-        background: 'color-mix(in srgb, var(--bg-tertiary) 72%, transparent)',
-        color: 'var(--text-muted)',
-      }}
-    >
+    <span className="command-palette__badge flex h-7 w-7 flex-shrink-0 items-center justify-center">
       {children}
     </span>
   )
@@ -153,7 +150,7 @@ function IconBadge({ children }: { children: ReactNode }) {
 function TextBadge({ label }: { label: string }) {
   return (
     <IconBadge>
-      <span className="text-[11px] font-semibold leading-none" style={{ fontFamily: 'monospace' }}>
+      <span className="command-palette__badge-text text-[11px] font-semibold leading-none">
         {label}
       </span>
     </IconBadge>
@@ -172,6 +169,7 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
   if (command.id.startsWith('file.recent.') || command.id.startsWith('palette.recent.')) return <SvgBadge name="clock" />
   if (mode === 'file') return <SvgBadge name="file" />
   if (command.id.startsWith('ai.')) return <SvgBadge name="sparkles" />
+  if (command.id.startsWith('help.')) return <SvgBadge name="shortcuts" />
   if (command.id.startsWith('theme.')) return <SvgBadge name="palette" />
   if (command.id.startsWith('lang.')) return <SvgBadge name="globe" />
 
@@ -191,6 +189,8 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
     case 'file.save':
     case 'file.saveAs':
       return <SvgBadge name="save" />
+    case 'file.close':
+      return <SvgBadge name="x" />
     case 'file.checkUpdates':
       return <SvgBadge name="download" />
     case 'file.recent.clear':
@@ -241,6 +241,8 @@ function getCommandIndicator(command: Command, mode: Props['mode']): ReactNode {
       return <SvgBadge name="underline" />
     case 'edit.strikethrough':
       return <SvgBadge name="strikethrough" />
+    case 'edit.heading':
+      return <TextBadge label="H" />
     case 'edit.highlight':
       return <SvgBadge name="highlight" />
     case 'edit.code':
@@ -416,8 +418,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-24"
-      style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }}
+      className="command-palette__backdrop fixed inset-0 z-[100] flex items-start justify-center px-4 pt-20 sm:pt-24"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       <div
@@ -431,38 +432,36 @@ export default function CommandPalette({ mode, onClose }: Props) {
             onClose()
           }
         }}
-        className="command-palette w-full max-w-xl overflow-hidden rounded-2xl shadow-2xl animate-in glass-panel"
+        className="command-palette w-full max-w-2xl overflow-hidden rounded-2xl animate-in glass-panel"
         style={{
-          background: 'var(--glass-bg)',
-          borderColor: 'var(--glass-border)',
           display: 'flex',
           flexDirection: 'column',
         }}
       >
         {/* Search input */}
-        <div
-          className="flex items-center gap-3 px-4"
-          style={{ borderBottom: '1px solid var(--border)', height: '52px' }}
-        >
-          <span style={{ color: 'var(--text-muted)' }}>
-            {mode === 'file' ? <AppIcon name="file" size={16} /> : <AppIcon name="command" size={16} />}
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={mode === 'file' ? t('palette.filePlaceholder') : t('palette.commandPlaceholder')}
-            className="flex-1 bg-transparent outline-none text-sm"
-            style={{ color: 'var(--text-primary)', caretColor: 'var(--accent)' }}
-          />
-          <kbd
-            className="text-xs px-1.5 py-0.5 rounded"
-            style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
-          >
-            ESC
-          </kbd>
+        <div className="command-palette__header flex flex-shrink-0 items-center p-3">
+          <label className="command-palette__search flex min-h-12 flex-1 items-center gap-3 px-3" htmlFor="command-palette-input">
+            <span className="command-palette__search-icon">
+              {mode === 'file' ? <AppIcon name="file" size={16} /> : <AppIcon name="command" size={16} />}
+            </span>
+            <input
+              id="command-palette-input"
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder={mode === 'file' ? t('palette.filePlaceholder') : t('palette.commandPlaceholder')}
+              aria-label={mode === 'file' ? t('palette.file') : t('toolbar.commandPalette')}
+              aria-controls="command-palette-results"
+              className="command-palette__search-input min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+            <kbd
+              className="command-palette__key flex-shrink-0 px-2 py-1 text-[11px] font-semibold leading-none"
+            >
+              ESC
+            </kbd>
+          </label>
         </div>
 
         {/* Results */}
@@ -478,7 +477,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
                 <button
                   type="button"
                   data-idx={idx}
-                  className={`command-palette__item flex w-full items-center gap-3 px-4 py-2.5 text-left ${
+                  className={`command-palette__item flex w-full items-center gap-3 px-3.5 py-2.5 text-left ${
                     idx === selectedIndex ? 'command-palette__item--selected' : ''
                   }`}
                   onMouseEnter={() => setSelectedIndex(idx)}
@@ -496,13 +495,7 @@ export default function CommandPalette({ mode, onClose }: Props) {
                   </div>
                   {cmd.shortcut && (
                     <kbd
-                      className="flex-shrink-0 rounded px-1.5 py-0.5 text-xs"
-                      style={{
-                        background: 'var(--bg-tertiary)',
-                        color: 'var(--text-muted)',
-                        border: '1px solid var(--border)',
-                        fontFamily: 'monospace',
-                      }}
+                      className="command-palette__shortcut flex-shrink-0 px-2 py-1 text-[11px] font-semibold leading-none"
                     >
                       {cmd.shortcut}
                     </kbd>
@@ -515,14 +508,13 @@ export default function CommandPalette({ mode, onClose }: Props) {
 
         {/* Footer */}
         <div
-          className="flex items-center gap-4 px-4 py-2 text-xs"
-          style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}
+          className="command-palette__footer flex flex-shrink-0 items-center gap-4 px-4 py-2 text-xs"
         >
-          <span>↑↓ {t('palette.navigate')}</span>
-          <span>↵ {t('palette.execute')}</span>
-          <span>ESC {t('palette.close')}</span>
+          <span className="command-palette__hint">↑↓ {t('palette.navigate')}</span>
+          <span className="command-palette__hint">↵ {t('palette.execute')}</span>
+          <span className="command-palette__hint">ESC {t('palette.close')}</span>
           <div className="flex-1" />
-          <span>{t('palette.results', { count: filtered.length })}</span>
+          <span className="command-palette__result-count">{t('palette.results', { count: filtered.length })}</span>
         </div>
       </div>
     </div>

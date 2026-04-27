@@ -1,6 +1,6 @@
 {
   "productName": "No.1 Markdown Editor",
-  "version": "0.19.2",
+  "version": "0.19.3",
   "identifier": "com.no1.markdown-editor",
   "build": {
     "frontendDist": "../dist",

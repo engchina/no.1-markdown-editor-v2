@@ -1,71 +1,13 @@
-import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useFileOps } from '../../hooks/useFileOps'
 import { useEditorStore } from '../../store/editor'
-
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export default function DocumentTabs() {
   const { t } = useTranslation()
   const tabs = useEditorStore((state) => state.tabs)
   const activeTabId = useEditorStore((state) => state.activeTabId)
   const setActiveTab = useEditorStore((state) => state.setActiveTab)
-  const closeTab = useEditorStore((state) => state.closeTab)
-  const { saveTabById } = useFileOps()
-
-  const requestCloseTab = useCallback(
-    async (tabId: string) => {
-      const tab = useEditorStore.getState().tabs.find((entry) => entry.id === tabId)
-      if (!tab) return
-
-      if (!tab.isDirty) {
-        closeTab(tab.id)
-        return
-      }
-
-      const messageText = t('dialog.unsavedMessage', { name: tab.name })
-      if (isTauri) {
-        const { message } = await import('@tauri-apps/plugin-dialog')
-        const saveLabel = t('dialog.save')
-        const discardLabel = t('dialog.dontSave')
-        const cancelLabel = t('dialog.cancel')
-
-        const result = await message(messageText, {
-          title: t('dialog.unsavedChanges'),
-          kind: 'warning',
-          buttons: { yes: saveLabel, no: discardLabel, cancel: cancelLabel },
-        })
-
-        if (result === saveLabel) {
-          const saved = await saveTabById(tab.id)
-          if (!saved) return
-          closeTab(tab.id)
-        } else if (result === discardLabel) {
-          closeTab(tab.id)
-        }
-        return
-      }
-
-      const saveRequested = window.confirm(
-        `${messageText}\n\n${t('dialog.browserSavePrompt')}`
-      )
-      if (saveRequested) {
-        const saved = await saveTabById(tab.id)
-        if (!saved) return
-        closeTab(tab.id)
-        return
-      }
-
-      const discardRequested = window.confirm(
-        `${t('dialog.discardMessage', { name: tab.name })}\n\n${t('dialog.browserDiscardPrompt')}`
-      )
-
-      if (discardRequested) {
-        closeTab(tab.id)
-      }
-    },
-    [closeTab, saveTabById, t]
-  )
+  const { closeTabById } = useFileOps()
 
   if (tabs.length === 0) return null
 
@@ -119,7 +61,7 @@ export default function DocumentTabs() {
               style={{ lineHeight: 1, fontSize: '16px' }}
               onClick={(event) => {
                 event.stopPropagation()
-                void requestCloseTab(tab.id)
+                void closeTabById(tab.id)
               }}
               onMouseEnter={(event) => {
                 event.currentTarget.style.background = 'color-mix(in srgb, var(--bg-tertiary) 78%, transparent)'

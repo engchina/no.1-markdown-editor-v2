@@ -119,10 +119,10 @@ Install latest package from [releases](https://github.com/engchina/no.1-markdown
 
 GitHub release automation is defined in `.github/workflows/release.yml`.
 
-- Run `npm run release:prepare -- 0.19.2` to sync `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and promote `CHANGELOG.md` `## Unreleased` into a dated `## 0.19.2 - YYYY-MM-DD` section before tagging.
-- Run `npm run release:validate` after bumping the release version to confirm `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `CHANGELOG.md` are ready for the same tag, and that the release changelog section no longer contains scaffold comment placeholders. Use `npm run release:validate -- 0.19.2` if you want to validate an explicit target before committing the version bump.
-- Run `npm run release:notes:preview -- 0.19.2` to print the GitHub release body locally before pushing `v0.19.2`.
-- After the release is published, run `npm run release:draft:advance -- 0.19.2` to reset `docs/release-notes-draft.md` and normalize `CHANGELOG.md` `## Unreleased` into the next-cycle suggested scaffold after `v0.19.2`.
+- Run `npm run release:prepare -- 0.19.3` to sync `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and promote `CHANGELOG.md` `## Unreleased` into a dated `## 0.19.3 - YYYY-MM-DD` section before tagging.
+- Run `npm run release:validate` after bumping the release version to confirm `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `CHANGELOG.md` are ready for the same tag, and that the release changelog section no longer contains scaffold comment placeholders. Use `npm run release:validate -- 0.19.3` if you want to validate an explicit target before committing the version bump.
+- Run `npm run release:notes:preview -- 0.19.3` to print the GitHub release body locally before pushing `v0.19.3`.
+- After the release is published, run `npm run release:draft:advance -- 0.19.3` to reset `docs/release-notes-draft.md` and normalize `CHANGELOG.md` `## Unreleased` into the next-cycle suggested scaffold after `v0.19.3`.
 - Keep the version aligned in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
 - Create and push a version tag such as `v0.14.0`. The workflow fails early if the tag does not match the app version.
 - Pushing the tag builds Windows x64, a single universal macOS release bundle for both Apple Silicon and Intel Macs, and Linux x64 release bundles on GitHub-hosted runners and uploads them to GitHub Releases automatically.

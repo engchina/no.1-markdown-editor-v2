@@ -196,8 +196,8 @@
     "refreshDiagram": "Refresh Diagram",
     "diagramError": "Diagram could not be rendered",
     "packetPlaceholderError": "Packet diagrams require numeric bit positions such as 0-15: \"Field\" or +8: \"Field\".",
-    "diagramsPending": "{{count}} diagram ready to render",
-    "diagramsPending_other": "{{count}} diagrams ready to render",
+    "diagramsPending": "{{count}} diagram not rendered yet",
+    "diagramsPending_other": "{{count}} diagrams not rendered yet",
     "renderAllDiagrams": "Render All",
     "renderingDiagrams": "Rendering...",
     "copyCode": "Copy",
@@ -259,7 +259,7 @@
     "wordWrap": "Word Wrap",
     "showInvisibleCharacters": "Show Invisible Characters",
     "typewriterMode": "Typewriter Mode",
-    "showInvisibleCharactersHint": "Shows tabs, trailing spaces, and special whitespace in source mode. Markdown hard-break spaces at line ends become easy to spot.",
+    "showInvisibleCharactersHint": "Shows tabs, trailing spaces, and special whitespace in source mode. In WYSIWYG, inactive lines stay preview-clean.",
     "spellcheck": "SPELLCHECK",
     "spellcheckModes": {
       "document-language": "Document",
@@ -270,6 +270,8 @@
     "spellcheckHintSystem": "Uses the system spellcheck without forcing a document language.",
     "spellcheckHintOff": "Disables spellcheck in the source editor and WYSIWYG table inputs.",
     "previewOptions": "PREVIEW OPTIONS",
+    "previewAutoRenderMermaid": "Auto-render Mermaid diagrams",
+    "previewAutoRenderMermaidHint": "Default on. Visible diagrams render automatically; turn this off to use manual rendering for large documents.",
     "previewLineBreaks": "Preview Line Breaks",
     "previewLineBreakModes": {
       "strict": "Strict",
@@ -296,6 +298,33 @@
     "downloadLatest": "Download Latest",
     "skipVersion": "Skip This Version",
     "cancel": "Cancel"
+  },
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "open": "Keyboard Shortcuts",
+    "subtitle": "Review file, editing, view, and AI shortcuts in one focused place.",
+    "count": "{{count}} shortcuts",
+    "switchFile": "Switch Open File",
+    "editor": {
+      "findNextMatch": "Find Next Match",
+      "findPreviousMatch": "Find Previous Match",
+      "selectNextMatch": "Select Next Match",
+      "goToLine": "Go to Line",
+      "indentLess": "Indent Less",
+      "indentMore": "Indent More",
+      "insertBlankLine": "Insert Blank Line",
+      "moveLineUp": "Move Line Up",
+      "moveLineDown": "Move Line Down",
+      "copyLineUp": "Copy Line Up",
+      "copyLineDown": "Copy Line Down"
+    },
+    "categories": {
+      "file": "File",
+      "edit": "Markdown & Editing",
+      "view": "View",
+      "ai": "AI",
+      "help": "Help"
+    }
   },
   "ai": {
     "setup": {

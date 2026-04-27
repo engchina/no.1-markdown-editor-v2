@@ -17,6 +17,7 @@ function getUntitledName(): string {
 export function useFileOps() {
   const addTab = useEditorStore((state) => state.addTab)
   const openDocument = useEditorStore((state) => state.openDocument)
+  const closeTab = useEditorStore((state) => state.closeTab)
   const saveTab = useEditorStore((state) => state.saveTab)
   const setTabPath = useEditorStore((state) => state.setTabPath)
   const updateTabContent = useEditorStore((state) => state.updateTabContent)
@@ -160,6 +161,73 @@ export function useFileOps() {
     return true
   }, [saveTabById])
 
+  const closeTabById = useCallback(
+    async (tabId: string): Promise<boolean> => {
+      const tab = useEditorStore.getState().tabs.find((entry) => entry.id === tabId)
+      if (!tab) return false
+
+      if (!tab.isDirty) {
+        closeTab(tab.id)
+        return true
+      }
+
+      const messageText = i18n.t('dialog.unsavedMessage', { name: tab.name })
+      if (isTauri) {
+        const { message } = await import('@tauri-apps/plugin-dialog')
+        const saveLabel = i18n.t('dialog.save')
+        const discardLabel = i18n.t('dialog.dontSave')
+        const cancelLabel = i18n.t('dialog.cancel')
+
+        const result = await message(messageText, {
+          title: i18n.t('dialog.unsavedChanges'),
+          kind: 'warning',
+          buttons: { yes: saveLabel, no: discardLabel, cancel: cancelLabel },
+        })
+
+        if (result === saveLabel) {
+          const saved = await saveTabById(tab.id)
+          if (!saved) return false
+          closeTab(tab.id)
+          return true
+        }
+
+        if (result === discardLabel) {
+          closeTab(tab.id)
+          return true
+        }
+
+        return false
+      }
+
+      const saveRequested = window.confirm(
+        `${messageText}\n\n${i18n.t('dialog.browserSavePrompt')}`
+      )
+      if (saveRequested) {
+        const saved = await saveTabById(tab.id)
+        if (!saved) return false
+        closeTab(tab.id)
+        return true
+      }
+
+      const discardRequested = window.confirm(
+        `${i18n.t('dialog.discardMessage', { name: tab.name })}\n\n${i18n.t('dialog.browserDiscardPrompt')}`
+      )
+      if (!discardRequested) return false
+
+      closeTab(tab.id)
+      return true
+    },
+    [closeTab, saveTabById]
+  )
+
+  const closeActiveFile = useCallback(async (): Promise<boolean> => {
+    const state = useEditorStore.getState()
+    const activeTab = state.tabs.find((entry) => entry.id === state.activeTabId) ?? state.tabs[0]
+    if (!activeTab) return false
+
+    return closeTabById(activeTab.id)
+  }, [closeTabById])
+
   return {
     newFile,
     openFile,
@@ -168,5 +236,7 @@ export function useFileOps() {
     saveTabById,
     saveTabAsById,
     saveAllDirtyTabs,
+    closeTabById,
+    closeActiveFile,
   }
 }

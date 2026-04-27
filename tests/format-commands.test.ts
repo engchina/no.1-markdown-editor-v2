@@ -66,6 +66,20 @@ test('applyFormat removes highlight markers when the full wrapped selection is s
   assert.equal(view.state.selection.main.to, 5)
 })
 
+test('applyFormat cycles the current line through Markdown heading levels', () => {
+  const plain = createTestView('Section', 0)
+  applyFormat(plain, 'heading')
+  assert.equal(plain.state.doc.toString(), '# Section')
+
+  const h1 = createTestView('# Section', 2)
+  applyFormat(h1, 'heading')
+  assert.equal(h1.state.doc.toString(), '## Section')
+
+  const h6 = createTestView('###### Section', 7)
+  applyFormat(h6, 'heading')
+  assert.equal(h6.state.doc.toString(), 'Section')
+})
+
 test('applyFormat scrolls the updated selection into view after inserting block content', () => {
   const view = createTestView('Paragraph', 9)
 

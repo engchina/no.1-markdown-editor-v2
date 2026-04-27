@@ -11,6 +11,7 @@ import { getFormatShortcutLabel } from '../components/Editor/formatShortcuts'
 import type { Language } from '../i18n'
 import { formatPrimaryShortcut } from '../lib/platform'
 import { runManualUpdateCheck } from '../lib/updateActions'
+import { dispatchKeyboardShortcutsOpen, getKeyboardShortcutsShortcutLabel } from '../lib/keyboardShortcuts'
 import {
   SIDEBAR_SURFACE_META,
   getSidebarSurfaceCommandId,
@@ -26,7 +27,7 @@ export interface Command {
   label: string
   description?: string
   icon?: string
-  category: 'file' | 'edit' | 'ai' | 'view' | 'theme' | 'export' | 'language'
+  category: 'file' | 'edit' | 'ai' | 'view' | 'theme' | 'export' | 'language' | 'help'
   shortcut?: string
   action: () => void
 }
@@ -38,7 +39,7 @@ function emitFormat(action: string) {
 export function useCommands(): Command[] {
   const { t } = useTranslation()
   const store = useEditorStore()
-  const { newFile, openFile, saveFile, saveFileAs } = useFileOps()
+  const { newFile, openFile, saveFile, saveFileAs, closeActiveFile } = useFileOps()
   const { exportHtml, exportPdf, exportMarkdown, copyAsHtml } = useExport()
   const { recentFiles, openRecent, clearRecent } = useRecentFiles()
   const newShortcut = formatPrimaryShortcut('N')
@@ -52,6 +53,8 @@ export function useCommands(): Command[] {
   const findShortcut = formatPrimaryShortcut('F')
   const replaceShortcut = formatPrimaryShortcut('H')
   const aiShortcut = formatPrimaryShortcut('J')
+  const closeFileShortcut = formatPrimaryShortcut('W')
+  const keyboardShortcutsShortcut = getKeyboardShortcutsShortcutLabel()
   const undoShortcut = getEditorUndoShortcutLabel()
   const redoShortcut = getEditorRedoShortcutLabel()
 
@@ -114,6 +117,15 @@ export function useCommands(): Command[] {
         shortcut: saveAsShortcut,
         action: () => {
           void saveFileAs()
+        },
+      },
+      {
+        id: 'file.close',
+        label: t('menu.closeFile'),
+        category: 'file',
+        shortcut: closeFileShortcut,
+        action: () => {
+          void closeActiveFile()
         },
       },
       {
@@ -222,6 +234,16 @@ export function useCommands(): Command[] {
         category: 'view',
         shortcut: resetFontShortcut,
         action: () => store.setZoom(100),
+      },
+      {
+        id: 'help.keyboardShortcuts',
+        label: t('shortcuts.open'),
+        icon: 'keyboard',
+        category: 'help',
+        shortcut: keyboardShortcutsShortcut,
+        action: () => {
+          dispatchKeyboardShortcutsOpen()
+        },
       },
       {
         id: 'view.fontSizeIncrease',
@@ -380,6 +402,14 @@ export function useCommands(): Command[] {
         action: () => emitFormat('strikethrough'),
       },
       {
+        id: 'edit.heading',
+        label: t('toolbar.headings'),
+        icon: 'H',
+        category: 'edit',
+        shortcut: getFormatShortcutLabel('heading'),
+        action: () => emitFormat('heading'),
+      },
+      {
         id: 'edit.highlight',
         label: t('toolbar.highlight'),
         icon: 'highlight',
@@ -399,6 +429,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.codeBlock'),
         icon: '```',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('codeblock'),
         action: () => emitFormat('codeblock'),
       },
       {
@@ -413,6 +444,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.ul'),
         icon: '•',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('ul'),
         action: () => emitFormat('ul'),
       },
       {
@@ -420,6 +452,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.ol'),
         icon: '1.',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('ol'),
         action: () => emitFormat('ol'),
       },
       {
@@ -427,6 +460,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.task'),
         icon: '☐',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('task'),
         action: () => emitFormat('task'),
       },
       {
@@ -448,6 +482,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.link'),
         icon: '🔗',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('link'),
         action: () => emitFormat('link'),
       },
       {
@@ -455,6 +490,7 @@ export function useCommands(): Command[] {
         label: t('toolbar.image'),
         icon: '🖼',
         category: 'edit',
+        shortcut: getFormatShortcutLabel('image'),
         action: () => emitFormat('image'),
       },
       {
@@ -575,6 +611,8 @@ export function useCommands(): Command[] {
     return commands
   }, [
     clearRecent,
+    closeActiveFile,
+    closeFileShortcut,
     copyAsHtml,
     exportHtml,
     exportMarkdown,
@@ -583,6 +621,7 @@ export function useCommands(): Command[] {
     findShortcut,
     decreaseFontShortcut,
     increaseFontShortcut,
+    keyboardShortcutsShortcut,
     newFile,
     newShortcut,
     openShortcut,

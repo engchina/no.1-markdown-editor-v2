@@ -1,6 +1,21 @@
 import type { FormatAction } from './formatCommands'
+import { hasPrimaryModifier, isMacPlatform } from '../../lib/platform.ts'
 
-export type ShortcutFormatAction = Extract<FormatAction, 'bold' | 'italic' | 'underline' | 'strikethrough' | 'code'>
+export type ShortcutFormatAction = Extract<
+  FormatAction,
+  | 'bold'
+  | 'italic'
+  | 'underline'
+  | 'strikethrough'
+  | 'heading'
+  | 'code'
+  | 'codeblock'
+  | 'link'
+  | 'image'
+  | 'ul'
+  | 'ol'
+  | 'task'
+>
 
 export interface ShortcutKeyboardEventLike {
   ctrlKey: boolean
@@ -14,25 +29,42 @@ export interface ShortcutKeyboardEventLike {
 interface FormatShortcutDefinition {
   code: string
   requiresShift: boolean
-  label: string
+  keyLabel: string
 }
 
 const FORMAT_SHORTCUTS: Record<ShortcutFormatAction, FormatShortcutDefinition> = {
-  bold: { code: 'KeyB', requiresShift: false, label: 'Ctrl+B' },
-  italic: { code: 'KeyI', requiresShift: false, label: 'Ctrl+I' },
-  underline: { code: 'KeyU', requiresShift: false, label: 'Ctrl+U' },
-  strikethrough: { code: 'Digit5', requiresShift: true, label: 'Ctrl+Shift+5' },
-  code: { code: 'Backquote', requiresShift: false, label: 'Ctrl+`' },
+  bold: { code: 'KeyB', requiresShift: false, keyLabel: 'B' },
+  italic: { code: 'KeyI', requiresShift: false, keyLabel: 'I' },
+  underline: { code: 'KeyU', requiresShift: false, keyLabel: 'U' },
+  strikethrough: { code: 'Digit5', requiresShift: true, keyLabel: '5' },
+  heading: { code: 'KeyH', requiresShift: true, keyLabel: 'H' },
+  code: { code: 'Backquote', requiresShift: false, keyLabel: '`' },
+  codeblock: { code: 'KeyK', requiresShift: true, keyLabel: 'K' },
+  link: { code: 'KeyL', requiresShift: true, keyLabel: 'L' },
+  image: { code: 'KeyG', requiresShift: true, keyLabel: 'G' },
+  ul: { code: 'KeyU', requiresShift: true, keyLabel: 'U' },
+  ol: { code: 'KeyO', requiresShift: true, keyLabel: 'O' },
+  task: { code: 'KeyC', requiresShift: true, keyLabel: 'C' },
 }
 
 const FORMAT_SHORTCUT_ENTRIES = Object.entries(FORMAT_SHORTCUTS) as [ShortcutFormatAction, FormatShortcutDefinition][]
 
-export function getFormatShortcutLabel(action: ShortcutFormatAction): string {
-  return FORMAT_SHORTCUTS[action].label
+export function getFormatShortcutLabel(action: ShortcutFormatAction, mac = isMacPlatform()): string {
+  const shortcut = FORMAT_SHORTCUTS[action]
+  if (mac) {
+    return `⌘${shortcut.requiresShift ? '⇧' : ''}${shortcut.keyLabel}`
+  }
+
+  return ['Ctrl', shortcut.requiresShift ? 'Shift' : '', shortcut.keyLabel]
+    .filter(Boolean)
+    .join('+')
 }
 
-export function getFormatActionFromShortcut(event: ShortcutKeyboardEventLike): ShortcutFormatAction | null {
-  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing) {
+export function getFormatActionFromShortcut(
+  event: ShortcutKeyboardEventLike,
+  mac = isMacPlatform()
+): ShortcutFormatAction | null {
+  if (!hasPrimaryModifier(event, mac) || event.altKey || event.isComposing) {
     return null
   }
 

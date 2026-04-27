@@ -194,7 +194,7 @@
     "refreshDiagram": "重新渲染",
     "diagramError": "图表无法渲染",
     "packetPlaceholderError": "Packet 图需要使用数值位范围，例如 0-15: \"Field\" 或 +8: \"Field\"。",
-    "diagramsPending": "有 {{count}} 个图表可供渲染",
+    "diagramsPending": "有 {{count}} 个图表尚未渲染",
     "renderAllDiagrams": "全部渲染",
     "renderingDiagrams": "渲染中...",
     "copyCode": "复制",
@@ -254,7 +254,7 @@
     "wordWrap": "自动换行",
     "showInvisibleCharacters": "显示不可见字符",
     "typewriterMode": "打字机模式",
-    "showInvisibleCharactersHint": "在源码模式下显示 Tab、行尾空格和特殊空白。Markdown 硬换行用到的行尾空格会更容易识别。",
+    "showInvisibleCharactersHint": "在源码模式下显示 Tab、行尾空格和特殊空白。WYSIWYG 中非当前行保持接近预览的干净效果。",
     "spellcheck": "拼写检查",
     "spellcheckModes": {
       "document-language": "文档语言",
@@ -265,6 +265,8 @@
     "spellcheckHintSystem": "使用系统拼写检查，但不强制指定文档语言。",
     "spellcheckHintOff": "关闭源码编辑器和 WYSIWYG 表格输入中的拼写检查。",
     "previewOptions": "预览选项",
+    "previewAutoRenderMermaid": "自动渲染 Mermaid 图表",
+    "previewAutoRenderMermaidHint": "默认开启。可见范围内的图表会自动渲染；大型文档需要手动控制时可以关闭。",
     "previewLineBreaks": "预览换行方式",
     "previewLineBreakModes": {
       "strict": "严格模式",
@@ -291,6 +293,33 @@
     "downloadLatest": "下载最新版",
     "skipVersion": "跳过这个版本",
     "cancel": "取消"
+  },
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "open": "键盘快捷键",
+    "subtitle": "集中查看文件、编辑、视图和 AI 操作的可用快捷键。",
+    "count": "{{count}} 个快捷键",
+    "switchFile": "切换已打开文件",
+    "editor": {
+      "findNextMatch": "查找下一个匹配",
+      "findPreviousMatch": "查找上一个匹配",
+      "selectNextMatch": "选择下一个匹配",
+      "goToLine": "跳转到行",
+      "indentLess": "减少缩进",
+      "indentMore": "增加缩进",
+      "insertBlankLine": "插入空行",
+      "moveLineUp": "上移当前行",
+      "moveLineDown": "下移当前行",
+      "copyLineUp": "向上复制当前行",
+      "copyLineDown": "向下复制当前行"
+    },
+    "categories": {
+      "file": "文件",
+      "edit": "Markdown 与编辑",
+      "view": "视图",
+      "ai": "AI",
+      "help": "帮助"
+    }
   },
   "ai": {
     "setup": {

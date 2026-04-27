@@ -10,9 +10,10 @@ function getNestedValue(locale: Record<string, unknown>, key: string): unknown {
   }, locale)
 }
 
-test('buildInvisibleCharacterExtensions only enables source-only visual aids when requested', () => {
+test('buildInvisibleCharacterExtensions scopes visual aids by editing mode', () => {
   assert.equal(buildInvisibleCharacterExtensions(false).length, 0)
   assert.equal(buildInvisibleCharacterExtensions(true).length, 2)
+  assert.equal(buildInvisibleCharacterExtensions(true, { activeLineOnly: true }).length, 2)
 })
 
 test('editor store persists invisible-character mode and CodeMirror wires it through a dedicated compartment', async () => {
@@ -33,21 +34,37 @@ test('editor store persists invisible-character mode and CodeMirror wires it thr
   assert.match(editor, /const showInvisibleCharacters = useEditorStore\(\(state\) => state\.showInvisibleCharacters\)/)
   assert.match(
     editor,
-    /invisibleCharactersCompartmentRef\.current\.of\(buildInvisibleCharacterExtensions\(showInvisibleCharacters\)\)/
+    /invisibleCharactersCompartmentRef\.current\.of\(\s*buildInvisibleCharacterExtensions\(showInvisibleCharacters, \{ activeLineOnly: wysiwygMode \}\)\s*\)/
   )
   assert.match(
     editor,
-    /reconfigure\(invisibleCharactersCompartmentRef\.current, buildInvisibleCharacterExtensions\(showInvisibleCharacters\)\)/
+    /reconfigure\(\s*invisibleCharactersCompartmentRef\.current,\s*buildInvisibleCharacterExtensions\(showInvisibleCharacters, \{ activeLineOnly: wysiwygMode \}\)\s*\)/
   )
+  assert.match(editor, /\[reconfigure, showInvisibleCharacters, wysiwygMode\]/)
 
-  assert.match(extensions, /export function buildInvisibleCharacterExtensions\(enabled: boolean\): Extension\[]/)
-  assert.match(extensions, /const trailingSpaceDecorator = new MatchDecorator\(\{/)
+  assert.match(
+    extensions,
+    /export function buildInvisibleCharacterExtensions\(\s*enabled: boolean,\s*options: \{ activeLineOnly\?: boolean \} = \{\}\s*\): Extension\[]/
+  )
+  assert.match(extensions, /const trailingSpaceDecorator = createTrailingSpaceDecorator\(\)/)
+  assert.match(extensions, /const activeLineTrailingSpaceDecorator = createTrailingSpaceDecorator\(\{ activeLineOnly: true \}\)/)
+  assert.match(extensions, /const activeLineSpecialCharDecorator = new MatchDecorator\(\{/)
   assert.match(extensions, /regexp: \/ \+\(\?=\[\\t \]\*\$\)\/g/)
+  assert.match(extensions, /if \(options\.activeLineOnly && !rangeStartsOnSelectionLine\(view, from\)\) return/)
+  assert.match(extensions, /function rangeStartsOnSelectionLine\(view: EditorView, from: number\): boolean/)
   assert.match(extensions, /for \(let pos = from; pos < to; pos \+= 1\) \{/)
   assert.match(extensions, /add\(pos, pos \+ 1, trailingSpaceMark\)/)
+  assert.match(extensions, /class InvisibleTabWidget extends WidgetType/)
+  assert.match(extensions, /countColumn\(line\.text, view\.state\.tabSize, from - line\.from\)/)
+  assert.match(extensions, /class InvisibleSpecialCharWidget extends WidgetType/)
+  assert.match(extensions, /refreshOnSelectionSet && update\.selectionSet/)
   assert.doesNotMatch(extensions, /highlightTrailingWhitespace\(\)/)
   assert.match(extensions, /highlightSpecialChars\(\{/)
   assert.match(extensions, /addSpecialChars: INVISIBLE_MARKDOWN_SPECIAL_CHARS/)
+  assert.match(
+    extensions,
+    /options\.activeLineOnly\s*\?\s*buildMatchDecoratorExtension\(activeLineSpecialCharDecorator, \{ refreshOnSelectionSet: true \}\)\s*:\s*highlightSpecialChars/
+  )
 })
 
 test('theme panel, locale copy, and editor styles explain the invisible-character mode clearly', async () => {

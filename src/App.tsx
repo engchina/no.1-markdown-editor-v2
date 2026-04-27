@@ -19,8 +19,9 @@ import { useFileOps } from './hooks/useFileOps'
 import { openDesktopDocumentPaths, SINGLE_INSTANCE_OPEN_FILES_EVENT } from './lib/desktopFileOpen'
 import { resolveFocusInlinePaddingPx, resolveFocusWidthPx } from './lib/focusWidth'
 import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from './lib/layout'
-import { matchesPrimaryShortcut } from './lib/platform'
+import { hasPrimaryModifier, matchesPrimaryShortcut } from './lib/platform'
 import { maybeRunAutomaticUpdateCheck } from './lib/updateActions'
+import { KEYBOARD_SHORTCUTS_OPEN_EVENT } from './lib/keyboardShortcuts'
 import { useAIStore } from './store/ai'
 import { useUpdateStore } from './store/update'
 import { useActiveTab, useEditorStore } from './store/editor'
@@ -30,6 +31,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const EditorPane = lazy(() => import('./components/Editor/EditorPane'))
 const MarkdownPreview = lazy(() => import('./components/Preview/MarkdownPreview'))
 const CommandPalette = lazy(() => import('./components/CommandPalette/CommandPalette'))
+const KeyboardShortcutsDialog = lazy(() => import('./components/KeyboardShortcuts/KeyboardShortcutsDialog'))
 const AIComposer = lazy(() => import('./components/AI/AIComposer'))
 const UpdateAvailableDialog = lazy(() => import('./components/Updates/UpdateAvailableDialog'))
 const ExternalMissingFileDialog = lazy(() => import('./components/ExternalFileConflicts/ExternalMissingFileDialog'))
@@ -111,8 +113,9 @@ export default function App() {
   const externalConflictDialogOpen = useEditorStore(
     (state) => state.externalMissingFiles.length === 0 && state.externalFileConflicts.length > 0
   )
-  const { saveAllDirtyTabs } = useFileOps()
+  const { saveAllDirtyTabs, closeActiveFile } = useFileOps()
   const [paletteMode, setPaletteMode] = useState<'command' | 'file' | null>(null)
+  const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false)
   const [previewActivated, setPreviewActivated] = useState(viewMode === 'preview')
   const { saving } = useAutoSave()
   const focusColumnWidth = resolveFocusWidthPx(focusWidthMode, focusWidthCustomPx)
@@ -181,6 +184,12 @@ export default function App() {
       } else if (matchesPrimaryShortcut(event, { key: 'j' })) {
         event.preventDefault()
         dispatchEditorAIOpen({ source: 'shortcut' })
+      } else if (matchesPrimaryShortcut(event, { key: '/' })) {
+        event.preventDefault()
+        setKeyboardShortcutsOpen(true)
+      } else if (matchesPrimaryShortcut(event, { key: 'w' })) {
+        event.preventDefault()
+        if (!event.repeat) void closeActiveFile()
       }
 
       if (event.key === 'F11') {
@@ -196,7 +205,7 @@ export default function App() {
         return
       }
 
-      if (event.altKey || !(event.ctrlKey || event.metaKey)) return
+      if (event.altKey || !hasPrimaryModifier(event)) return
 
       const store = useEditorStore.getState()
       if (event.code === 'Equal' || event.key === '=' || event.key === '+') {
@@ -213,6 +222,13 @@ export default function App() {
 
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
+  }, [closeActiveFile])
+
+  useEffect(() => {
+    const openKeyboardShortcuts = () => setKeyboardShortcutsOpen(true)
+
+    document.addEventListener(KEYBOARD_SHORTCUTS_OPEN_EVENT, openKeyboardShortcuts)
+    return () => document.removeEventListener(KEYBOARD_SHORTCUTS_OPEN_EVENT, openKeyboardShortcuts)
   }, [])
 
   useEffect(() => {
@@ -451,6 +467,11 @@ export default function App() {
           <CommandPalette mode={paletteMode} onClose={closePalette} />
         </Suspense>
       )}
+      {keyboardShortcutsOpen && (
+        <Suspense fallback={null}>
+          <KeyboardShortcutsDialog onClose={() => setKeyboardShortcutsOpen(false)} />
+        </Suspense>
+      )}
       {aiComposerOpen && (
         <Suspense fallback={null}>
           <AIComposer />
@@ -496,7 +517,12 @@ export default function App() {
             </div>
           ) : (
             <div className="toolbar-scroll-shell">
-              <Toolbar onOpenPalette={() => setPaletteMode('command')} saving={saving} />
+              <Toolbar
+                onOpenPalette={() => setPaletteMode('command')}
+                onOpenShortcuts={() => setKeyboardShortcutsOpen(true)}
+                shortcutsOpen={keyboardShortcutsOpen}
+                saving={saving}
+              />
             </div>
           )}
         </div>

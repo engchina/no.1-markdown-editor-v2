@@ -9,7 +9,7 @@ import { appendEditorSelectionScrollEffect } from '../../lib/editorScroll.ts'
 
 export type FormatAction =
   | 'bold' | 'italic' | 'underline' | 'strikethrough' | 'highlight'
-  | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
+  | 'heading' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
   | 'code' | 'codeblock'
   | 'link' | 'image'
   | 'quote' | 'ul' | 'ol' | 'task'
@@ -23,6 +23,7 @@ export function applyFormat(view: EditorView, action: FormatAction): void {
     case 'strikethrough': return wrapInline(view, '~~', '~~', 'strikethrough')
     case 'highlight':     return wrapInline(view, '==', '==', 'highlighted text')
     case 'code':          return wrapInline(view, '`', '`', 'code')
+    case 'heading': return cycleHeading(view)
     case 'h1': return insertHeading(view, 1)
     case 'h2': return insertHeading(view, 2)
     case 'h3': return insertHeading(view, 3)
@@ -83,6 +84,25 @@ function wrapInline(view: EditorView, before: string, after: string, placeholder
       return {
         changes: { from: range.from, to: range.to, insert },
         range: EditorSelection.range(range.from + before.length, range.from + before.length + selected.length),
+      }
+    })
+  )
+}
+
+function cycleHeading(view: EditorView): void {
+  dispatchFormatChange(
+    view,
+    view.state.changeByRange((range) => {
+      const line = view.state.doc.lineAt(range.from)
+      const text = view.state.sliceDoc(line.from, line.to)
+      const match = /^(#{1,6})\s+(.*)$/u.exec(text)
+      const nextLevel = match ? match[1].length + 1 : 1
+      const clean = match ? match[2] : text
+      const newText = nextLevel > 6 ? clean : `${'#'.repeat(nextLevel)} ${clean}`
+
+      return {
+        changes: { from: line.from, to: line.to, insert: newText },
+        range: EditorSelection.cursor(line.from + newText.length),
       }
     })
   )

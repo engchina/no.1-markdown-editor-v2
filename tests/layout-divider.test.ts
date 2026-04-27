@@ -22,6 +22,22 @@ test('layout uses the shared divider for both sidebar and split panes', async ()
   assert.match(divider, /panel-divider__hint/)
 })
 
+test('divider hint uses one custom tooltip without the native title tooltip', async () => {
+  const [divider, css] = await Promise.all([
+    readFile(new URL('../src/components/Layout/ResizableDivider.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/global.css', import.meta.url), 'utf8'),
+  ])
+
+  assert.doesNotMatch(divider, /\stitle=/)
+  assert.match(divider, /createPortal/)
+  assert.match(divider, /data-hint-ready=\{hintPoint \? 'true' : 'false'\}/)
+  assert.match(divider, /data-visible=\{showHint \? 'true' : 'false'\}/)
+  assert.match(divider, /onPointerMove=\{handlePointerHintMove\}/)
+  assert.match(css, /\.panel-divider__hint\s*\{[\s\S]*position: fixed/)
+  assert.match(css, /\.panel-divider__hint\s*\{[\s\S]*white-space: normal/)
+  assert.match(css, /\.panel-divider__hint\s*\{[\s\S]*overflow-wrap: anywhere/)
+})
+
 test('sidebar and editor share the same relative content shell', async () => {
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 
@@ -48,10 +64,11 @@ test('divider copy is localized for all supported editor languages', async () =>
   }
 })
 
-test('sidebar resets to the maximum width by default', async () => {
+test('sidebar resets to a comfortable default width within the allowed range', async () => {
   const layout = await readFile(new URL('../src/lib/layout.ts', import.meta.url), 'utf8')
 
   assert.match(layout, /export const SIDEBAR_MIN_WIDTH = 260/)
   assert.match(layout, /export const SIDEBAR_MAX_WIDTH = 420/)
-  assert.match(layout, /export const SIDEBAR_DEFAULT_WIDTH = SIDEBAR_MAX_WIDTH/)
+  assert.match(layout, /export const SIDEBAR_DEFAULT_WIDTH = 320/)
+  assert.doesNotMatch(layout, /export const SIDEBAR_DEFAULT_WIDTH = SIDEBAR_MAX_WIDTH/)
 })

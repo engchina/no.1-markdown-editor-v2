@@ -15,9 +15,11 @@ import {
   placeholder as placeholderExtension,
   tooltips,
   type DecorationSet,
+  type KeyBinding,
   type ViewUpdate,
+  WidgetType,
 } from '@codemirror/view'
-import { EditorSelection, EditorState, type Extension } from '@codemirror/state'
+import { countColumn, EditorSelection, EditorState, Prec, type Extension } from '@codemirror/state'
 import { history, defaultKeymap, historyKeymap, indentWithTab } from '@codemirror/commands'
 import {
   foldGutter,
@@ -35,6 +37,19 @@ import { isThematicBreakLine } from './thematicBreak.ts'
 import { collectInlineCodeRanges, findContainingTextRange } from './wysiwygInlineCode.ts'
 import { findInlineMathRanges } from './wysiwygInlineMath.ts'
 import { findBlockFootnoteRanges, findInlineFootnoteRanges } from './wysiwygFootnote.ts'
+import { dispatchKeyboardShortcutsOpen } from '../../lib/keyboardShortcuts.ts'
+
+export const CODEMIRROR_MARKDOWN_COMMENT_SHORTCUTS = new Set(['Mod-/', 'Alt-A'])
+
+export function isCodeMirrorMarkdownCommentShortcut(binding: KeyBinding): boolean {
+  return [binding.key, binding.mac, binding.win, binding.linux].some((key) =>
+    key ? CODEMIRROR_MARKDOWN_COMMENT_SHORTCUTS.has(key) : false
+  )
+}
+
+export const sourceEditorDefaultKeymap = defaultKeymap.filter(
+  (binding) => !isCodeMirrorMarkdownCommentShortcut(binding)
+)
 
 export const lightTheme = EditorView.theme(
   {
@@ -108,15 +123,83 @@ const markdownUnderlineOverride = HighlightStyle.define([
 // tabs, non-breaking spaces, and line-ending whitespace handled separately below.
 const INVISIBLE_MARKDOWN_SPECIAL_CHARS = /[\t\u00a0]/g
 const trailingSpaceMark = Decoration.mark({ class: 'cm-trailingSpace' })
-const trailingSpaceDecorator = new MatchDecorator({
-  regexp: / +(?=[\t ]*$)/g,
-  // Decorate each trailing space separately so CSS can render exactly one dot per space.
-  decorate(add, from, to) {
-    for (let pos = from; pos < to; pos += 1) {
-      add(pos, pos + 1, trailingSpaceMark)
+const trailingSpaceDecorator = createTrailingSpaceDecorator()
+const activeLineTrailingSpaceDecorator = createTrailingSpaceDecorator({ activeLineOnly: true })
+const activeLineSpecialCharDecorator = new MatchDecorator({
+  regexp: INVISIBLE_MARKDOWN_SPECIAL_CHARS,
+  decorate(add, from, to, match, view) {
+    if (!rangeStartsOnSelectionLine(view, from)) return
+
+    if (match[0] === '\t') {
+      const line = view.state.doc.lineAt(from)
+      const col = countColumn(line.text, view.state.tabSize, from - line.from)
+      const width = (view.state.tabSize - (col % view.state.tabSize)) * view.defaultCharacterWidth / view.scaleX
+      add(from, to, Decoration.replace({ widget: new InvisibleTabWidget(width) }))
+      return
     }
+
+    add(from, to, Decoration.replace({ widget: new InvisibleSpecialCharWidget() }))
   },
 })
+
+function createTrailingSpaceDecorator(options: { activeLineOnly?: boolean } = {}): MatchDecorator {
+  return new MatchDecorator({
+    regexp: / +(?=[\t ]*$)/g,
+    // Decorate each trailing space separately so CSS can render exactly one dot per space.
+    decorate(add, from, to, _match, view) {
+      if (options.activeLineOnly && !rangeStartsOnSelectionLine(view, from)) return
+
+      for (let pos = from; pos < to; pos += 1) {
+        add(pos, pos + 1, trailingSpaceMark)
+      }
+    },
+  })
+}
+
+function rangeStartsOnSelectionLine(view: EditorView, from: number): boolean {
+  const lineNumber = view.state.doc.lineAt(from).number
+  return view.state.selection.ranges.some((range) => {
+    const selectionFromLine = view.state.doc.lineAt(range.from).number
+    const selectionToLine = view.state.doc.lineAt(range.to).number
+    return lineNumber >= selectionFromLine && lineNumber <= selectionToLine
+  })
+}
+
+class InvisibleTabWidget extends WidgetType {
+  private readonly width: number
+
+  constructor(width: number) {
+    super()
+    this.width = width
+  }
+
+  eq(other: InvisibleTabWidget) {
+    return this.width === other.width
+  }
+
+  toDOM() {
+    const span = document.createElement('span')
+    span.textContent = '\t'
+    span.className = 'cm-tab'
+    span.style.width = `${this.width}px`
+    return span
+  }
+
+  ignoreEvent() { return false }
+}
+
+class InvisibleSpecialCharWidget extends WidgetType {
+  toDOM() {
+    const span = document.createElement('span')
+    span.textContent = '\u2022'
+    span.title = 'Special whitespace'
+    span.setAttribute('aria-label', 'Special whitespace')
+    span.className = 'cm-specialChar'
+    return span
+  }
+
+  ignoreEvent() { return false }
+}
 
 export const markdownHighlight = [
   syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
@@ -204,6 +287,11 @@ export function insertMarkdownHardLineBreak(
   return true
 }
 
+export function openKeyboardShortcutsFromEditor(): boolean {
+  dispatchKeyboardShortcutsOpen()
+  return true
+}
+
 export function buildCoreExtensions(options: {
   onChange: (content: string) => void
   onCursorChange: (line: number, col: number) => void
@@ -221,12 +309,21 @@ export function buildCoreExtensions(options: {
     indentOnInput(),
     bracketMatching(),
     tooltips({ position: 'fixed' }),
+    Prec.highest(
+      keymap.of([
+        {
+          key: 'Mod-/',
+          run: openKeyboardShortcutsFromEditor,
+          preventDefault: true,
+        },
+      ])
+    ),
     keymap.of([
       {
         key: 'Shift-Enter',
         run: insertMarkdownHardLineBreak,
       },
-      ...defaultKeymap,
+      ...sourceEditorDefaultKeymap,
       ...historyKeymap,
       ...foldKeymap,
       indentWithTab,
@@ -256,7 +353,10 @@ export function buildWordWrapExtensions(enabled: boolean): Extension[] {
   return enabled ? [EditorView.lineWrapping] : []
 }
 
-function buildMatchDecoratorExtension(decorator: MatchDecorator): Extension {
+function buildMatchDecoratorExtension(
+  decorator: MatchDecorator,
+  options: { refreshOnSelectionSet?: boolean } = {}
+): Extension {
   return ViewPlugin.fromClass(
     class {
       decorations: DecorationSet
@@ -266,7 +366,9 @@ function buildMatchDecoratorExtension(decorator: MatchDecorator): Extension {
       }
 
       update(update: ViewUpdate) {
-        this.decorations = decorator.updateDeco(update, this.decorations)
+        this.decorations = options.refreshOnSelectionSet && update.selectionSet
+          ? decorator.createDeco(update.view)
+          : decorator.updateDeco(update, this.decorations)
       }
     },
     {
@@ -275,15 +377,23 @@ function buildMatchDecoratorExtension(decorator: MatchDecorator): Extension {
   )
 }
 
-export function buildInvisibleCharacterExtensions(enabled: boolean): Extension[] {
-  return enabled
-    ? [
-        buildMatchDecoratorExtension(trailingSpaceDecorator),
-        highlightSpecialChars({
+export function buildInvisibleCharacterExtensions(
+  enabled: boolean,
+  options: { activeLineOnly?: boolean } = {}
+): Extension[] {
+  if (!enabled) return []
+
+  return [
+    buildMatchDecoratorExtension(
+      options.activeLineOnly ? activeLineTrailingSpaceDecorator : trailingSpaceDecorator,
+      { refreshOnSelectionSet: options.activeLineOnly }
+    ),
+    options.activeLineOnly
+      ? buildMatchDecoratorExtension(activeLineSpecialCharDecorator, { refreshOnSelectionSet: true })
+      : highlightSpecialChars({
           addSpecialChars: INVISIBLE_MARKDOWN_SPECIAL_CHARS,
         }),
-      ]
-    : []
+  ]
 }
 
 export function buildPlaceholderExtensions(placeholder?: string): Extension[] {

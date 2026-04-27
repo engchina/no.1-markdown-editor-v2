@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { EditorView } from '@codemirror/view'
 import { countSearchMatches } from '../../lib/search'
 import type { SearchSupport } from '../Editor/optionalFeatures'
+import AppIcon from '../Icons/AppIcon'
 
 interface Props {
   editorView: EditorView | null
@@ -14,6 +15,7 @@ interface Props {
 
 export default function SearchBar({ editorView, searchSupport, loading, showReplace, onClose }: Props) {
   const { t } = useTranslation()
+  const inputId = useId()
   const [findText, setFindText] = useState('')
   const [replaceText, setReplaceText] = useState('')
   const [caseSensitive, setCaseSensitive] = useState(false)
@@ -24,6 +26,8 @@ export default function SearchBar({ editorView, searchSupport, loading, showRepl
   const [hasReplace, setHasReplace] = useState(showReplace)
 
   const findRef = useRef<HTMLInputElement>(null)
+  const findInputId = `${inputId}-find`
+  const replaceInputId = `${inputId}-replace`
 
   useEffect(() => {
     setHasReplace(showReplace)
@@ -147,110 +151,135 @@ export default function SearchBar({ editorView, searchSupport, loading, showRepl
     if (opt === 'ww') setWholeWord((value) => { runSearch(findText, { ww: !value }); return !value })
   }
 
-  const btnStyle = (active: boolean) => ({
-    background: active ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'transparent',
-    color: active ? 'var(--accent)' : 'var(--text-muted)',
-    border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-    borderRadius: '4px',
-    padding: '1px 6px',
-    fontSize: '11px',
-    fontFamily: 'monospace',
-    cursor: 'pointer',
-  })
-
   if (loading || !searchSupport) {
     return (
-      <div
-        className="flex items-center gap-2 px-3 py-2 flex-shrink-0"
-        style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}
-      >
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('search.loading')}</span>
+      <div className="search-bar search-bar--loading">
+        <span className="search-bar__loading">{t('search.loading')}</span>
         <div className="flex-1" />
         <button
+          type="button"
           onClick={onClose}
-          className="w-6 h-6 rounded flex items-center justify-center text-sm"
-          style={{ color: 'var(--text-muted)' }}
+          className="search-bar__icon-button search-bar__icon-button--ghost"
           title={t('search.close')}
+          aria-label={t('search.close')}
         >
-          ×
+          <AppIcon name="x" size={15} />
         </button>
       </div>
     )
   }
 
   return (
-    <div
-      className="flex flex-col gap-1 px-3 py-2 flex-shrink-0"
-      style={{
-        background: 'var(--bg-secondary)',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '52px' }}>{t('search.find')}</span>
-        <div
-          className="flex-1 flex items-center gap-1 rounded px-2"
-          style={{ background: 'var(--editor-bg)', border: '1px solid var(--border)', height: '26px' }}
-        >
+    <div className="search-bar" data-replace={hasReplace ? 'true' : 'false'}>
+      <div className="search-bar__row">
+        <label className="search-bar__label" htmlFor={findInputId}>
+          {t('search.find')}
+        </label>
+        <div className={`search-bar__field${hasNoMatches ? ' search-bar__field--invalid' : ''}`}>
+          <AppIcon name="search" size={15} className="search-bar__field-icon" />
           <input
+            id={findInputId}
             ref={findRef}
             type="text"
             value={findText}
             onChange={(event) => setFindText(event.target.value)}
             onKeyDown={onKeyDown}
             placeholder={t('search.searchPlaceholder')}
-            className="flex-1 bg-transparent outline-none text-xs"
-            style={{ color: 'var(--text-primary)' }}
+            className="search-bar__input"
           />
           {matchCount && (
-            <span className="text-xs flex-shrink-0" style={{ color: hasNoMatches ? '#ef4444' : 'var(--text-muted)' }}>
+            <span className={`search-bar__match-count${hasNoMatches ? ' search-bar__match-count--empty' : ''}`}>
               {matchCount}
             </span>
           )}
         </div>
-        <button style={btnStyle(caseSensitive)} onClick={() => toggleOpt('cs')} title={t('search.caseSensitive')}>Aa</button>
-        <button style={btnStyle(wholeWord)} onClick={() => toggleOpt('ww')} title={t('search.wholeWord')}>W</button>
-        <button style={btnStyle(useRegex)} onClick={() => toggleOpt('re')} title={t('search.useRegex')}>.*</button>
-        <button
-          title={t('search.previous')}
-          onClick={() => editorView && searchSupport.findPrevious(editorView)}
-          className="w-6 h-6 rounded flex items-center justify-center transition-colors"
-          style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-        >↑</button>
-        <button
-          title={t('search.next')}
-          onClick={() => editorView && searchSupport.findNext(editorView)}
-          className="w-6 h-6 rounded flex items-center justify-center transition-colors"
-          style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-        >↓</button>
-        <button
-          disabled={!findText}
-          onClick={() => editorView && searchSupport.selectAll(editorView)}
-          className="text-xs px-2 h-6 rounded disabled:opacity-40"
-          style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-          title={t('search.selectAll')}
-        >{t('search.selectAll')}</button>
-        <button
-          onClick={() => setHasReplace((value) => !value)}
-          className="text-xs px-2 h-6 rounded"
-          style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
-        >{hasReplace ? t('search.hideReplace') : t('search.showReplace')}</button>
-        <button
-          onClick={onClose}
-          className="w-6 h-6 rounded flex items-center justify-center text-sm"
-          style={{ color: 'var(--text-muted)' }}
-          title={t('search.close')}
-        >×</button>
+        <div className="search-bar__controls">
+          <div className="search-bar__toggle-group">
+            <button
+              type="button"
+              className="search-bar__toggle"
+              aria-pressed={caseSensitive}
+              onClick={() => toggleOpt('cs')}
+              title={t('search.caseSensitive')}
+            >
+              Aa
+            </button>
+            <button
+              type="button"
+              className="search-bar__toggle"
+              aria-pressed={wholeWord}
+              onClick={() => toggleOpt('ww')}
+              title={t('search.wholeWord')}
+            >
+              W
+            </button>
+            <button
+              type="button"
+              className="search-bar__toggle"
+              aria-pressed={useRegex}
+              onClick={() => toggleOpt('re')}
+              title={t('search.useRegex')}
+            >
+              .*
+            </button>
+          </div>
+          <div className="search-bar__button-group">
+            <button
+              type="button"
+              title={t('search.previous')}
+              aria-label={t('search.previous')}
+              onClick={() => editorView && searchSupport.findPrevious(editorView)}
+              className="search-bar__icon-button"
+            >
+              <AppIcon name="arrowUp" size={15} />
+            </button>
+            <button
+              type="button"
+              title={t('search.next')}
+              aria-label={t('search.next')}
+              onClick={() => editorView && searchSupport.findNext(editorView)}
+              className="search-bar__icon-button"
+            >
+              <AppIcon name="arrowDown" size={15} />
+            </button>
+          </div>
+          <button
+            type="button"
+            disabled={!findText}
+            onClick={() => editorView && searchSupport.selectAll(editorView)}
+            className="search-bar__text-button"
+            title={t('search.selectAll')}
+          >
+            {t('search.selectAll')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setHasReplace((value) => !value)}
+            className="search-bar__text-button search-bar__text-button--muted"
+          >
+            {hasReplace ? t('search.hideReplace') : t('search.showReplace')}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="search-bar__icon-button search-bar__icon-button--ghost"
+            title={t('search.close')}
+            aria-label={t('search.close')}
+          >
+            <AppIcon name="x" size={15} />
+          </button>
+        </div>
       </div>
 
       {hasReplace && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '52px' }}>{t('search.replace')}</span>
-          <div
-            className="flex-1 flex items-center gap-1 rounded px-2"
-            style={{ background: 'var(--editor-bg)', border: '1px solid var(--border)', height: '26px' }}
-          >
+        <div className="search-bar__row search-bar__row--replace">
+          <label className="search-bar__label" htmlFor={replaceInputId}>
+            {t('search.replace')}
+          </label>
+          <div className="search-bar__field">
+            <AppIcon name="replace" size={15} className="search-bar__field-icon" />
             <input
+              id={replaceInputId}
               type="text"
               value={replaceText}
               onChange={(event) => setReplaceText(event.target.value)}
@@ -263,22 +292,27 @@ export default function SearchBar({ editorView, searchSupport, loading, showRepl
                 if (event.key === 'Escape') onClose()
               }}
               placeholder={t('search.replacePlaceholder')}
-              className="flex-1 bg-transparent outline-none text-xs"
-              style={{ color: 'var(--text-primary)' }}
+              className="search-bar__input"
             />
           </div>
-          <button
-            disabled={!findText}
-            onClick={replaceOne}
-            className="text-xs px-2 h-6 rounded disabled:opacity-40"
-            style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-          >{t('search.replaceOne')}</button>
-          <button
-            disabled={!findText}
-            onClick={replaceEveryMatch}
-            className="text-xs px-2 h-6 rounded disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: 'white', border: 'none' }}
-          >{t('search.replaceAll')}</button>
+          <div className="search-bar__controls search-bar__replace-actions">
+            <button
+              type="button"
+              disabled={!findText}
+              onClick={replaceOne}
+              className="search-bar__text-button"
+            >
+              {t('search.replaceOne')}
+            </button>
+            <button
+              type="button"
+              disabled={!findText}
+              onClick={replaceEveryMatch}
+              className="search-bar__text-button search-bar__text-button--primary"
+            >
+              {t('search.replaceAll')}
+            </button>
+          </div>
         </div>
       )}
     </div>

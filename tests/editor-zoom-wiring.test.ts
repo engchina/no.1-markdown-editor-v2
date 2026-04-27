@@ -3,7 +3,10 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
 test('view commands reserve the primary zoom shortcuts for app zoom and leave font size as palette-only actions', async () => {
-  const commands = await readFile(new URL('../src/hooks/useCommands.ts', import.meta.url), 'utf8')
+  const [commands, app] = await Promise.all([
+    readFile(new URL('../src/hooks/useCommands.ts', import.meta.url), 'utf8'),
+    readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
+  ])
 
   assert.match(commands, /id: 'view\.zoomIn'/)
   assert.match(commands, /id: 'view\.zoomIn'[\s\S]*shortcut: increaseFontShortcut/)
@@ -21,6 +24,8 @@ test('view commands reserve the primary zoom shortcuts for app zoom and leave fo
     /id: 'view\.fontSizeDecrease',[\s\S]*?shortcut:[\s\S]*?action: \(\) => store\.setFontSize\(Math\.max\(store\.fontSize - 1, 11\)\)/
   )
   assert.doesNotMatch(commands, /id: 'view\.fontSizeReset',[\s\S]*?shortcut:[\s\S]*?action: \(\) => store\.setFontSize\(14\)/)
+  assert.match(app, /import \{ hasPrimaryModifier, matchesPrimaryShortcut \} from '\.\/lib\/platform'/)
+  assert.match(app, /if \(event\.altKey \|\| !hasPrimaryModifier\(event\)\) return/)
 })
 
 test('command palette prioritizes and badges zoom commands ahead of font size commands', async () => {
