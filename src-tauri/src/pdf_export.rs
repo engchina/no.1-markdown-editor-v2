@@ -185,7 +185,7 @@ async fn native_print_to_pdf<R: Runtime>(
     use std::sync::mpsc;
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2_7;
     use webview2_com::PrintToPdfCompletedHandler;
-    use windows::core::{HSTRING, Interface};
+    use windows::core::{Interface, HSTRING};
 
     let (tx, rx) = mpsc::channel::<Result<(), String>>();
     let output = output_path.to_string();
@@ -441,8 +441,7 @@ mod tests {
     fn should_signal_pdf_page_ready_ignores_unrelated_urls() {
         let expected_url = reqwest::Url::parse("file:///C:/temp/no1-pdf-export-test.html")
             .expect("expected file url");
-        let current_url =
-            reqwest::Url::parse("about:blank").expect("about blank url");
+        let current_url = reqwest::Url::parse("about:blank").expect("about blank url");
 
         assert!(!should_signal_pdf_page_ready(
             PageLoadEvent::Finished,
@@ -459,6 +458,9 @@ mod tests {
         let uri = output_file_uri(path.as_path()).expect("output file uri");
 
         assert!(uri.starts_with("file://"), "expected file URI, got {uri}");
-        assert!(uri.contains("%20"), "expected URI-encoded spaces, got {uri}");
+        assert!(
+            uri.contains("%20"),
+            "expected URI-encoded spaces, got {uri}"
+        );
     }
 }

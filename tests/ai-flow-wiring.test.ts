@@ -132,6 +132,7 @@ test('AIComposer keeps the answer first while placing retrieval details below th
   assert.ok(resultPanelIndex >= 0)
   assert.ok(retrievalDisclosureCallIndex > resultPanelIndex)
   assert.match(core, /data-ai-result-body="true"/)
+  assert.match(core, /className="whitespace-pre-wrap break-words text-sm"[\s\S]*\{composer\.errorMessage\}/)
   assert.match(core, /data-ai-result-actions="true"/)
   assert.match(core, /className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-1\.5 sm:flex-none sm:basis-auto sm:justify-end"/)
   assert.match(core, /className="max-w-full shrink-0 truncate rounded-lg/)
@@ -207,7 +208,7 @@ test('AIComposer no longer renders the structured workspace context picker', asy
   assert.doesNotMatch(composer, /insertNoteMention\(result\.path \?\? result\.name\)/)
 })
 
-test('AIComposer promotes Hosted Agent to a top-level knowledge tab instead of nesting it under Data', async () => {
+test('AIComposer keeps Hosted Agent top-level while Data mode exposes SQL draft and MCP execution actions', async () => {
   const [composer, core, runtime] = await Promise.all([
     readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
@@ -215,11 +216,30 @@ test('AIComposer promotes Hosted Agent to a top-level knowledge tab instead of n
   ])
 
   assert.match(runtime, /getAIKnowledgeType\(composer\.knowledgeSelection, composer\.executionTargetKind\)/)
+  assert.match(runtime, /getDefaultUnstructuredStoreRegistration\(oracleProviderConfig\)/)
+  assert.match(runtime, /getDefaultStructuredStoreRegistration\(oracleProviderConfig\)/)
   assert.match(core, /{ value: 'agent', label: t\('ai\.knowledge\.type\.agent'\) }/)
   assert.match(core, /data-ai-agent-profile-select="true"/)
-  assert.doesNotMatch(core, /data-ai-structured-mode=/)
+  assert.match(core, /data-ai-structured-mode=\{option\.mode\}/)
+  assert.match(core, /onSelectDataMode\(option\.mode\)/)
+  assert.match(core, /ai\.knowledge\.structuredAction\.sqlDraft/)
+  assert.match(core, /ai\.knowledge\.structuredAction\.agentAnswer/)
+  assert.match(core, /data-ai-action="execute-structured-sql"/)
+  assert.match(core, /data-ai-sql-draft-card="true"/)
+  assert.match(core, /data-ai-sql-draft-header-actions="true"[\s\S]*data-ai-action="execute-structured-sql"/)
+  assert.match(core, /className="inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1\.5 rounded-lg px-3 py-1\.5 text-xs font-medium transition-colors"/)
+  assert.doesNotMatch(core, /className="mt-3 flex justify-end"[\s\S]*data-ai-action="execute-structured-sql"/)
+  assert.match(core, /ai\.knowledge\.structuredExecution\.execute/)
+  assert.match(runtime, /const handleSelectDataMode = useCallback\(\(mode: 'sql-draft' \| 'agent-answer'\)/)
+  assert.doesNotMatch(runtime, /composer\.knowledgeSelection\.mode !== store\.defaultMode/)
+  assert.match(runtime, /const nextCapability =\s*composer\.knowledgeSelection\.mode === 'agent-answer' \? 'structured-execution' : 'nl2sql-draft'/)
+  assert.match(runtime, /mode: 'sql-draft' as const/)
+  assert.match(runtime, /const handleExecuteStructuredSql = useCallback\(async \(\) =>/)
+  assert.match(runtime, /generatedSql: sqlToExecute/)
   assert.doesNotMatch(core, /data-ai-hosted-agent-select=/)
   assert.match(composer, /useAIComposerRuntime\(\{/)
+  assert.match(composer, /canExecuteStructuredSql=/)
+  assert.match(composer, /onExecuteStructuredSql=\{handleExecuteStructuredSql\}/)
 })
 
 test('AIComposer exposes workspace execution task cards and autonomous workspace agent session controls', async () => {

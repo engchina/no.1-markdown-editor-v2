@@ -137,8 +137,10 @@ export default function AIComposer() {
     handleSelectKnowledgeType,
     handleSelectDocsStore,
     handleSelectDataStore,
+    handleSelectDataMode,
     handleSelectHostedAgentProfile,
     handleSubmit,
+    handleExecuteStructuredSql,
     handleCancelRequest,
     handleCopy,
   } = useAIComposerRuntime({
@@ -463,6 +465,14 @@ export default function AIComposer() {
       hasInsertPreview={hasInsertPreview}
       diffBlocks={diffBlocks}
       canSubmit={canSubmit}
+      canExecuteStructuredSql={
+        composer.requestState !== 'streaming' &&
+        composer.knowledgeSelection.kind === 'oracle-structured-store' &&
+        composer.knowledgeSelection.mode === 'agent-answer' &&
+        !!(composer.generatedSql ?? (composer.draftFormat === 'sql' ? normalizedDraft : '')).trim() &&
+        !composer.structuredExecutionStatus &&
+        hasConnection
+      }
       canApplyToEditor={canApplyToEditor}
       canApplyToAnyTarget={canApplyToAnyTarget}
       canReplaceCurrentTarget={canReplaceCurrentTarget}
@@ -477,6 +487,7 @@ export default function AIComposer() {
       onOpenAISetup={handleOpenAISetup}
       onCancelRequest={handleCancelRequest}
       onRun={handleSubmit}
+      onExecuteStructuredSql={handleExecuteStructuredSql}
       onResetAndClose={() => {
         resetDraftState()
         void handleCloseComposer()
@@ -485,6 +496,7 @@ export default function AIComposer() {
       onSelectKnowledgeType={handleSelectKnowledgeType}
       onSelectDocsStore={handleSelectDocsStore}
       onSelectDataStore={handleSelectDataStore}
+      onSelectDataMode={handleSelectDataMode}
       onSelectHostedAgentProfile={handleSelectHostedAgentProfile}
       onSelectTemplate={applyTemplate}
       onRetry={handleSubmit}

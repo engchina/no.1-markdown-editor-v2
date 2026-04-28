@@ -47,7 +47,8 @@ export type AIInvocationCapability =
 export type AIKnowledgeType = 'none' | 'docs' | 'data' | 'agent'
 export type AIOracleStructuredStoreMode = 'sql-draft' | 'agent-answer'
 export type AIHostedAgentTransport = 'http-json' | 'sse'
-export type AIHostedAgentSupportedContract = 'chat-text' | 'structured-data-answer'
+export type AIMCPExecutionTransport = 'stdio' | 'streamable-http'
+export type AIOracleEnrichmentMode = 'full' | 'partial' | 'delta'
 export type AIStorageKind = 'keyring' | 'unsupported'
 export type AIExplicitContextKind = 'note' | 'search'
 export type AIPromptMentionKind = AIExplicitContextKind
@@ -129,12 +130,44 @@ export interface AIOracleStructuredStoreRegistration {
   id: string
   label: string
   semanticStoreId: string
-  vectorStoreId?: string
+  compartmentId?: string
   storeOcid?: string
+  ociAuthProfileId: string | null
+  regionOverride: string
+  schemaName: string
   description: string
   enabled: boolean
+  isDefault: boolean
   defaultMode: AIOracleStructuredStoreMode
-  executionAgentProfileId: string | null
+  executionProfileId: string | null
+  enrichmentDefaultMode: AIOracleEnrichmentMode
+  enrichmentObjectNames: string
+}
+
+export interface AIOracleOCIAuthProfile {
+  id: string
+  label: string
+  configFile: string
+  profile: string
+  region: string
+  tenancy: string
+  user: string
+  fingerprint: string
+  keyFile: string
+  enabled: boolean
+}
+
+export interface AIOracleMCPExecutionProfile {
+  id: string
+  label: string
+  description: string
+  configJson: string
+  command: string
+  args: string[]
+  serverUrl: string
+  transport: AIMCPExecutionTransport
+  toolName: string
+  enabled: boolean
 }
 
 export interface AIOracleHostedAgentProfile {
@@ -148,7 +181,6 @@ export interface AIOracleHostedAgentProfile {
   clientId: string
   scope: string
   transport: AIHostedAgentTransport
-  supportedContracts: AIHostedAgentSupportedContract[]
 }
 
 export interface AIOpenAICompatibleProviderConfig {
@@ -163,8 +195,10 @@ export interface AIOCIResponsesProviderConfig {
   baseUrl: string
   model: string
   project: string
+  ociAuthProfiles: AIOracleOCIAuthProfile[]
   unstructuredStores: AIOracleUnstructuredStoreRegistration[]
   structuredStores: AIOracleStructuredStoreRegistration[]
+  mcpExecutionProfiles: AIOracleMCPExecutionProfile[]
   hostedAgentProfiles: AIOracleHostedAgentProfile[]
 }
 
@@ -203,6 +237,7 @@ export interface AIRunCompletionRequest {
   knowledgeSelection: AIKnowledgeSelection
   threadId: string | null
   hostedAgentProfileId: string | null
+  generatedSql?: string | null
 }
 
 export interface AIRunCompletionResponse {
@@ -219,6 +254,9 @@ export interface AIRunCompletionResponse {
   retrievalQuery: string | null
   retrievalResults: AIRetrievalResultPreview[]
   retrievalResultCount: number | null
+  generatedSql: string | null
+  structuredExecutionStatus: string | null
+  structuredExecutionToolName: string | null
 }
 
 export interface AIRetrievalResultPreview {
@@ -231,6 +269,7 @@ export interface AIProviderState {
   config: AIProviderConfig | null
   hasApiKey: boolean
   storageKind: AIStorageKind
+  hasOCIKeyFilePassphraseById: Record<string, boolean>
   hasHostedAgentClientSecretById: Record<string, boolean>
 }
 
@@ -271,6 +310,9 @@ export interface AIComposerState {
   retrievalQuery: string | null
   retrievalResults: AIRetrievalResultPreview[]
   retrievalResultCount: number | null
+  generatedSql: string | null
+  structuredExecutionStatus: string | null
+  structuredExecutionToolName: string | null
   diffBaseText: string | null
   threadId: string | null
   startedAt: number | null

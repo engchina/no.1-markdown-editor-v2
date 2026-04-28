@@ -1,9 +1,12 @@
 import type {
   AIOCIResponsesProviderConfig,
   AIOpenAICompatibleProviderConfig,
-  AIHostedAgentSupportedContract,
   AIKnowledgeSelection,
+  AIMCPExecutionTransport,
+  AIOracleEnrichmentMode,
   AIOracleHostedAgentProfile,
+  AIOracleMCPExecutionProfile,
+  AIOracleOCIAuthProfile,
   AIOracleStructuredStoreMode,
   AIOracleStructuredStoreRegistration,
   AIOracleUnstructuredStoreRegistration,
@@ -13,6 +16,10 @@ import type {
 
 export const OPENAI_COMPATIBLE_PROVIDER = 'openai-compatible' as const
 export const OCI_RESPONSES_PROVIDER = 'oci-responses' as const
+export const DEFAULT_OCI_IAM_CONFIG_FILE = '~/.oci_iam/config'
+const DEFAULT_NL2SQL_MCP_SERVER_URL = 'https://genai.oci.{region-identifier}.oraclecloud.com/nl2sql/toolchain'
+const DEFAULT_MCP_REMOTE_COMMAND = '/opt/homebrew/bin/npx'
+const DEFAULT_MCP_REMOTE_ARGS = ['-y', 'mcp-remote', DEFAULT_NL2SQL_MCP_SERVER_URL, '--allow-http'] as const
 
 export function createDefaultAIProviderConfig(): AIProviderConfig {
   return {
@@ -20,8 +27,10 @@ export function createDefaultAIProviderConfig(): AIProviderConfig {
     baseUrl: '',
     model: '',
     project: '',
+    ociAuthProfiles: [],
     unstructuredStores: [],
     structuredStores: [],
+    mcpExecutionProfiles: [],
     hostedAgentProfiles: [],
   }
 }
@@ -42,12 +51,51 @@ export function createDefaultAIOracleStructuredStoreRegistration(): AIOracleStru
     id: createAIConfigId('structured'),
     label: '',
     semanticStoreId: '',
-    vectorStoreId: '',
+    compartmentId: '',
     storeOcid: '',
+    ociAuthProfileId: null,
+    regionOverride: '',
+    schemaName: '',
     description: '',
     enabled: true,
+    isDefault: false,
     defaultMode: 'sql-draft',
-    executionAgentProfileId: null,
+    executionProfileId: null,
+    enrichmentDefaultMode: 'full',
+    enrichmentObjectNames: '',
+  }
+}
+
+export function createDefaultAIOracleOCIAuthProfile(): AIOracleOCIAuthProfile {
+  return {
+    id: createAIConfigId('oci-auth'),
+    label: '',
+    configFile: DEFAULT_OCI_IAM_CONFIG_FILE,
+    profile: 'DEFAULT',
+    region: '',
+    tenancy: '',
+    user: '',
+    fingerprint: '',
+    keyFile: '',
+    enabled: true,
+  }
+}
+
+export function createDefaultAIOracleMCPExecutionProfile(): AIOracleMCPExecutionProfile {
+  const profile = {
+    id: createAIConfigId('mcp-execution'),
+    label: '',
+    description: '',
+    command: defaultMcpRemoteCommand(),
+    args: [...DEFAULT_MCP_REMOTE_ARGS],
+    serverUrl: DEFAULT_NL2SQL_MCP_SERVER_URL,
+    transport: 'streamable-http' as const,
+    toolName: '',
+    enabled: true,
+  }
+  return {
+    ...profile,
+    configJson: buildAIOracleMCPConfigJson(profile),
   }
 }
 
@@ -63,7 +111,6 @@ export function createDefaultAIOracleHostedAgentProfile(): AIOracleHostedAgentPr
     clientId: '',
     scope: '',
     transport: 'http-json',
-    supportedContracts: ['chat-text'],
   }
 }
 
@@ -141,16 +188,25 @@ export function normalizeOCIResponsesProviderConfig(
   if (!model) throw new Error('AI model is required.')
   const project = config.project.trim()
 
+  const ociAuthProfiles = normalizeOCIAuthProfiles(config.ociAuthProfiles)
+  const mcpExecutionProfiles = normalizeMCPExecutionProfiles(config.mcpExecutionProfiles)
   const hostedAgentProfiles = normalizeHostedAgentProfiles(config.hostedAgentProfiles)
-  const hostedAgentIds = new Set(hostedAgentProfiles.map((profile) => profile.id))
+  const ociAuthProfileIds = new Set(ociAuthProfiles.map((profile) => profile.id))
+  const mcpExecutionProfileIds = new Set(mcpExecutionProfiles.map((profile) => profile.id))
 
   return {
     provider: OCI_RESPONSES_PROVIDER,
     baseUrl,
     model,
     project,
+    ociAuthProfiles,
     unstructuredStores: normalizeUnstructuredStoreRegistrations(config.unstructuredStores),
-    structuredStores: normalizeStructuredStoreRegistrations(config.structuredStores, hostedAgentIds),
+    structuredStores: normalizeStructuredStoreRegistrations(
+      config.structuredStores,
+      ociAuthProfileIds,
+      mcpExecutionProfileIds
+    ),
+    mcpExecutionProfiles,
     hostedAgentProfiles,
   }
 }
@@ -167,7 +223,8 @@ export function getDefaultStructuredStoreRegistration(
   config: AIOCIResponsesProviderConfig | null | undefined
 ): AIOracleStructuredStoreRegistration | null {
   if (!config) return null
-  return config.structuredStores.find((store) => store.enabled) ?? null
+  const enabled = config.structuredStores.filter((store) => store.enabled)
+  return enabled.find((store) => store.isDefault) ?? enabled[0] ?? null
 }
 
 export function findHostedAgentProfile(
@@ -201,6 +258,66 @@ export function buildHostedAgentInvokeUrlPreview(
   return `https://application.generativeai.${region}.oci.oraclecloud.com/${apiVersion}/hostedApplications/${hostedApplicationOcid}/actions/invoke/${apiAction}`
 }
 
+export interface AIOracleMCPConfigJsonImport {
+  label: string
+  description: string
+  command: string
+  args: string[]
+  serverUrl: string
+  transport: AIMCPExecutionTransport
+  configJson: string
+}
+
+export function parseAIOracleMCPConfigJson(input: string): AIOracleMCPConfigJsonImport {
+  const parsed = JSON.parse(input) as unknown
+  const serverEntries = getMCPServerEntries(parsed)
+  if (serverEntries.length === 0) {
+    throw new Error('MCP JSON must contain at least one mcpServers entry.')
+  }
+
+  const [label, server] = serverEntries[0] as [string, Record<string, unknown>]
+  const command = getStringValue(server.command).trim()
+  if (!command) throw new Error('MCP JSON server command is required.')
+
+  const args = Array.isArray(server.args)
+    ? server.args.map((arg) => (typeof arg === 'string' ? arg.trim() : '')).filter(Boolean)
+    : []
+  const serverUrl = getStringValue(server.url).trim() || getStringValue(server.serverUrl).trim() || extractMCPServerUrl(args)
+
+  return {
+    label,
+    description: getStringValue(server.description).trim(),
+    command,
+    args,
+    serverUrl,
+    transport: normalizeMCPTransport(getStringValue(server.transport)),
+    configJson: JSON.stringify(parsed, null, 2),
+  }
+}
+
+export function tryParseAIOracleMCPConfigJson(input: string): AIOracleMCPConfigJsonImport | null {
+  try {
+    return parseAIOracleMCPConfigJson(input)
+  } catch {
+    return null
+  }
+}
+
+export function buildAIOracleMCPConfigJson(
+  profile: Pick<AIOracleMCPExecutionProfile, 'id' | 'label' | 'description' | 'command' | 'args' | 'transport'>
+): string {
+  const serverName = normalizeMCPServerName(profile.label || profile.id || 'nl2sql')
+  const server: Record<string, unknown> = {
+    command: profile.command.trim() || defaultMcpRemoteCommand(),
+    args: profile.args.map((arg) => arg.trim()).filter(Boolean),
+    transport: normalizeMCPTransport(profile.transport),
+  }
+  const description = profile.description.trim()
+  if (description) server.description = description
+
+  return JSON.stringify({ mcpServers: { [serverName]: server } }, null, 2)
+}
+
 function normalizeUnstructuredStoreRegistrations(
   stores: readonly AIOracleUnstructuredStoreRegistration[] | undefined
 ): AIOracleUnstructuredStoreRegistration[] {
@@ -219,22 +336,75 @@ function normalizeUnstructuredStoreRegistrations(
 
 function normalizeStructuredStoreRegistrations(
   stores: readonly AIOracleStructuredStoreRegistration[] | undefined,
-  hostedAgentIds: ReadonlySet<string>
+  ociAuthProfileIds: ReadonlySet<string>,
+  mcpExecutionProfileIds: ReadonlySet<string>
 ): AIOracleStructuredStoreRegistration[] {
-  return (stores ?? []).map((store, index) => ({
+  const normalized = (stores ?? []).map((store, index) => ({
     id: normalizeConfigId(store.id, 'structured', index),
     label: store.label.trim(),
     semanticStoreId: store.semanticStoreId.trim(),
-    vectorStoreId: store.vectorStoreId?.trim() ?? '',
+    compartmentId: store.compartmentId?.trim() || store.storeOcid?.trim() || '',
     storeOcid: store.storeOcid?.trim() ?? '',
+    ociAuthProfileId:
+      store.ociAuthProfileId && ociAuthProfileIds.has(store.ociAuthProfileId)
+        ? store.ociAuthProfileId
+        : null,
+    regionOverride: store.regionOverride?.trim() ?? '',
+    schemaName: store.schemaName?.trim() ?? '',
     description: store.description.trim(),
     enabled: store.enabled !== false,
+    isDefault: store.isDefault === true,
     defaultMode: normalizeStructuredStoreMode(store.defaultMode),
-    executionAgentProfileId:
-      store.executionAgentProfileId && hostedAgentIds.has(store.executionAgentProfileId)
-        ? store.executionAgentProfileId
+    executionProfileId:
+      store.executionProfileId && mcpExecutionProfileIds.has(store.executionProfileId)
+        ? store.executionProfileId
         : null,
+    enrichmentDefaultMode: normalizeEnrichmentMode(store.enrichmentDefaultMode),
+    enrichmentObjectNames: store.enrichmentObjectNames?.trim() ?? '',
   }))
+
+  enforceSingleDefault(normalized, (store) => store.isDefault, (store, next) => ({ ...store, isDefault: next }))
+  return normalized
+}
+
+function normalizeOCIAuthProfiles(
+  profiles: readonly AIOracleOCIAuthProfile[] | undefined
+): AIOracleOCIAuthProfile[] {
+  return (profiles ?? []).map((profile, index) => ({
+    id: normalizeConfigId(profile.id, 'oci-auth', index),
+    label: profile.label?.trim() ?? '',
+    configFile: DEFAULT_OCI_IAM_CONFIG_FILE,
+    profile: profile.profile?.trim() || 'DEFAULT',
+    region: profile.region?.trim() ?? '',
+    tenancy: profile.tenancy?.trim() ?? '',
+    user: profile.user?.trim() ?? '',
+    fingerprint: profile.fingerprint?.trim() ?? '',
+    keyFile: profile.keyFile?.trim() ?? '',
+    enabled: profile.enabled !== false,
+  }))
+}
+
+function normalizeMCPExecutionProfiles(
+  profiles: readonly AIOracleMCPExecutionProfile[] | undefined
+): AIOracleMCPExecutionProfile[] {
+  return (profiles ?? []).map((profile, index) => {
+    const normalized = {
+      id: normalizeConfigId(profile.id, 'mcp-execution', index),
+      label: profile.label?.trim() ?? '',
+      description: profile.description?.trim() ?? '',
+      command: profile.command?.trim() || defaultMcpRemoteCommand(),
+      args: normalizeMCPArgs(profile.args, profile.serverUrl),
+      serverUrl: profile.serverUrl?.trim() ?? '',
+      transport: normalizeMCPTransport(profile.transport),
+      toolName: profile.toolName?.trim() ?? '',
+      enabled: profile.enabled !== false,
+    }
+
+    return {
+      ...normalized,
+      configJson: profile.configJson?.trim() || buildAIOracleMCPConfigJson(normalized),
+    }
+  })
 }
 
 function normalizeHostedAgentProfiles(
@@ -251,26 +421,55 @@ function normalizeHostedAgentProfiles(
     clientId: profile.clientId.trim(),
     scope: profile.scope.trim(),
     transport: profile.transport === 'sse' ? 'sse' : 'http-json',
-    supportedContracts: normalizeHostedAgentSupportedContracts(profile.supportedContracts),
   }))
-}
-
-function normalizeHostedAgentSupportedContracts(
-  contracts: readonly AIHostedAgentSupportedContract[] | undefined
-): AIHostedAgentSupportedContract[] {
-  const seen = new Set<AIHostedAgentSupportedContract>()
-  const normalized: AIHostedAgentSupportedContract[] = []
-  for (const candidate of contracts ?? []) {
-    if (candidate !== 'chat-text' && candidate !== 'structured-data-answer') continue
-    if (seen.has(candidate)) continue
-    seen.add(candidate)
-    normalized.push(candidate)
-  }
-  return normalized.length > 0 ? normalized : ['chat-text']
 }
 
 function normalizeStructuredStoreMode(mode: AIOracleStructuredStoreMode | undefined): AIOracleStructuredStoreMode {
   return mode === 'agent-answer' ? 'agent-answer' : 'sql-draft'
+}
+
+function normalizeEnrichmentMode(mode: AIOracleEnrichmentMode | undefined): AIOracleEnrichmentMode {
+  if (mode === 'partial' || mode === 'delta') return mode
+  return 'full'
+}
+
+function normalizeMCPArgs(args: readonly string[] | undefined, serverUrl: string | undefined): string[] {
+  const normalized = (args ?? []).map((arg) => arg.trim()).filter(Boolean)
+  if (normalized.length > 0) return normalized
+  const trimmedServerUrl = serverUrl?.trim()
+  return trimmedServerUrl
+    ? ['-y', 'mcp-remote', trimmedServerUrl, '--allow-http']
+    : [...DEFAULT_MCP_REMOTE_ARGS]
+}
+
+function defaultMcpRemoteCommand(): string {
+  return DEFAULT_MCP_REMOTE_COMMAND
+}
+
+function normalizeMCPTransport(transport: string | undefined): AIMCPExecutionTransport {
+  return transport === 'streamable-http' ? 'streamable-http' : 'stdio'
+}
+
+function extractMCPServerUrl(args: readonly string[]): string {
+  return args.find((arg) => /^https?:\/\//u.test(arg)) ?? ''
+}
+
+function getStringValue(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function getMCPServerEntries(value: unknown): Array<[string, Record<string, unknown>]> {
+  const root = isRecord(value) ? value : {}
+  const mcpServers = isRecord(root.mcpServers) ? root.mcpServers : root
+  return Object.entries(mcpServers).filter((entry): entry is [string, Record<string, unknown>] => isRecord(entry[1]))
+}
+
+function normalizeMCPServerName(input: string): string {
+  return input.trim().replace(/[^A-Za-z0-9_-]+/gu, '_').replace(/^_+|_+$/gu, '') || 'nl2sql'
 }
 
 function normalizeHostedAgentOciRegion(profile: AIOracleHostedAgentProfile): string {

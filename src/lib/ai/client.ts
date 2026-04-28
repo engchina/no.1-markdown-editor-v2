@@ -36,6 +36,20 @@ export async function loadAIProviderState(): Promise<AIProviderState> {
         baseUrl: 'https://mock.invalid/openai/v1',
         model: 'mock-ai-model',
         project: 'ocid1.project.oc1..mock',
+        ociAuthProfiles: [
+          {
+            id: 'oci-auth-default',
+            label: 'OCI DEFAULT',
+            configFile: '~/.oci_iam/config',
+            profile: 'DEFAULT',
+            region: 'us-chicago-1',
+            tenancy: 'ocid1.tenancy.oc1..mock',
+            user: 'ocid1.user.oc1..mock',
+            fingerprint: '00:00:00:00',
+            keyFile: '~/.oci/oci_api_key.pem',
+            enabled: true,
+          },
+        ],
         unstructuredStores: [
           {
             id: 'docs-default',
@@ -51,12 +65,49 @@ export async function loadAIProviderState(): Promise<AIProviderState> {
             id: 'data-default',
             label: 'Analytics Schema',
             semanticStoreId: 'semantic_mock_analytics',
-            vectorStoreId: 'vs_mock_data',
             storeOcid: 'ocid1.generativeaivectorstore.oc1..mock',
+            ociAuthProfileId: 'oci-auth-default',
+            regionOverride: 'us-chicago-1',
+            schemaName: 'SALES',
             description: 'Mock semantic store',
             enabled: true,
+            isDefault: true,
             defaultMode: 'sql-draft',
-            executionAgentProfileId: 'hosted-agent-default',
+            executionProfileId: 'mcp-default',
+            enrichmentDefaultMode: 'full',
+            enrichmentObjectNames: '',
+          },
+        ],
+        mcpExecutionProfiles: [
+          {
+            id: 'mcp-default',
+            label: 'Sales MCP',
+            description: 'Mock NL2SQL MCP execution profile',
+            configJson: JSON.stringify(
+              {
+                mcpServers: {
+                  nl2sql_sales_database: {
+                    description: 'Mock NL2SQL MCP execution profile',
+                    command: '/opt/homebrew/bin/npx',
+                    args: [
+                      '-y',
+                      'mcp-remote',
+                      'https://genai.oci.us-chicago-1.oraclecloud.com/nl2sql/toolchain',
+                      '--allow-http',
+                    ],
+                    transport: 'streamable-http',
+                  },
+                },
+              },
+              null,
+              2
+            ),
+            command: '/opt/homebrew/bin/npx',
+            args: ['-y', 'mcp-remote', 'https://genai.oci.us-chicago-1.oraclecloud.com/nl2sql/toolchain', '--allow-http'],
+            serverUrl: 'https://genai.oci.us-chicago-1.oraclecloud.com/nl2sql/toolchain',
+            transport: 'streamable-http',
+            toolName: 'query_sales_database',
+            enabled: true,
           },
         ],
         hostedAgentProfiles: [
@@ -71,12 +122,14 @@ export async function loadAIProviderState(): Promise<AIProviderState> {
             clientId: 'mock-client-id',
             scope: 'urn:opc:resource:consumer::all',
             transport: 'http-json',
-            supportedContracts: ['chat-text', 'structured-data-answer'],
           },
         ],
       },
       hasApiKey: true,
       storageKind: 'unsupported',
+      hasOCIKeyFilePassphraseById: {
+        'oci-auth-default': false,
+      },
       hasHostedAgentClientSecretById: {
         'hosted-agent-default': true,
       },
@@ -111,6 +164,27 @@ export async function clearAIProviderApiKey(): Promise<void> {
 
   assertTauriAIAvailable()
   await invoke('ai_clear_provider_api_key')
+}
+
+export async function storeAIOCIKeyFilePassphrase(profileId: string, passphrase: string): Promise<void> {
+  if (isAIBrowserMockEnabled()) {
+    void profileId
+    void passphrase
+    return
+  }
+
+  assertTauriAIAvailable()
+  await invoke('ai_store_oci_key_file_passphrase', { profileId, passphrase })
+}
+
+export async function clearAIOCIKeyFilePassphrase(profileId: string): Promise<void> {
+  if (isAIBrowserMockEnabled()) {
+    void profileId
+    return
+  }
+
+  assertTauriAIAvailable()
+  await invoke('ai_clear_oci_key_file_passphrase', { profileId })
 }
 
 export async function storeAIHostedAgentClientSecret(profileId: string, clientSecret: string): Promise<void> {
@@ -180,6 +254,54 @@ export async function cancelAICompletion(requestId: string): Promise<boolean> {
   return invoke<boolean>('ai_cancel_completion', { requestId })
 }
 
+export interface AIEnrichmentJobRequest {
+  structuredStoreId: string
+  mode: 'full' | 'partial' | 'delta'
+  schemaName?: string
+  databaseObjects?: string[]
+}
+
+export interface AIListEnrichmentJobsRequest {
+  structuredStoreId: string
+  compartmentId: string
+}
+
+export interface AIEnrichmentJobActionRequest {
+  structuredStoreId: string
+  enrichmentJobId: string
+}
+
+export async function listAIEnrichmentJobs(request: AIListEnrichmentJobsRequest): Promise<unknown> {
+  if (isAIBrowserMockEnabled()) {
+    return { items: [] }
+  }
+
+  assertTauriAIAvailable()
+  return invoke('ai_list_enrichment_jobs', { request })
+}
+
+export async function generateAIEnrichmentJob(request: AIEnrichmentJobRequest): Promise<unknown> {
+  if (isAIBrowserMockEnabled()) {
+    return {
+      id: `mock-enrichment-${Date.now().toString(36)}`,
+      lifecycleState: 'ACCEPTED',
+      request,
+    }
+  }
+
+  assertTauriAIAvailable()
+  return invoke('ai_generate_enrichment_job', { request })
+}
+
+export async function getAIEnrichmentJob(request: AIEnrichmentJobActionRequest): Promise<unknown> {
+  if (isAIBrowserMockEnabled()) {
+    return { id: request.enrichmentJobId, lifecycleState: 'SUCCEEDED' }
+  }
+
+  assertTauriAIAvailable()
+  return invoke('ai_get_enrichment_job', { request })
+}
+
 function assertTauriAIAvailable(): void {
   if (!isTauri) {
     throw new Error('AI desktop provider commands are unavailable outside the Tauri runtime.')
@@ -237,6 +359,9 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
     retrievalQuery: null,
     retrievalResults: [],
     retrievalResultCount: null,
+    generatedSql: null,
+    structuredExecutionStatus: null,
+    structuredExecutionToolName: null,
   }
 
   if (prompt.includes('[ai-history-ranking]')) {
@@ -254,22 +379,57 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
   }
 
   if (request.knowledgeSelection.kind === 'oracle-structured-store' && request.knowledgeSelection.mode === 'sql-draft') {
+    const promptIsReadOnlySql = isReadOnlySelectSql(request.prompt)
+    const sql = promptIsReadOnlySql
+      ? request.prompt.trim()
+      : [
+          'SELECT customer_name, total_amount',
+          'FROM sales_orders',
+          'WHERE order_status = \'OPEN\'',
+          'ORDER BY total_amount DESC',
+          'FETCH FIRST 10 ROWS ONLY;',
+        ].join('\n')
     return {
-      text: [
+      text: sql,
+      finishReason: 'stop',
+      model: promptIsReadOnlySql ? 'user-supplied-sql' : 'mock-ai-model',
+      threadId: request.threadId,
+      contentType: 'sql',
+      explanationText: promptIsReadOnlySql
+        ? 'Using the read-only SQL from the prompt. No NL2SQL request was sent.'
+        : 'Drafted from the selected semantic store using the current natural-language request.',
+      warningText: 'Review table names and predicates before running this SQL against production data.',
+      sourceLabel: 'Analytics Schema',
+      ...noRetrieval,
+      generatedSql: sql,
+    }
+  }
+
+  if (request.knowledgeSelection.kind === 'oracle-structured-store' && request.knowledgeSelection.mode === 'agent-answer') {
+    const promptSql = isReadOnlySelectSql(request.prompt) ? request.prompt.trim() : ''
+    const sql =
+      request.generatedSql?.trim() ||
+      promptSql ||
+      [
         'SELECT customer_name, total_amount',
         'FROM sales_orders',
         'WHERE order_status = \'OPEN\'',
         'ORDER BY total_amount DESC',
         'FETCH FIRST 10 ROWS ONLY;',
-      ].join('\n'),
+      ].join('\n')
+    return {
+      text: 'The MCP execution profile returned the top open sales orders. Alice Industries has the highest open total in the mock result set.',
       finishReason: 'stop',
-      model: 'mock-ai-model',
+      model: 'mock-nl2sql-mcp',
       threadId: request.threadId,
-      contentType: 'sql',
-      explanationText: 'Drafted from the selected semantic store using the current natural-language request.',
-      warningText: 'Review table names and predicates before running this SQL against production data.',
+      contentType: 'markdown',
+      explanationText: 'Generated SQL with OCI NL2SQL, then executed through the configured MCP profile.',
+      warningText: null,
       sourceLabel: 'Analytics Schema',
       ...noRetrieval,
+      generatedSql: sql,
+      structuredExecutionStatus: 'MCP execution completed with query_sales_database.',
+      structuredExecutionToolName: 'query_sales_database',
     }
   }
 
@@ -349,6 +509,9 @@ function buildBrowserMockResponse(request: AIRunCompletionRequest): Omit<AIRunCo
         },
       ],
       retrievalResultCount: 2,
+      generatedSql: null,
+      structuredExecutionStatus: null,
+      structuredExecutionToolName: null,
     }
   }
 
@@ -459,6 +622,36 @@ function buildBrowserMockChunks(text: string): string[] {
   }
 
   return chunks
+}
+
+function isReadOnlySelectSql(input: string): boolean {
+  const withoutLineComments = input
+    .trim()
+    .toLowerCase()
+    .split(/\r?\n/u)
+    .filter((line) => !line.trimStart().startsWith('--'))
+    .join('\n')
+    .trimStart()
+  if (!withoutLineComments.startsWith('select') && !withoutLineComments.startsWith('with')) return false
+
+  const padded = ` ${withoutLineComments} `
+  return ![
+    ' insert ',
+    ' update ',
+    ' delete ',
+    ' merge ',
+    ' drop ',
+    ' alter ',
+    ' create ',
+    ' truncate ',
+    ' grant ',
+    ' revoke ',
+    ' call ',
+    ' execute ',
+    ' begin ',
+    ' commit ',
+    ' rollback ',
+  ].some((token) => padded.includes(token))
 }
 
 function stripMarkdownExtension(value: string): string {

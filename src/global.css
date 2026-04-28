@@ -203,6 +203,61 @@ a:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+.ai-settings-disclosure-summary {
+  list-style: none;
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 52%, transparent);
+}
+
+.ai-settings-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-settings-disclosure-summary:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-primary));
+}
+
+.ai-settings-disclosure-summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, transparent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.ai-settings-disclosure-icon {
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--border) 76%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
+  transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.ai-settings-disclosure-chevron {
+  transition: transform 180ms ease;
+  transform-origin: center;
+}
+
+.ai-settings-disclosure[open] > .ai-settings-disclosure-summary {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-primary));
+}
+
+.ai-settings-disclosure[open] > .ai-settings-disclosure-summary .ai-settings-disclosure-icon {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.ai-settings-disclosure[open] > .ai-settings-disclosure-summary .ai-settings-disclosure-chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-settings-disclosure-icon,
+  .ai-settings-disclosure-chevron {
+    transition: none;
+  }
+}
+
 /* Allow text selection in editor and preview */
 .cm-editor,
 .markdown-preview {

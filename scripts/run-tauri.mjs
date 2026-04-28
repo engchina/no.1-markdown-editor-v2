@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const args = process.argv.slice(2)
 const DEV_PORT = 1420
+const DEV_CLEANUP_TIMEOUT_MS = 5000
 const require = createRequire(import.meta.url)
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..')
@@ -105,6 +106,7 @@ function cleanupStaleDevProcess() {
     try {
       execFileSync('taskkill', ['/F', '/IM', exe, '/T'], {
         stdio: 'ignore',
+        timeout: DEV_CLEANUP_TIMEOUT_MS,
       })
     } catch {
       // No stale process for this name is fine.
@@ -124,7 +126,7 @@ function cleanupDevPort() {
           '-Command',
           `$ids = Get-NetTCPConnection -LocalPort ${DEV_PORT} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($id in $ids) { $proc = Get-Process -Id $id -ErrorAction SilentlyContinue; if ($proc -and @('node', 'no1-markdown-editor', 'No.1 Markdown Editor') -contains $proc.ProcessName) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue } }`,
         ],
-        { stdio: 'ignore' }
+        { stdio: 'ignore', timeout: DEV_CLEANUP_TIMEOUT_MS }
       )
     } catch {
       // Ignore cleanup failures and let Tauri surface a real port error if needed.
@@ -139,25 +141,40 @@ function cleanupDevPort() {
         '-lc',
         `for pid in $(lsof -ti tcp:${DEV_PORT} -sTCP:LISTEN 2>/dev/null); do cmd=$(ps -o comm= -p "$pid" 2>/dev/null); case "$cmd" in *node*|*no1-markdown-editor*) kill -9 "$pid" ;; esac; done`,
       ],
-      { stdio: 'ignore' }
+      { stdio: 'ignore', timeout: DEV_CLEANUP_TIMEOUT_MS }
     )
   } catch {
     // Ignore cleanup failures and let Tauri surface a real port error if needed.
   }
 }
 
+function getTauriCommand() {
+  const binaryName = process.platform === 'win32' ? 'tauri.cmd' : 'tauri'
+  const localBinary = path.join(REPO_ROOT, 'node_modules', '.bin', binaryName)
+
+  return existsSync(localBinary) ? localBinary : 'tauri'
+}
+
 ensureTauriCliNativeBinding()
 cleanupStaleDevProcess()
 cleanupDevPort()
 
+const tauriCommand = getTauriCommand()
 const child =
   process.platform === 'win32'
-    ? spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'tauri', ...args], {
+    ? spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', tauriCommand, ...args], {
+        cwd: REPO_ROOT,
         stdio: 'inherit',
       })
-    : spawn('tauri', args, {
+    : spawn(tauriCommand, args, {
+        cwd: REPO_ROOT,
         stdio: 'inherit',
       })
+
+child.on('error', (error) => {
+  console.error(`Failed to start Tauri CLI: ${error.message}`)
+  process.exit(1)
+})
 
 child.on('exit', (code, signal) => {
   if (signal) {

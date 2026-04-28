@@ -1,12 +1,23 @@
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine as _,
+};
+use chrono::Utc;
 use keyring::Entry;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, USER_AGENT};
 use reqwest::StatusCode;
+use ring::rand::SystemRandom;
+use ring::signature::{RsaKeyPair, RSA_PKCS1_SHA256};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::process::{ChildStderr, Command, ExitStatus, Stdio};
 use std::sync::Mutex;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::task::AbortHandle;
@@ -14,11 +25,14 @@ use tokio::task::AbortHandle;
 const AI_PROVIDER_CONFIG_FILE: &str = "ai-provider.json";
 const AI_KEYRING_SERVICE: &str = "com.no1.markdown-editor.ai";
 const AI_DIRECT_PROVIDER_ACCOUNT: &str = "direct-provider";
+const AI_OCI_KEY_FILE_PASSPHRASE_ACCOUNT_PREFIX: &str = "oci-key-file-passphrase:";
 const AI_HOSTED_AGENT_ACCOUNT_PREFIX: &str = "hosted-agent:";
 const AI_PROVIDER_USER_AGENT: &str = "No.1 Markdown Editor AI Client";
 const AI_PROVIDER_PROJECT_HEADER: &str = "OpenAI-Project";
 const AI_COMPLETION_STREAM_EVENT: &str = "ai:completion-stream";
 const AI_OAUTH_REFRESH_MARGIN_SECONDS: u64 = 30;
+const DEFAULT_OCI_IAM_CONFIG_FILE: &str = "~/.oci_iam/config";
+const MCP_STDERR_MAX_CHARS: usize = 4000;
 
 pub struct AiInFlightRequests(pub Mutex<HashMap<String, AbortHandle>>);
 pub struct AiOAuthTokenCache(pub Mutex<HashMap<String, CachedOAuthToken>>);
@@ -54,13 +68,68 @@ pub struct AiOracleStructuredStoreRegistration {
     pub label: String,
     pub semantic_store_id: String,
     #[serde(default)]
-    pub vector_store_id: String,
+    pub compartment_id: String,
     #[serde(default)]
     pub store_ocid: String,
+    #[serde(default)]
+    pub oci_auth_profile_id: Option<String>,
+    #[serde(default)]
+    pub region_override: String,
+    #[serde(default)]
+    pub schema_name: String,
     pub description: String,
     pub enabled: bool,
+    #[serde(default)]
+    pub is_default: bool,
     pub default_mode: String,
-    pub execution_agent_profile_id: Option<String>,
+    #[serde(default)]
+    pub execution_profile_id: Option<String>,
+    #[serde(default)]
+    pub enrichment_default_mode: String,
+    #[serde(default)]
+    pub enrichment_object_names: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AiOracleOCIAuthProfile {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub config_file: String,
+    #[serde(default)]
+    pub profile: String,
+    #[serde(default)]
+    pub region: String,
+    #[serde(default)]
+    pub tenancy: String,
+    #[serde(default)]
+    pub user: String,
+    #[serde(default)]
+    pub fingerprint: String,
+    #[serde(default)]
+    pub key_file: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AiOracleMCPExecutionProfile {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub config_json: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub server_url: String,
+    pub transport: String,
+    #[serde(default)]
+    pub tool_name: String,
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -81,8 +150,6 @@ pub struct AiOracleHostedAgentProfile {
     #[serde(default)]
     pub scope: String,
     pub transport: String,
-    #[serde(default)]
-    pub supported_contracts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -94,9 +161,13 @@ pub struct AiProviderConfig {
     #[serde(default)]
     pub project: String,
     #[serde(default)]
+    pub oci_auth_profiles: Vec<AiOracleOCIAuthProfile>,
+    #[serde(default)]
     pub unstructured_stores: Vec<AiOracleUnstructuredStoreRegistration>,
     #[serde(default)]
     pub structured_stores: Vec<AiOracleStructuredStoreRegistration>,
+    #[serde(default)]
+    pub mcp_execution_profiles: Vec<AiOracleMCPExecutionProfile>,
     #[serde(default)]
     pub hosted_agent_profiles: Vec<AiOracleHostedAgentProfile>,
 }
@@ -107,6 +178,7 @@ pub struct AiProviderState {
     pub config: Option<AiProviderConfig>,
     pub has_api_key: bool,
     pub storage_kind: String,
+    pub has_oci_key_file_passphrase_by_id: HashMap<String, bool>,
     pub has_hosted_agent_client_secret_by_id: HashMap<String, bool>,
 }
 
@@ -148,6 +220,8 @@ pub struct AiRunCompletionRequest {
     pub thread_id: Option<String>,
     #[serde(default)]
     pub hosted_agent_profile_id: Option<String>,
+    #[serde(default)]
+    pub generated_sql: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -180,6 +254,39 @@ pub struct AiRunCompletionResponse {
     pub retrieval_results: Vec<AiRetrievalResultPreview>,
     #[serde(default)]
     pub retrieval_result_count: Option<usize>,
+    #[serde(default)]
+    pub generated_sql: Option<String>,
+    #[serde(default)]
+    pub structured_execution_status: Option<String>,
+    #[serde(default)]
+    pub structured_execution_tool_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AiListEnrichmentJobsRequest {
+    pub structured_store_id: String,
+    #[serde(default)]
+    pub compartment_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEnrichmentJobRequest {
+    pub structured_store_id: String,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub schema_name: String,
+    #[serde(default)]
+    pub database_objects: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AiEnrichmentJobActionRequest {
+    pub structured_store_id: String,
+    pub enrichment_job_id: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -241,6 +348,19 @@ struct AiOAuthTokenResponse {
 pub fn ai_load_provider_state<R: Runtime>(app: AppHandle<R>) -> Result<AiProviderState, String> {
     let config = read_ai_provider_config(&app)?;
     let has_api_key = has_ai_provider_api_key()?;
+    let has_oci_key_file_passphrase_by_id = match config.as_ref() {
+        Some(config) if config.provider == "oci-responses" => config
+            .oci_auth_profiles
+            .iter()
+            .map(|profile| {
+                Ok((
+                    profile.id.clone(),
+                    has_oci_key_file_passphrase(&profile.id)?,
+                ))
+            })
+            .collect::<Result<HashMap<_, _>, String>>()?,
+        _ => HashMap::new(),
+    };
     let has_hosted_agent_client_secret_by_id = match config.as_ref() {
         Some(config) if config.provider == "oci-responses" => config
             .hosted_agent_profiles
@@ -259,6 +379,7 @@ pub fn ai_load_provider_state<R: Runtime>(app: AppHandle<R>) -> Result<AiProvide
         config,
         has_api_key,
         storage_kind: "keyring".to_string(),
+        has_oci_key_file_passphrase_by_id,
         has_hosted_agent_client_secret_by_id,
     })
 }
@@ -290,6 +411,41 @@ pub fn ai_clear_provider_api_key() -> Result<(), String> {
     match ai_keyring_entry(AI_DIRECT_PROVIDER_ACCOUNT)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(error) => Err(format!("Failed to clear AI API key: {error}")),
+    }
+}
+
+#[tauri::command]
+pub fn ai_store_oci_key_file_passphrase(
+    profile_id: String,
+    passphrase: String,
+) -> Result<(), String> {
+    let trimmed_profile_id = profile_id.trim();
+    if trimmed_profile_id.is_empty() {
+        return Err("OCI auth profile id is required".to_string());
+    }
+
+    let trimmed_passphrase = passphrase.trim();
+    if trimmed_passphrase.is_empty() {
+        return Err("OCI key file passphrase cannot be empty".to_string());
+    }
+
+    ai_keyring_entry(&oci_key_file_passphrase_account(trimmed_profile_id))?
+        .set_password(trimmed_passphrase)
+        .map_err(|error| format!("Failed to store OCI key file passphrase: {error}"))
+}
+
+#[tauri::command]
+pub fn ai_clear_oci_key_file_passphrase(profile_id: String) -> Result<(), String> {
+    let trimmed_profile_id = profile_id.trim();
+    if trimmed_profile_id.is_empty() {
+        return Err("OCI auth profile id is required".to_string());
+    }
+
+    match ai_keyring_entry(&oci_key_file_passphrase_account(trimmed_profile_id))?
+        .delete_credential()
+    {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(error) => Err(format!("Failed to clear OCI key file passphrase: {error}")),
     }
 }
 
@@ -390,6 +546,91 @@ pub fn ai_cancel_completion(
     Ok(false)
 }
 
+#[tauri::command]
+pub async fn ai_list_enrichment_jobs<R: Runtime>(
+    app: AppHandle<R>,
+    request: AiListEnrichmentJobsRequest,
+) -> Result<Value, String> {
+    let config = read_ai_provider_config(&app)?
+        .ok_or_else(|| "AI provider settings are not configured".to_string())?;
+    let store = find_structured_store_registration(&config, Some(&request.structured_store_id))
+        .ok_or_else(|| "Selected Oracle structured store was not found".to_string())?;
+    let url = build_ai_enrichment_jobs_url(&config, store, Some(&request.compartment_id))?;
+    let response = build_default_http_client()?
+        .get(url.clone())
+        .header(USER_AGENT, AI_PROVIDER_USER_AGENT);
+    let response = apply_oci_iam_signature(response, &config, store, "get", &url, "")?
+        .send()
+        .await
+        .map_err(|error| {
+            normalize_ai_send_error_message(
+                error.is_timeout(),
+                error.is_connect(),
+                &error.to_string(),
+            )
+        })?;
+    let response = ensure_ai_success_status(response, "ai:list-enrichment-jobs").await?;
+    parse_json_response(response).await
+}
+
+#[tauri::command]
+pub async fn ai_generate_enrichment_job<R: Runtime>(
+    app: AppHandle<R>,
+    request: AiEnrichmentJobRequest,
+) -> Result<Value, String> {
+    let config = read_ai_provider_config(&app)?
+        .ok_or_else(|| "AI provider settings are not configured".to_string())?;
+    let store = find_structured_store_registration(&config, Some(&request.structured_store_id))
+        .ok_or_else(|| "Selected Oracle structured store was not found".to_string())?;
+    let url = build_ai_generate_enrichment_job_url(&config, store)?;
+    let payload = build_enrichment_job_payload(store, &request)?;
+    let body = payload.to_string();
+    let response = build_default_http_client()?
+        .post(url.clone())
+        .header(USER_AGENT, AI_PROVIDER_USER_AGENT)
+        .header(CONTENT_TYPE, "application/json")
+        .body(body.clone());
+    let response = apply_oci_iam_signature(response, &config, store, "post", &url, &body)?
+        .send()
+        .await
+        .map_err(|error| {
+            normalize_ai_send_error_message(
+                error.is_timeout(),
+                error.is_connect(),
+                &error.to_string(),
+            )
+        })?;
+    let response = ensure_ai_success_status(response, "ai:generate-enrichment-job").await?;
+    parse_json_response(response).await
+}
+
+#[tauri::command]
+pub async fn ai_get_enrichment_job<R: Runtime>(
+    app: AppHandle<R>,
+    request: AiEnrichmentJobActionRequest,
+) -> Result<Value, String> {
+    let config = read_ai_provider_config(&app)?
+        .ok_or_else(|| "AI provider settings are not configured".to_string())?;
+    let store = find_structured_store_registration(&config, Some(&request.structured_store_id))
+        .ok_or_else(|| "Selected Oracle structured store was not found".to_string())?;
+    let url = build_ai_enrichment_job_url(&config, store, &request.enrichment_job_id)?;
+    let response = build_default_http_client()?
+        .get(url.clone())
+        .header(USER_AGENT, AI_PROVIDER_USER_AGENT);
+    let response = apply_oci_iam_signature(response, &config, store, "get", &url, "")?
+        .send()
+        .await
+        .map_err(|error| {
+            normalize_ai_send_error_message(
+                error.is_timeout(),
+                error.is_connect(),
+                &error.to_string(),
+            )
+        })?;
+    let response = ensure_ai_success_status(response, "ai:get-enrichment-job").await?;
+    parse_json_response(response).await
+}
+
 async fn route_ai_completion_request<R: Runtime>(
     app: AppHandle<R>,
     request_id: String,
@@ -400,16 +641,22 @@ async fn route_ai_completion_request<R: Runtime>(
         return run_hosted_agent_completion(app, &config, &request, &request_id).await;
     }
 
+    if request.knowledge_selection.kind == "oracle-structured-store"
+        && request.knowledge_selection.mode.as_deref() == Some("sql-draft")
+    {
+        return run_oci_nl2sql_draft_completion(&config, &request).await;
+    }
+
+    if request.knowledge_selection.kind == "oracle-structured-store"
+        && request.knowledge_selection.mode.as_deref() == Some("agent-answer")
+    {
+        return run_oci_structured_mcp_completion(&config, &request).await;
+    }
+
     let api_key = read_ai_provider_api_key()?;
 
     if config.provider == "openai-compatible" || config.project.trim().is_empty() {
         return run_openai_chat_completion(app, &config, &api_key, &request, &request_id).await;
-    }
-
-    if request.knowledge_selection.kind == "oracle-structured-store"
-        && request.knowledge_selection.mode.as_deref() == Some("sql-draft")
-    {
-        return run_oci_nl2sql_draft_completion(&config, &api_key, &request).await;
     }
 
     run_oci_responses_completion(app, &config, &api_key, &request, &request_id).await
@@ -503,7 +750,6 @@ async fn run_oci_responses_completion<R: Runtime>(
 
 async fn run_oci_nl2sql_draft_completion(
     config: &AiProviderConfig,
-    api_key: &str,
     request: &AiRunCompletionRequest,
 ) -> Result<AiRunCompletionResponse, String> {
     let store = find_structured_store_registration(
@@ -511,30 +757,36 @@ async fn run_oci_nl2sql_draft_completion(
         request.knowledge_selection.registration_id.as_deref(),
     )
     .ok_or_else(|| "Selected Oracle structured store was not found".to_string())?;
-    let generate_sql_url = build_ai_generate_sql_url(&config.base_url, &store.semantic_store_id)?;
+
+    if let Some(response) = build_user_supplied_sql_draft_response(store, request) {
+        return Ok(response);
+    }
+
+    let generate_sql_url = build_ai_generate_sql_url(config, store)?;
     let payload = json!({
         "inputNaturalLanguageQuery": request.prompt.trim()
     });
 
     let response = build_default_http_client()?
-        .post(generate_sql_url)
+        .post(generate_sql_url.clone())
         .header(USER_AGENT, AI_PROVIDER_USER_AGENT)
         .header(CONTENT_TYPE, "application/json")
-        .bearer_auth(api_key)
         .body(payload.to_string());
 
-    let response = apply_ai_project_header(response, &config.project)
-        .send()
-        .await
-        .map_err(|error| {
-            normalize_ai_send_error_message(
-                error.is_timeout(),
-                error.is_connect(),
-                &error.to_string(),
-            )
-        })?
-        .error_for_status()
-        .map_err(|error| normalize_ai_status_error_message(error.status(), &error.to_string()))?;
+    let response = apply_oci_iam_signature(
+        response,
+        config,
+        store,
+        "post",
+        &generate_sql_url,
+        &payload.to_string(),
+    )?
+    .send()
+    .await
+    .map_err(|error| {
+        normalize_ai_send_error_message(error.is_timeout(), error.is_connect(), &error.to_string())
+    })?;
+    let response = ensure_ai_success_status(response, "ai:generate-sql-from-nl").await?;
 
     let response_body = response
         .text()
@@ -548,7 +800,7 @@ async fn run_oci_nl2sql_draft_completion(
     let warning_text = extract_nl2sql_warning(&response_json);
 
     Ok(AiRunCompletionResponse {
-        text,
+        text: text.clone(),
         finish_reason: Some("stop".to_string()),
         model: Some(config.model.clone()),
         request_id: Some(request.request_id.clone()),
@@ -561,6 +813,106 @@ async fn run_oci_nl2sql_draft_completion(
         retrieval_query: None,
         retrieval_results: vec![],
         retrieval_result_count: None,
+        generated_sql: Some(text.clone()),
+        structured_execution_status: None,
+        structured_execution_tool_name: None,
+    })
+}
+
+fn build_user_supplied_sql_draft_response(
+    store: &AiOracleStructuredStoreRegistration,
+    request: &AiRunCompletionRequest,
+) -> Option<AiRunCompletionResponse> {
+    let sql = request.prompt.trim();
+    if !is_read_only_select_sql(sql) {
+        return None;
+    }
+
+    Some(AiRunCompletionResponse {
+        text: sql.to_string(),
+        finish_reason: Some("stop".to_string()),
+        model: Some("user-supplied-sql".to_string()),
+        request_id: Some(request.request_id.clone()),
+        thread_id: request.thread_id.clone(),
+        content_type: "sql".to_string(),
+        explanation_text: Some(
+            "Using the read-only SQL from the prompt. No NL2SQL request was sent.".to_string(),
+        ),
+        warning_text: Some(
+            "Review table names and predicates before running this SQL against production data."
+                .to_string(),
+        ),
+        source_label: Some(store.label.clone()),
+        retrieval_executed: false,
+        retrieval_query: None,
+        retrieval_results: vec![],
+        retrieval_result_count: None,
+        generated_sql: Some(sql.to_string()),
+        structured_execution_status: None,
+        structured_execution_tool_name: None,
+    })
+}
+
+async fn run_oci_structured_mcp_completion(
+    config: &AiProviderConfig,
+    request: &AiRunCompletionRequest,
+) -> Result<AiRunCompletionResponse, String> {
+    let store = find_structured_store_registration(
+        config,
+        request.knowledge_selection.registration_id.as_deref(),
+    )
+    .ok_or_else(|| "Selected Oracle structured store was not found".to_string())?;
+    let sql = request
+        .generated_sql
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let sql = if let Some(sql) = sql {
+        sql
+    } else {
+        run_oci_nl2sql_draft_completion(config, request)
+            .await?
+            .text
+            .trim()
+            .to_string()
+    };
+    if !is_read_only_select_sql(&sql) {
+        return Err("Generated SQL is not a read-only SELECT query. Review and copy the SQL manually instead of executing it.".to_string());
+    }
+
+    let execution_profile =
+        find_mcp_execution_profile(config, store.execution_profile_id.as_deref())
+            .ok_or_else(|| "Selected MCP execution profile was not found".to_string())?;
+    let (answer, tool_name) = run_mcp_execution_profile(execution_profile, store, request, &sql)?;
+    let status = format!(
+        "MCP execution completed{}.",
+        tool_name
+            .as_deref()
+            .map(|name| format!(" with {name}"))
+            .unwrap_or_default()
+    );
+
+    Ok(AiRunCompletionResponse {
+        text: answer,
+        finish_reason: Some("stop".to_string()),
+        model: Some("oci-nl2sql-mcp".to_string()),
+        request_id: Some(request.request_id.clone()),
+        thread_id: request.thread_id.clone(),
+        content_type: "markdown".to_string(),
+        explanation_text: Some(
+            "Generated SQL with OCI NL2SQL, then executed through the configured MCP profile."
+                .to_string(),
+        ),
+        warning_text: None,
+        source_label: Some(store.label.clone()),
+        retrieval_executed: false,
+        retrieval_query: None,
+        retrieval_results: vec![],
+        retrieval_result_count: None,
+        generated_sql: Some(sql),
+        structured_execution_status: Some(status),
+        structured_execution_tool_name: tool_name,
     })
 }
 
@@ -704,6 +1056,9 @@ async fn run_hosted_agent_completion<R: Runtime>(
         retrieval_query: None,
         retrieval_results: vec![],
         retrieval_result_count: None,
+        generated_sql: None,
+        structured_execution_status: None,
+        structured_execution_tool_name: None,
     })
 }
 
@@ -991,6 +1346,10 @@ fn ai_keyring_entry(account: &str) -> Result<Entry, String> {
         .map_err(|error| format!("Failed to initialize AI keyring entry: {error}"))
 }
 
+fn oci_key_file_passphrase_account(profile_id: &str) -> String {
+    format!("{AI_OCI_KEY_FILE_PASSPHRASE_ACCOUNT_PREFIX}{profile_id}")
+}
+
 fn hosted_agent_keyring_account(profile_id: &str) -> String {
     format!("{AI_HOSTED_AGENT_ACCOUNT_PREFIX}{profile_id}")
 }
@@ -1014,6 +1373,27 @@ fn read_ai_provider_api_key() -> Result<String, String> {
         }
         Err(keyring::Error::NoEntry) => Err("No AI API key is configured".to_string()),
         Err(error) => Err(format!("Failed to read AI API key: {error}")),
+    }
+}
+
+fn has_oci_key_file_passphrase(profile_id: &str) -> Result<bool, String> {
+    match ai_keyring_entry(&oci_key_file_passphrase_account(profile_id))?.get_password() {
+        Ok(value) => Ok(!value.trim().is_empty()),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(error) => Err(format!(
+            "Failed to inspect OCI key file passphrase state: {error}"
+        )),
+    }
+}
+
+fn read_oci_key_file_passphrase(profile_id: &str) -> Result<Option<String>, String> {
+    match ai_keyring_entry(&oci_key_file_passphrase_account(profile_id))?.get_password() {
+        Ok(value) => {
+            let trimmed = value.trim();
+            Ok((!trimmed.is_empty()).then(|| trimmed.to_string()))
+        }
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(error) => Err(format!("Failed to read OCI key file passphrase: {error}")),
     }
 }
 
@@ -1063,8 +1443,10 @@ fn normalize_ai_provider_config(config: AiProviderConfig) -> Result<AiProviderCo
             base_url,
             model: model.to_string(),
             project: config.project.trim().to_string(),
+            oci_auth_profiles: vec![],
             unstructured_stores: vec![],
             structured_stores: vec![],
+            mcp_execution_profiles: vec![],
             hosted_agent_profiles: vec![],
         }),
         "oci-responses" => {
@@ -1072,7 +1454,14 @@ fn normalize_ai_provider_config(config: AiProviderConfig) -> Result<AiProviderCo
 
             let hosted_agent_profiles =
                 normalize_hosted_agent_profiles(config.hosted_agent_profiles)?;
-            let hosted_agent_ids = hosted_agent_profiles
+            let oci_auth_profiles = normalize_oci_auth_profiles(config.oci_auth_profiles);
+            let oci_auth_profile_ids = oci_auth_profiles
+                .iter()
+                .map(|profile| profile.id.clone())
+                .collect::<HashSet<_>>();
+            let mcp_execution_profiles =
+                normalize_mcp_execution_profiles(config.mcp_execution_profiles);
+            let mcp_execution_profile_ids = mcp_execution_profiles
                 .iter()
                 .map(|profile| profile.id.clone())
                 .collect::<HashSet<_>>();
@@ -1080,7 +1469,8 @@ fn normalize_ai_provider_config(config: AiProviderConfig) -> Result<AiProviderCo
                 normalize_unstructured_store_registrations(config.unstructured_stores);
             let structured_stores = normalize_structured_store_registrations(
                 config.structured_stores,
-                &hosted_agent_ids,
+                &oci_auth_profile_ids,
+                &mcp_execution_profile_ids,
             );
 
             Ok(AiProviderConfig {
@@ -1088,8 +1478,10 @@ fn normalize_ai_provider_config(config: AiProviderConfig) -> Result<AiProviderCo
                 base_url,
                 model: model.to_string(),
                 project: project.to_string(),
+                oci_auth_profiles,
                 unstructured_stores,
                 structured_stores,
+                mcp_execution_profiles,
                 hosted_agent_profiles,
             })
         }
@@ -1126,32 +1518,140 @@ fn normalize_unstructured_store_registrations(
 
 fn normalize_structured_store_registrations(
     stores: Vec<AiOracleStructuredStoreRegistration>,
-    hosted_agent_ids: &HashSet<String>,
+    oci_auth_profile_ids: &HashSet<String>,
+    mcp_execution_profile_ids: &HashSet<String>,
 ) -> Vec<AiOracleStructuredStoreRegistration> {
+    let mut seen_default = false;
     stores
         .into_iter()
         .enumerate()
-        .map(|(index, store)| AiOracleStructuredStoreRegistration {
-            id: normalize_config_id(&store.id, "structured", index),
-            label: store.label.trim().to_string(),
-            semantic_store_id: store.semantic_store_id.trim().to_string(),
-            vector_store_id: store.vector_store_id.trim().to_string(),
-            store_ocid: store.store_ocid.trim().to_string(),
-            description: store.description.trim().to_string(),
-            enabled: store.enabled,
-            default_mode: if store.default_mode == "agent-answer" {
-                "agent-answer".to_string()
+        .map(|(index, store)| {
+            let is_default = if store.is_default && !seen_default {
+                seen_default = true;
+                true
             } else {
-                "sql-draft".to_string()
-            },
-            execution_agent_profile_id: store.execution_agent_profile_id.and_then(|value| {
-                let trimmed = value.trim().to_string();
-                if trimmed.is_empty() || !hosted_agent_ids.contains(&trimmed) {
-                    None
+                false
+            };
+
+            AiOracleStructuredStoreRegistration {
+                id: normalize_config_id(&store.id, "structured", index),
+                label: store.label.trim().to_string(),
+                semantic_store_id: store.semantic_store_id.trim().to_string(),
+                compartment_id: first_non_empty(&[
+                    store.compartment_id.as_str(),
+                    store.store_ocid.as_str(),
+                ]),
+                store_ocid: store.store_ocid.trim().to_string(),
+                oci_auth_profile_id: store.oci_auth_profile_id.and_then(|value| {
+                    let trimmed = value.trim().to_string();
+                    if trimmed.is_empty() || !oci_auth_profile_ids.contains(&trimmed) {
+                        None
+                    } else {
+                        Some(trimmed)
+                    }
+                }),
+                region_override: store.region_override.trim().to_string(),
+                schema_name: store.schema_name.trim().to_string(),
+                description: store.description.trim().to_string(),
+                enabled: store.enabled,
+                is_default,
+                default_mode: if store.default_mode == "agent-answer" {
+                    "agent-answer".to_string()
                 } else {
-                    Some(trimmed)
-                }
-            }),
+                    "sql-draft".to_string()
+                },
+                execution_profile_id: store.execution_profile_id.and_then(|value| {
+                    let trimmed = value.trim().to_string();
+                    if trimmed.is_empty() || !mcp_execution_profile_ids.contains(&trimmed) {
+                        None
+                    } else {
+                        Some(trimmed)
+                    }
+                }),
+                enrichment_default_mode: match store.enrichment_default_mode.as_str() {
+                    "partial" => "partial".to_string(),
+                    "delta" => "delta".to_string(),
+                    _ => "full".to_string(),
+                },
+                enrichment_object_names: store.enrichment_object_names.trim().to_string(),
+            }
+        })
+        .collect()
+}
+
+fn normalize_oci_auth_profiles(
+    profiles: Vec<AiOracleOCIAuthProfile>,
+) -> Vec<AiOracleOCIAuthProfile> {
+    profiles
+        .into_iter()
+        .enumerate()
+        .map(|(index, profile)| AiOracleOCIAuthProfile {
+            id: normalize_config_id(&profile.id, "oci-auth", index),
+            label: profile.label.trim().to_string(),
+            config_file: DEFAULT_OCI_IAM_CONFIG_FILE.to_string(),
+            profile: if profile.profile.trim().is_empty() {
+                "DEFAULT".to_string()
+            } else {
+                profile.profile.trim().to_string()
+            },
+            region: profile.region.trim().to_string(),
+            tenancy: profile.tenancy.trim().to_string(),
+            user: profile.user.trim().to_string(),
+            fingerprint: profile.fingerprint.trim().to_string(),
+            key_file: profile.key_file.trim().to_string(),
+            enabled: profile.enabled,
+        })
+        .collect()
+}
+
+fn normalize_mcp_execution_profiles(
+    profiles: Vec<AiOracleMCPExecutionProfile>,
+) -> Vec<AiOracleMCPExecutionProfile> {
+    profiles
+        .into_iter()
+        .enumerate()
+        .map(|(index, profile)| {
+            let server_url = profile.server_url.trim().to_string();
+            let mut args: Vec<String> = profile
+                .args
+                .into_iter()
+                .map(|arg| arg.trim().to_string())
+                .filter(|arg| !arg.is_empty())
+                .collect();
+            if args.is_empty() {
+                args = vec![
+                    "-y".to_string(),
+                    "mcp-remote".to_string(),
+                    if server_url.is_empty() {
+                        "https://genai.oci.{region-identifier}.oraclecloud.com/nl2sql/toolchain"
+                            .to_string()
+                    } else {
+                        server_url.clone()
+                    },
+                    "--allow-http".to_string(),
+                ];
+            }
+
+            AiOracleMCPExecutionProfile {
+                id: normalize_config_id(&profile.id, "mcp-execution", index),
+                label: profile.label.trim().to_string(),
+                description: profile.description.trim().to_string(),
+                config_json: profile.config_json.trim().to_string(),
+                command: if profile.command.trim().is_empty() {
+                    "/opt/homebrew/bin/npx".to_string()
+                } else {
+                    profile.command.trim().to_string()
+                },
+                args,
+                server_url,
+                transport: if profile.transport.trim() == "streamable-http" {
+                    "streamable-http".to_string()
+                } else {
+                    "stdio".to_string()
+                },
+                tool_name: profile.tool_name.trim().to_string(),
+                enabled: profile.enabled,
+            }
         })
         .collect()
 }
@@ -1190,30 +1690,9 @@ fn normalize_hosted_agent_profiles(
                 } else {
                     "http-json".to_string()
                 },
-                supported_contracts: normalize_supported_contracts(profile.supported_contracts),
             })
         })
         .collect()
-}
-
-fn normalize_supported_contracts(contracts: Vec<String>) -> Vec<String> {
-    let mut seen = HashSet::new();
-    let mut normalized = vec![];
-    for contract in contracts {
-        let trimmed = contract.trim();
-        if trimmed != "chat-text" && trimmed != "structured-data-answer" {
-            continue;
-        }
-        if seen.insert(trimmed.to_string()) {
-            normalized.push(trimmed.to_string());
-        }
-    }
-
-    if normalized.is_empty() {
-        normalized.push("chat-text".to_string());
-    }
-
-    normalized
 }
 
 fn normalize_config_id(input: &str, prefix: &str, index: usize) -> String {
@@ -1276,20 +1755,104 @@ fn build_ai_responses_url(base_url: &str) -> Result<reqwest::Url, String> {
 }
 
 fn build_ai_generate_sql_url(
-    base_url: &str,
-    semantic_store_id: &str,
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
 ) -> Result<reqwest::Url, String> {
-    let inference_root = build_ai_inference_root_url(base_url)?;
+    let inference_root = build_ai_inference_root_url(config, store)?;
     inference_root
         .join(&format!(
-            "20231130/semanticStores/{}/actions/generateSqlFromNl",
-            semantic_store_id.trim()
+            "20260325/semanticStores/{}/actions/generateSqlFromNl",
+            store.semantic_store_id.trim()
         ))
         .map_err(|error| format!("Failed to build AI GenerateSqlFromNl URL: {error}"))
 }
 
-fn build_ai_inference_root_url(base_url: &str) -> Result<reqwest::Url, String> {
-    let mut parsed = normalize_url_with_trailing_slash(base_url)?;
+fn build_ai_enrichment_jobs_url(
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
+    compartment_id_override: Option<&str>,
+) -> Result<reqwest::Url, String> {
+    let inference_root = build_ai_inference_root_url(config, store)?;
+    let mut url = inference_root
+        .join(&format!(
+            "20260325/semanticStores/{}/enrichmentJobs",
+            store.semantic_store_id.trim()
+        ))
+        .map_err(|error| format!("Failed to build AI Enrichment Jobs URL: {error}"))?;
+    let compartment_id = resolve_enrichment_jobs_compartment_id(store, compartment_id_override)?;
+    url.query_pairs_mut()
+        .append_pair("compartmentId", &compartment_id)
+        .append_pair("sortBy", "timeCreated")
+        .append_pair("sortOrder", "DESC")
+        .append_pair("limit", "10");
+    Ok(url)
+}
+
+fn build_ai_generate_enrichment_job_url(
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
+) -> Result<reqwest::Url, String> {
+    let inference_root = build_ai_inference_root_url(config, store)?;
+    inference_root
+        .join(&format!(
+            "20260325/semanticStores/{}/actions/enrich",
+            store.semantic_store_id.trim()
+        ))
+        .map_err(|error| format!("Failed to build AI GenerateEnrichmentJob URL: {error}"))
+}
+
+fn build_ai_enrichment_job_url(
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
+    enrichment_job_id: &str,
+) -> Result<reqwest::Url, String> {
+    let enrichment_job_id = enrichment_job_id.trim();
+    if enrichment_job_id.is_empty() {
+        return Err("Enrichment Job ID is required".to_string());
+    }
+    let inference_root = build_ai_inference_root_url(config, store)?;
+    inference_root
+        .join(&format!(
+            "20260325/semanticStores/{}/enrichmentJobs/{}",
+            store.semantic_store_id.trim(),
+            enrichment_job_id
+        ))
+        .map_err(|error| format!("Failed to build Enrichment Job URL: {error}"))
+}
+
+fn resolve_enrichment_jobs_compartment_id(
+    store: &AiOracleStructuredStoreRegistration,
+    compartment_id_override: Option<&str>,
+) -> Result<String, String> {
+    let compartment_id = first_non_empty(&[
+        compartment_id_override.unwrap_or(""),
+        store.compartment_id.as_str(),
+        // Legacy configs briefly stored this value in storeOcid before the UI exposed
+        // the Oracle API's compartmentId requirement explicitly.
+        store.store_ocid.as_str(),
+    ]);
+    if compartment_id.is_empty() {
+        return Err("Compartment OCID is required to refresh enrichment jobs".to_string());
+    }
+    Ok(compartment_id)
+}
+
+fn build_ai_inference_root_url(
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
+) -> Result<reqwest::Url, String> {
+    let region = resolve_structured_store_region(config, store)?;
+    let parsed = normalize_url_with_trailing_slash(&config.base_url)?;
+
+    if let Some(host) = parsed.host_str() {
+        if let Some(inference_host) = build_generative_ai_data_inference_host(host, &region) {
+            let url = format!("{}://{}/", parsed.scheme(), inference_host);
+            return reqwest::Url::parse(&url)
+                .map_err(|error| format!("Failed to build OCI Generative AI Data URL: {error}"));
+        }
+    }
+
+    let mut parsed = parsed;
     let normalized_path = parsed.path().trim_end_matches('/').to_string();
     let trimmed_path = if normalized_path.ends_with("/openai/v1") {
         normalized_path.trim_end_matches("/openai/v1")
@@ -1307,6 +1870,51 @@ fn build_ai_inference_root_url(base_url: &str) -> Result<reqwest::Url, String> {
         parsed.set_path(&value);
     }
     Ok(parsed)
+}
+
+fn build_generative_ai_data_inference_host(host: &str, region: &str) -> Option<String> {
+    let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
+    let region = region.trim();
+    if host.is_empty() || region.is_empty() {
+        return None;
+    }
+
+    if host.starts_with("inference.generativeai.") {
+        return Some(format!(
+            "inference.generativeai.{region}.oci.{}",
+            infer_oci_second_level_domain(&host, region)?
+        ));
+    }
+
+    if host.starts_with("genai.oci.")
+        || host.contains(".oraclecloud.")
+        || host.contains(".oraclegovcloud.")
+    {
+        return Some(format!(
+            "inference.generativeai.{region}.oci.{}",
+            infer_oci_second_level_domain(&host, region)?
+        ));
+    }
+
+    None
+}
+
+fn infer_oci_second_level_domain(host: &str, region: &str) -> Option<String> {
+    if let Some((_, suffix)) = host.split_once(".oci.") {
+        let region_prefix = format!("{}.", region.trim());
+        let suffix = suffix.strip_prefix(&region_prefix).unwrap_or(suffix);
+        if !suffix.trim().is_empty() {
+            return Some(suffix.to_string());
+        }
+    }
+
+    for marker in ["oraclecloud.", "oraclegovcloud."] {
+        if let Some(index) = host.find(marker) {
+            return Some(host[index..].to_string());
+        }
+    }
+
+    None
 }
 
 fn build_ai_hosted_agent_invoke_url(
@@ -1350,9 +1958,10 @@ fn normalize_url_with_trailing_slash(base_url: &str) -> Result<reqwest::Url, Str
 }
 
 fn decode_jwt_claim(token: &str, claim: &str) -> Option<Value> {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     let payload_b64 = token.split('.').nth(1)?;
-    let payload_bytes = URL_SAFE_NO_PAD.decode(payload_b64.trim_end_matches('=')).ok()?;
+    let payload_bytes = URL_SAFE_NO_PAD
+        .decode(payload_b64.trim_end_matches('='))
+        .ok()?;
     let payload: Value = serde_json::from_slice(&payload_bytes).ok()?;
     payload.get(claim).cloned()
 }
@@ -1382,6 +1991,458 @@ fn apply_ai_project_header(
     }
 }
 
+fn apply_oci_iam_signature(
+    builder: reqwest::RequestBuilder,
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
+    method: &str,
+    url: &reqwest::Url,
+    body: &str,
+) -> Result<reqwest::RequestBuilder, String> {
+    let auth = resolve_oci_auth_settings(config, store)?;
+    let date = Utc::now().format("%a, %d %b %Y %H:%M:%S GMT").to_string();
+    let headers = build_oci_signature_headers(method, url, &date, body)?;
+    let signing_string = headers
+        .iter()
+        .map(|(name, value)| format!("{name}: {value}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let signature = sign_oci_request_string(
+        &auth.key_file,
+        auth.key_file_passphrase.as_deref(),
+        &signing_string,
+    )?;
+    let key_id = format!("{}/{}/{}", auth.tenancy, auth.user, auth.fingerprint);
+    let header_names = headers
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let authorization = format!(
+        "Signature version=\"1\",keyId=\"{key_id}\",algorithm=\"rsa-sha256\",headers=\"{header_names}\",signature=\"{signature}\""
+    );
+
+    let mut builder = builder;
+    for (name, value) in &headers {
+        if *name == "(request-target)" {
+            continue;
+        }
+        builder = builder.header(*name, value.as_str());
+    }
+
+    Ok(builder.header("authorization", authorization))
+}
+
+fn build_oci_signature_headers(
+    method: &str,
+    url: &reqwest::Url,
+    date: &str,
+    body: &str,
+) -> Result<Vec<(&'static str, String)>, String> {
+    let host = url
+        .host_str()
+        .ok_or_else(|| "OCI request URL did not include a host".to_string())?
+        .to_string();
+    let mut headers = vec![
+        ("date", date.to_string()),
+        ("(request-target)", build_oci_request_target(method, url)),
+        ("host", host),
+    ];
+
+    // OCI IAM signing only includes body headers for methods that send a body.
+    // Signing them for GET makes some OCI endpoints reject otherwise valid requests.
+    if method.eq_ignore_ascii_case("post")
+        || method.eq_ignore_ascii_case("put")
+        || method.eq_ignore_ascii_case("patch")
+    {
+        headers.extend([
+            (
+                "x-content-sha256",
+                STANDARD.encode(Sha256::digest(body.as_bytes())),
+            ),
+            ("content-type", "application/json".to_string()),
+            ("content-length", body.as_bytes().len().to_string()),
+        ]);
+    }
+
+    Ok(headers)
+}
+
+async fn parse_json_response(response: reqwest::Response) -> Result<Value, String> {
+    let body = response
+        .text()
+        .await
+        .map_err(|_| "AI service returned an unreadable response".to_string())?;
+    serde_json::from_str(&body).map_err(|_| "AI service returned a malformed response".to_string())
+}
+
+async fn ensure_ai_success_status(
+    response: reqwest::Response,
+    operation: &str,
+) -> Result<reqwest::Response, String> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+
+    let opc_request_id = response
+        .headers()
+        .get("opc-request-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let body = response.text().await.unwrap_or_default();
+    eprintln!(
+        "[{operation}] provider returned status={} body={}",
+        status.as_u16(),
+        preview_ai_response_body(&body, 1000)
+    );
+    Err(normalize_ai_status_error_message_with_provider_detail(
+        Some(status),
+        &body,
+        operation,
+        opc_request_id.as_deref(),
+    ))
+}
+
+fn build_enrichment_job_payload(
+    store: &AiOracleStructuredStoreRegistration,
+    request: &AiEnrichmentJobRequest,
+) -> Result<Value, String> {
+    let mode = match request.mode.trim() {
+        "partial" => "PARTIAL_BUILD",
+        "delta" => {
+            return Err(
+                "Delta enrichment requires a refresh schedule and is not supported by this setup panel yet. Use Full Build or Partial Build."
+                    .to_string(),
+            )
+        }
+        _ => "FULL_BUILD",
+    };
+    let schema_name = first_non_empty(&[request.schema_name.as_str(), store.schema_name.as_str()]);
+    if schema_name.is_empty() {
+        return Err("Schema name is required for enrichment jobs".to_string());
+    }
+    let mut configuration = json!({
+        "enrichmentJobType": mode,
+        "schemaName": schema_name,
+    });
+    if mode == "PARTIAL_BUILD" {
+        let objects = if request.database_objects.is_empty() {
+            store
+                .enrichment_object_names
+                .lines()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(build_database_object_payload)
+                .collect::<Vec<_>>()
+        } else {
+            request
+                .database_objects
+                .iter()
+                .map(|name| name.trim())
+                .filter(|value| !value.is_empty())
+                .map(build_database_object_payload)
+                .collect::<Vec<_>>()
+        };
+        if objects.is_empty() {
+            return Err("Partial enrichment requires at least one database object".to_string());
+        }
+        configuration["databaseObjects"] = Value::Array(objects);
+    }
+    Ok(json!({
+        "enrichmentJobType": mode,
+        "enrichmentJobConfiguration": configuration
+    }))
+}
+
+fn build_database_object_payload(name: &str) -> Value {
+    json!({
+        "name": name,
+        "type": "TABLE"
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedOCIAuthSettings {
+    region: String,
+    tenancy: String,
+    user: String,
+    fingerprint: String,
+    key_file: String,
+    key_file_passphrase: Option<String>,
+}
+
+fn resolve_oci_auth_settings(
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
+) -> Result<ResolvedOCIAuthSettings, String> {
+    let profile = find_oci_auth_profile(config, store.oci_auth_profile_id.as_deref())
+        .ok_or_else(|| "OCI auth profile is required for NL2SQL".to_string())?;
+    let config_values = load_oci_config_profile(&profile.config_file, &profile.profile)?;
+    let keyring_passphrase = read_oci_key_file_passphrase(&profile.id)?;
+    let region = first_non_empty(&[
+        store.region_override.as_str(),
+        profile.region.as_str(),
+        config_values
+            .get("region")
+            .map(String::as_str)
+            .unwrap_or(""),
+    ]);
+    let tenancy = first_non_empty(&[
+        profile.tenancy.as_str(),
+        config_values
+            .get("tenancy")
+            .map(String::as_str)
+            .unwrap_or(""),
+    ]);
+    let user = first_non_empty(&[
+        profile.user.as_str(),
+        config_values.get("user").map(String::as_str).unwrap_or(""),
+    ]);
+    let fingerprint = first_non_empty(&[
+        profile.fingerprint.as_str(),
+        config_values
+            .get("fingerprint")
+            .map(String::as_str)
+            .unwrap_or(""),
+    ]);
+    let key_file = first_non_empty(&[
+        profile.key_file.as_str(),
+        config_values
+            .get("key_file")
+            .map(String::as_str)
+            .unwrap_or(""),
+    ]);
+    let key_file_passphrase = first_non_empty(&[
+        keyring_passphrase.as_deref().unwrap_or(""),
+        config_values
+            .get("pass_phrase")
+            .map(String::as_str)
+            .unwrap_or(""),
+    ]);
+
+    for (label, value) in [
+        ("OCI region", region.as_str()),
+        ("OCI tenancy OCID", tenancy.as_str()),
+        ("OCI user OCID", user.as_str()),
+        ("OCI fingerprint", fingerprint.as_str()),
+        ("OCI key file", key_file.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            return Err(format!("{label} is required for NL2SQL IAM signing"));
+        }
+    }
+
+    Ok(ResolvedOCIAuthSettings {
+        region,
+        tenancy,
+        user,
+        fingerprint,
+        key_file,
+        key_file_passphrase: (!key_file_passphrase.trim().is_empty())
+            .then_some(key_file_passphrase),
+    })
+}
+
+fn resolve_structured_store_region(
+    config: &AiProviderConfig,
+    store: &AiOracleStructuredStoreRegistration,
+) -> Result<String, String> {
+    let profile = find_oci_auth_profile(config, store.oci_auth_profile_id.as_deref());
+    let config_values = match profile {
+        Some(profile) => load_oci_config_profile(&profile.config_file, &profile.profile)?,
+        None => HashMap::new(),
+    };
+    let profile_region = profile.map(|value| value.region.as_str()).unwrap_or("");
+    let region = first_non_empty(&[
+        store.region_override.as_str(),
+        profile_region,
+        config_values
+            .get("region")
+            .map(String::as_str)
+            .unwrap_or(""),
+        infer_oci_region_from_base_url(&config.base_url)
+            .as_deref()
+            .unwrap_or(""),
+    ]);
+
+    if region.is_empty() {
+        return Err("OCI region is required for NL2SQL endpoint resolution".to_string());
+    }
+
+    Ok(region)
+}
+
+fn infer_oci_region_from_base_url(base_url: &str) -> Option<String> {
+    let parsed = normalize_url_with_trailing_slash(base_url).ok()?;
+    let host = parsed
+        .host_str()?
+        .trim()
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    let parts = host.split('.').collect::<Vec<_>>();
+    let oci_index = parts.iter().position(|part| *part == "oci")?;
+    let candidate = parts.get(oci_index + 1)?;
+    if candidate.contains('-') {
+        Some((*candidate).to_string())
+    } else {
+        None
+    }
+}
+
+fn first_non_empty(values: &[&str]) -> String {
+    values
+        .iter()
+        .map(|value| value.trim())
+        .find(|value| !value.is_empty())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn load_oci_config_profile(
+    _config_file: &str,
+    profile_name: &str,
+) -> Result<HashMap<String, String>, String> {
+    let path = expand_home_path(DEFAULT_OCI_IAM_CONFIG_FILE);
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    let raw = fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read OCI config file {}: {error}", path.display()))?;
+    Ok(parse_oci_config_profile(&raw, profile_name))
+}
+
+fn parse_oci_config_profile(raw: &str, profile_name: &str) -> HashMap<String, String> {
+    let target = if profile_name.trim().is_empty() {
+        "DEFAULT"
+    } else {
+        profile_name.trim()
+    };
+    let mut active = false;
+    let mut values = HashMap::new();
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+            continue;
+        }
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            active = trimmed
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .trim()
+                .eq_ignore_ascii_case(target);
+            continue;
+        }
+        if !active {
+            continue;
+        }
+        if let Some((key, value)) = trimmed.split_once('=') {
+            values.insert(key.trim().to_string(), value.trim().to_string());
+        }
+    }
+
+    values
+}
+
+fn sign_oci_request_string(
+    key_file: &str,
+    key_file_passphrase: Option<&str>,
+    signing_string: &str,
+) -> Result<String, String> {
+    let key_text = read_text_file_expanding_home(key_file)?;
+    let key_der = decode_pem_private_key(&key_text, key_file_passphrase)?;
+    let key_pair = RsaKeyPair::from_pkcs8(&key_der)
+        .or_else(|_| RsaKeyPair::from_der(&key_der))
+        .map_err(|_| {
+            "Failed to parse OCI private key. Encrypted private keys are not supported yet."
+                .to_string()
+        })?;
+    let rng = SystemRandom::new();
+    let mut signature = vec![0; key_pair.public().modulus_len()];
+    key_pair
+        .sign(
+            &RSA_PKCS1_SHA256,
+            &rng,
+            signing_string.as_bytes(),
+            &mut signature,
+        )
+        .map_err(|_| "Failed to sign OCI request".to_string())?;
+    Ok(STANDARD.encode(signature))
+}
+
+fn read_text_file_expanding_home(path: &str) -> Result<String, String> {
+    let expanded = expand_home_path(path);
+    fs::read_to_string(&expanded)
+        .map_err(|error| format!("Failed to read {}: {error}", expanded.display()))
+}
+
+fn expand_home_path(path: &str) -> PathBuf {
+    let trimmed = path.trim();
+    if trimmed == "~" || trimmed.starts_with("~/") || trimmed.starts_with("~\\") {
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+            let suffix = trimmed
+                .trim_start_matches('~')
+                .trim_start_matches('/')
+                .trim_start_matches('\\');
+            return PathBuf::from(home).join(suffix);
+        }
+    }
+    PathBuf::from(trimmed)
+}
+
+fn decode_pem_private_key(
+    text: &str,
+    key_file_passphrase: Option<&str>,
+) -> Result<Vec<u8>, String> {
+    let mut body = String::new();
+    let mut in_key = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("-----BEGIN ") && trimmed.contains("PRIVATE KEY-----") {
+            if trimmed.contains("ENCRYPTED") {
+                if key_file_passphrase.map(str::trim).unwrap_or("").is_empty() {
+                    return Err(
+                        "Encrypted OCI private key requires a key file passphrase".to_string()
+                    );
+                }
+                return Err(
+                    "Encrypted OCI private keys are not supported by the built-in signer yet"
+                        .to_string(),
+                );
+            }
+            in_key = true;
+            continue;
+        }
+        if trimmed.starts_with("-----END ") && trimmed.contains("PRIVATE KEY-----") {
+            break;
+        }
+        if in_key {
+            body.push_str(trimmed);
+        }
+    }
+    if body.is_empty() {
+        return Err("OCI private key PEM did not contain a supported private key".to_string());
+    }
+    STANDARD
+        .decode(body.as_bytes())
+        .map_err(|_| "Failed to decode OCI private key PEM".to_string())
+}
+
+fn build_oci_request_target(method: &str, url: &reqwest::Url) -> String {
+    let path = if url.path().is_empty() {
+        "/"
+    } else {
+        url.path()
+    };
+    match url.query() {
+        Some(query) if !query.is_empty() => {
+            format!("{} {path}?{query}", method.to_ascii_lowercase())
+        }
+        _ => format!("{} {path}", method.to_ascii_lowercase()),
+    }
+}
+
 fn normalize_ai_send_error_message(is_timeout: bool, is_connect: bool, fallback: &str) -> String {
     if is_timeout {
         return "AI request timed out".to_string();
@@ -1400,11 +2461,143 @@ fn normalize_ai_status_error_message(status: Option<StatusCode>, fallback: &str)
         Some(401 | 403) => {
             "AI authentication failed. Check your API key and project settings".to_string()
         }
-        Some(404) => "AI endpoint was not found. Check the configured base URL".to_string(),
+        Some(404) => {
+            "AI endpoint or resource was not found. Check the configured base URL, OCI region, semantic store ID, compartment OCID, enrichment job ID, and IAM policy".to_string()
+        }
         Some(429) => "AI rate limit reached. Try again in a moment".to_string(),
         Some(500..=599) => "AI service is temporarily unavailable. Try again later".to_string(),
         Some(code) => format!("AI request returned an error ({code})"),
         None => format!("AI request returned an error: {fallback}"),
+    }
+}
+
+fn normalize_ai_status_error_message_with_provider_detail(
+    status: Option<StatusCode>,
+    fallback: &str,
+    operation: &str,
+    opc_request_id: Option<&str>,
+) -> String {
+    let base = normalize_ai_operation_status_error_message(operation, status, fallback);
+    match summarize_ai_provider_error_detail(fallback, opc_request_id) {
+        Some(detail) => format!("{base}. Provider detail ({operation}): {detail}"),
+        None => base,
+    }
+}
+
+fn normalize_ai_operation_status_error_message(
+    operation: &str,
+    status: Option<StatusCode>,
+    fallback: &str,
+) -> String {
+    if operation.starts_with("ai:generate-sql-from-nl")
+        || operation.starts_with("ai:generate-enrichment-job")
+        || operation.starts_with("ai:list-enrichment-jobs")
+        || operation.starts_with("ai:get-enrichment-job")
+    {
+        match status.map(|status| status.as_u16()) {
+            Some(400) => {
+                return "Structured data request was rejected by OCI. Check the Semantic Store OCID, schema metadata, and request details.".to_string();
+            }
+            Some(401 | 403) => {
+                return "OCI authentication failed. Check the selected IAM profile, key file, and policy permissions.".to_string();
+            }
+            Some(404) => {
+                return "OCI structured data endpoint or resource was not found. Check the Semantic Store OCID, OCI region, base URL, compartment OCID, enrichment job ID, and IAM policy.".to_string();
+            }
+            Some(429) => {
+                return "OCI structured data rate limit reached. Try again in a moment."
+                    .to_string();
+            }
+            Some(500..=599) => {
+                return "OCI structured data service is temporarily unavailable. Try again later."
+                    .to_string();
+            }
+            _ => {}
+        }
+    }
+
+    normalize_ai_status_error_message(status, fallback)
+}
+
+fn summarize_ai_provider_error_detail(body: &str, opc_request_id: Option<&str>) -> Option<String> {
+    let trimmed = body.trim();
+    let mut parts = Vec::new();
+    let mut detail_includes_request_id = false;
+
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        if let Some(code) = first_json_string_by_keys(&value, &["code", "errorCode", "status"]) {
+            parts.push(format!("code={code}"));
+        }
+        if let Some(message) = first_json_string_by_keys(
+            &value,
+            &["message", "errorMessage", "errorDescription", "detail"],
+        ) {
+            parts.push(format!("message={message}"));
+        }
+        if let Some(request_id) =
+            first_json_string_by_keys(&value, &["opc-request-id", "opcRequestId", "requestId"])
+        {
+            detail_includes_request_id = true;
+            parts.push(format!("opc-request-id={request_id}"));
+        }
+        if parts.is_empty() && !trimmed.is_empty() {
+            parts.push(format!("body={}", preview_ai_response_body(trimmed, 360)));
+        }
+    } else if !trimmed.is_empty() {
+        parts.push(format!("body={}", preview_ai_response_body(trimmed, 360)));
+    }
+
+    if !detail_includes_request_id {
+        if let Some(request_id) = opc_request_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            parts.push(format!("opc-request-id={request_id}"));
+        }
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" "))
+    }
+}
+
+fn first_json_string_by_keys(value: &Value, keys: &[&str]) -> Option<String> {
+    match value {
+        Value::Object(map) => {
+            for key in keys {
+                for (field, candidate) in map {
+                    if field.eq_ignore_ascii_case(key) {
+                        if let Some(text) = candidate
+                            .as_str()
+                            .map(str::trim)
+                            .filter(|text| !text.is_empty())
+                        {
+                            return Some(text.to_string());
+                        }
+                    }
+                }
+            }
+
+            for candidate in map.values() {
+                if let Some(text) = first_json_string_by_keys(candidate, keys) {
+                    return Some(text);
+                }
+            }
+
+            None
+        }
+        Value::Array(items) => {
+            for item in items {
+                if let Some(text) = first_json_string_by_keys(item, keys) {
+                    return Some(text);
+                }
+            }
+
+            None
+        }
+        _ => None,
     }
 }
 
@@ -1694,6 +2887,38 @@ fn find_structured_store_registration<'a>(
         .find(|store| store.id == registration_id)
 }
 
+fn find_oci_auth_profile<'a>(
+    config: &'a AiProviderConfig,
+    profile_id: Option<&str>,
+) -> Option<&'a AiOracleOCIAuthProfile> {
+    if let Some(profile_id) = profile_id.map(str::trim).filter(|value| !value.is_empty()) {
+        return config
+            .oci_auth_profiles
+            .iter()
+            .find(|profile| profile.id == profile_id && profile.enabled);
+    }
+
+    config
+        .oci_auth_profiles
+        .iter()
+        .find(|profile| profile.enabled)
+}
+
+fn find_mcp_execution_profile<'a>(
+    config: &'a AiProviderConfig,
+    profile_id: Option<&str>,
+) -> Option<&'a AiOracleMCPExecutionProfile> {
+    let profile_id = profile_id?.trim();
+    if profile_id.is_empty() {
+        return None;
+    }
+
+    config
+        .mcp_execution_profiles
+        .iter()
+        .find(|profile| profile.id == profile_id && profile.enabled)
+}
+
 fn find_hosted_agent_profile<'a>(
     config: &'a AiProviderConfig,
     profile_id: &str,
@@ -1707,6 +2932,384 @@ fn find_hosted_agent_profile<'a>(
         .hosted_agent_profiles
         .iter()
         .find(|profile| profile.id == profile_id)
+}
+
+fn is_read_only_select_sql(sql: &str) -> bool {
+    let trimmed = sql.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let without_comments = lower
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("--"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let candidate = without_comments.trim_start();
+    if !(candidate.starts_with("select") || candidate.starts_with("with")) {
+        return false;
+    }
+    let forbidden = [
+        " insert ",
+        " update ",
+        " delete ",
+        " merge ",
+        " drop ",
+        " alter ",
+        " create ",
+        " truncate ",
+        " grant ",
+        " revoke ",
+        " call ",
+        " execute ",
+        " begin ",
+        " commit ",
+        " rollback ",
+    ];
+    let padded = format!(" {candidate} ");
+    !forbidden.iter().any(|token| padded.contains(token))
+}
+
+fn run_mcp_execution_profile(
+    profile: &AiOracleMCPExecutionProfile,
+    store: &AiOracleStructuredStoreRegistration,
+    request: &AiRunCompletionRequest,
+    sql: &str,
+) -> Result<(String, Option<String>), String> {
+    let command = profile.command.trim();
+    if command.is_empty() {
+        return Err("MCP command is required".to_string());
+    }
+
+    let mut child = Command::new(command)
+        .args(profile.args.iter().filter(|arg| !arg.trim().is_empty()))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Failed to start MCP execution profile: {error}"))?;
+
+    let stderr_reader = child.stderr.take().map(spawn_mcp_stderr_reader);
+    let mut stdin = match child.stdin.take() {
+        Some(stdin) => stdin,
+        None => {
+            return Err(finish_mcp_process_with_error(
+                child,
+                stderr_reader,
+                "Failed to open MCP stdin".to_string(),
+            ))
+        }
+    };
+    let mut stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            return Err(finish_mcp_process_with_error(
+                child,
+                stderr_reader,
+                "Failed to open MCP stdout".to_string(),
+            ))
+        }
+    };
+
+    let session_result =
+        run_mcp_execution_session(&mut stdin, &mut stdout, profile, store, request, sql);
+    drop(stdin);
+    match session_result {
+        Ok((text, tool_name)) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = join_mcp_stderr_reader(stderr_reader);
+            Ok((text, Some(tool_name)))
+        }
+        Err(error) => Err(finish_mcp_process_with_error(child, stderr_reader, error)),
+    }
+}
+
+fn run_mcp_execution_session(
+    stdin: &mut std::process::ChildStdin,
+    stdout: &mut std::process::ChildStdout,
+    profile: &AiOracleMCPExecutionProfile,
+    store: &AiOracleStructuredStoreRegistration,
+    request: &AiRunCompletionRequest,
+    sql: &str,
+) -> Result<(String, String), String> {
+    write_mcp_message(
+        stdin,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "No.1 Markdown Editor",
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }
+        }),
+    )?;
+    let _ = read_mcp_response(stdout, 1)?;
+    write_mcp_message(
+        stdin,
+        &json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }),
+    )?;
+
+    write_mcp_message(
+        stdin,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": {}
+        }),
+    )?;
+    let tools_response = read_mcp_response(stdout, 2)?;
+    let tool_name = resolve_mcp_tool_name(&tools_response, &profile.tool_name)?;
+
+    write_mcp_message(
+        stdin,
+        &json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": {
+                    "query": request.prompt.trim(),
+                    "naturalLanguageQuery": request.prompt.trim(),
+                    "sql": sql,
+                    "semanticStoreId": store.semantic_store_id.clone(),
+                    "schemaName": store.schema_name.clone()
+                }
+            }
+        }),
+    )?;
+    let call_response = read_mcp_response(stdout, 3)?;
+    let text = extract_mcp_text_response(&call_response)
+        .ok_or_else(|| "MCP execution response did not include text content".to_string())?;
+    Ok((text, tool_name))
+}
+
+fn spawn_mcp_stderr_reader(mut stderr: ChildStderr) -> JoinHandle<String> {
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        match stderr.read_to_end(&mut bytes) {
+            Ok(_) => String::from_utf8_lossy(&bytes).to_string(),
+            Err(error) => format!("Failed to read MCP stderr: {error}"),
+        }
+    })
+}
+
+fn join_mcp_stderr_reader(reader: Option<JoinHandle<String>>) -> String {
+    reader
+        .and_then(|handle| handle.join().ok())
+        .unwrap_or_default()
+}
+
+fn finish_mcp_process_with_error(
+    mut child: std::process::Child,
+    stderr_reader: Option<JoinHandle<String>>,
+    error: String,
+) -> String {
+    let status = child.try_wait().ok().flatten();
+    if status.is_none() {
+        let _ = child.kill();
+    }
+    let status = status.or_else(|| child.wait().ok());
+    let status_text = status.as_ref().map(describe_mcp_exit_status);
+    let stderr = join_mcp_stderr_reader(stderr_reader);
+    format_mcp_process_error(&error, status_text.as_deref(), &stderr)
+}
+
+fn describe_mcp_exit_status(status: &ExitStatus) -> String {
+    status
+        .code()
+        .map(|code| format!("exit code {code}"))
+        .unwrap_or_else(|| "terminated without an exit code".to_string())
+}
+
+fn format_mcp_process_error(error: &str, status: Option<&str>, stderr: &str) -> String {
+    let mut parts = vec![normalize_mcp_transport_error(error)];
+    if let Some(status) = status {
+        parts.push(format!("MCP process status: {status}"));
+    }
+    let stderr = normalize_mcp_stderr(stderr);
+    if !stderr.is_empty() {
+        if let Some(hint) = infer_mcp_stderr_hint(&stderr) {
+            parts.push(hint.to_string());
+        }
+        parts.push(format!("MCP stderr:\n{stderr}"));
+    }
+    parts.join("\n\n")
+}
+
+fn normalize_mcp_transport_error(error: &str) -> String {
+    if error.starts_with("Failed to read MCP response header") {
+        return format!("MCP process exited before sending a response header ({error}).");
+    }
+    error.to_string()
+}
+
+fn normalize_mcp_stderr(stderr: &str) -> String {
+    let normalized = stderr.replace("\r\n", "\n").replace('\r', "\n");
+    let trimmed = normalized.trim();
+    if trimmed.chars().count() <= MCP_STDERR_MAX_CHARS {
+        return trimmed.to_string();
+    }
+    let truncated = trimmed
+        .chars()
+        .take(MCP_STDERR_MAX_CHARS)
+        .collect::<String>();
+    format!("{truncated}\n... MCP stderr truncated ...")
+}
+
+fn infer_mcp_stderr_hint(stderr: &str) -> Option<&'static str> {
+    let lower = stderr.to_ascii_lowercase();
+    if lower.contains("enotcached") || lower.contains("only-if-cached") {
+        return Some("npm is running in offline/cache-only mode and mcp-remote is not cached. Disable npm offline mode (`npm config set offline false`) or preinstall/cache `mcp-remote` before running this MCP profile.");
+    }
+    if lower.contains("econnrefused") && lower.contains("registry.npmjs.org") {
+        return Some("npm could not reach the package registry. Check npm proxy/network settings or preinstall/cache `mcp-remote` before running this MCP profile.");
+    }
+    if lower.contains("enotfound") || lower.contains("getaddrinfo") {
+        if lower.contains("oraclecloud.com") || lower.contains("genai.oci") {
+            return Some("MCP remote server hostname could not be resolved. Check DNS/network/proxy settings and verify the Oracle GenAI MCP server URL/region.");
+        }
+        return Some("MCP remote server hostname could not be resolved. Check DNS/network/proxy settings and verify the MCP server URL/region.");
+    }
+    if lower.contains("fetch failed") {
+        return Some("MCP remote server request failed. Check network/proxy settings and verify the MCP server URL/region.");
+    }
+    None
+}
+
+fn write_mcp_message(stdin: &mut std::process::ChildStdin, value: &Value) -> Result<(), String> {
+    let body = value.to_string();
+    let frame = format!("Content-Length: {}\r\n\r\n{}", body.as_bytes().len(), body);
+    stdin
+        .write_all(frame.as_bytes())
+        .and_then(|_| stdin.flush())
+        .map_err(|error| format!("Failed to write MCP message: {error}"))
+}
+
+fn read_mcp_response(
+    stdout: &mut std::process::ChildStdout,
+    expected_id: i64,
+) -> Result<Value, String> {
+    loop {
+        let value = read_mcp_message(stdout)?;
+        if value.get("id").and_then(Value::as_i64) != Some(expected_id) {
+            continue;
+        }
+        if let Some(error) = value.get("error") {
+            return Err(format!(
+                "MCP returned an error: {}",
+                summarize_mcp_error(error)
+            ));
+        }
+        return Ok(value);
+    }
+}
+
+fn read_mcp_message(stdout: &mut std::process::ChildStdout) -> Result<Value, String> {
+    let mut header = Vec::new();
+    let mut byte = [0_u8; 1];
+    while !header.ends_with(b"\r\n\r\n") && !header.ends_with(b"\n\n") {
+        stdout
+            .read_exact(&mut byte)
+            .map_err(|error| format!("Failed to read MCP response header: {error}"))?;
+        header.push(byte[0]);
+        if header.len() > 8192 {
+            return Err("MCP response header was too large".to_string());
+        }
+    }
+    let header_text = String::from_utf8_lossy(&header);
+    let content_length = header_text
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.trim()
+                .eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        })
+        .ok_or_else(|| "MCP response did not include Content-Length".to_string())?;
+    let mut body = vec![0_u8; content_length];
+    stdout
+        .read_exact(&mut body)
+        .map_err(|error| format!("Failed to read MCP response body: {error}"))?;
+    serde_json::from_slice(&body)
+        .map_err(|error| format!("MCP response was malformed JSON: {error}"))
+}
+
+fn resolve_mcp_tool_name(
+    tools_response: &Value,
+    configured_tool_name: &str,
+) -> Result<String, String> {
+    let configured = configured_tool_name.trim();
+    if !configured.is_empty() {
+        return Ok(configured.to_string());
+    }
+    let tools = tools_response
+        .get("result")
+        .and_then(|result| result.get("tools"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if tools.len() == 1 {
+        return tools[0]
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| "MCP tool did not include a name".to_string());
+    }
+    if tools.is_empty() {
+        return Err("MCP server did not expose any tools".to_string());
+    }
+    let names = tools
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(format!(
+        "MCP server exposed multiple tools ({names}). Configure a tool name in AI Setup."
+    ))
+}
+
+fn extract_mcp_text_response(response: &Value) -> Option<String> {
+    let result = response.get("result")?;
+    if let Some(text) = result.get("text").and_then(Value::as_str) {
+        return Some(text.trim().to_string()).filter(|value| !value.is_empty());
+    }
+    if let Some(content) = result.get("content").and_then(Value::as_array) {
+        let text = content
+            .iter()
+            .filter_map(|item| {
+                if item.get("type").and_then(Value::as_str) == Some("text") {
+                    item.get("text").and_then(Value::as_str)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Some(text.trim().to_string()).filter(|value| !value.is_empty());
+    }
+    None
+}
+
+fn summarize_mcp_error(error: &Value) -> String {
+    error
+        .get("message")
+        .and_then(Value::as_str)
+        .or_else(|| error.as_str())
+        .unwrap_or("unknown MCP error")
+        .to_string()
 }
 
 fn build_hosted_agent_message(request: &AiRunCompletionRequest) -> String {
@@ -1896,6 +3499,41 @@ fn extract_nl2sql_sql_text(response_json: &Value) -> Option<String> {
                 .filter(|value| !value.is_empty())
                 .map(str::to_string)
         })
+        .or_else(|| {
+            response_json
+                .get("jobOutput")
+                .and_then(extract_nl2sql_job_output_text)
+        })
+        .or_else(|| {
+            response_json
+                .get("output")
+                .and_then(extract_nl2sql_job_output_text)
+        })
+}
+
+fn extract_nl2sql_job_output_text(job_output: &Value) -> Option<String> {
+    job_output
+        .get("content")
+        .and_then(extract_content_text)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            job_output
+                .get("generatedSql")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            job_output
+                .get("data")
+                .and_then(|data| data.get("generatedSql"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
 }
 
 fn extract_nl2sql_explanation(response_json: &Value) -> Option<String> {
@@ -2010,6 +3648,9 @@ fn extract_ai_completion_response(response_json: Value) -> Result<AiRunCompletio
         retrieval_query: None,
         retrieval_results: vec![],
         retrieval_result_count: None,
+        generated_sql: None,
+        structured_execution_status: None,
+        structured_execution_tool_name: None,
     })
 }
 
@@ -2089,6 +3730,9 @@ async fn read_ai_streaming_completion_response<R: Runtime>(
             retrieval_query: None,
             retrieval_results: vec![],
             retrieval_result_count: None,
+            generated_sql: None,
+            structured_execution_status: None,
+            structured_execution_tool_name: None,
         },
         file_search_observation,
     ))
@@ -2599,29 +4243,45 @@ fn unix_timestamp_now() -> u64 {
 mod tests {
     use super::apply_ai_project_header;
     use super::build_ai_chat_completions_url;
+    use super::build_ai_enrichment_job_url;
+    use super::build_ai_enrichment_jobs_url;
+    use super::build_ai_generate_enrichment_job_url;
     use super::build_ai_generate_sql_url;
     use super::build_ai_hosted_agent_invoke_url;
     use super::build_ai_responses_url;
+    use super::build_enrichment_job_payload;
+    use super::build_oci_request_target;
     use super::build_oci_responses_payload;
+    use super::build_oci_signature_headers;
+    use super::build_user_supplied_sql_draft_response;
     use super::collect_ai_file_search_observation;
     use super::collect_ai_sse_data;
     use super::extract_ai_completion_response;
     use super::extract_ai_stream_chunk;
     use super::extract_ai_stream_finish_reason;
     use super::extract_hosted_agent_oauth_token_response;
+    use super::extract_mcp_text_response;
     use super::extract_nl2sql_sql_text;
     use super::finalize_document_store_response;
+    use super::format_mcp_process_error;
+    use super::is_read_only_select_sql;
+    use super::normalize_ai_operation_status_error_message;
     use super::normalize_ai_provider_config;
     use super::normalize_ai_send_error_message;
     use super::normalize_ai_sse_buffer;
     use super::normalize_ai_status_error_message;
+    use super::normalize_ai_status_error_message_with_provider_detail;
     use super::normalize_hosted_agent_invoke_status_error;
     use super::normalize_hosted_agent_token_status_error;
+    use super::parse_oci_config_profile;
+    use super::resolve_mcp_tool_name;
     use super::take_next_ai_sse_event;
+    use super::AiEnrichmentJobRequest;
     use super::AiFileSearchCallObservation;
     use super::AiFileSearchObservation;
     use super::AiKnowledgeSelection;
     use super::AiOracleHostedAgentProfile;
+    use super::AiOracleStructuredStoreRegistration;
     use super::AiOracleUnstructuredStoreRegistration;
     use super::AiProviderConfig;
     use super::AiRequestMessage;
@@ -2648,7 +4308,29 @@ mod tests {
                 is_default: true,
             }],
             structured_stores: vec![],
+            oci_auth_profiles: vec![],
             hosted_agent_profiles: vec![],
+            mcp_execution_profiles: vec![],
+        }
+    }
+
+    fn sample_structured_store() -> AiOracleStructuredStoreRegistration {
+        AiOracleStructuredStoreRegistration {
+            id: "sales-store".to_string(),
+            label: "Sales".to_string(),
+            semantic_store_id: "semantic-store-1".to_string(),
+            compartment_id: "ocid1.compartment.oc1..sales".to_string(),
+            store_ocid: "".to_string(),
+            oci_auth_profile_id: Some("oci-default".to_string()),
+            region_override: "us-chicago-1".to_string(),
+            schema_name: "SALES".to_string(),
+            description: "".to_string(),
+            enabled: true,
+            is_default: true,
+            default_mode: "agent-answer".to_string(),
+            execution_profile_id: Some("mcp-sales".to_string()),
+            enrichment_default_mode: "full".to_string(),
+            enrichment_object_names: "ORDERS\nCUSTOMERS".to_string(),
         }
     }
 
@@ -2678,6 +4360,7 @@ mod tests {
             },
             thread_id: None,
             hosted_agent_profile_id: None,
+            generated_sql: None,
         }
     }
 
@@ -2696,6 +4379,9 @@ mod tests {
             retrieval_query: None,
             retrieval_results: vec![],
             retrieval_result_count: None,
+            generated_sql: None,
+            structured_execution_status: None,
+            structured_execution_tool_name: None,
         }
     }
 
@@ -2708,7 +4394,9 @@ mod tests {
             project: "  project-123  ".to_string(),
             unstructured_stores: vec![],
             structured_stores: vec![],
+            oci_auth_profiles: vec![],
             hosted_agent_profiles: vec![],
+            mcp_execution_profiles: vec![],
         })
         .expect("normalize provider config");
 
@@ -2727,6 +4415,7 @@ mod tests {
             project: "".to_string(),
             unstructured_stores: vec![],
             structured_stores: vec![],
+            oci_auth_profiles: vec![],
             hosted_agent_profiles: vec![AiOracleHostedAgentProfile {
                 id: "hosted-agent-1".to_string(),
                 label: "Travel Agent".to_string(),
@@ -2740,8 +4429,8 @@ mod tests {
                 client_id: " client-id ".to_string(),
                 scope: " https://k8scloud.site/invoke ".to_string(),
                 transport: "http-json".to_string(),
-                supported_contracts: vec!["chat-text".to_string()],
             }],
+            mcp_execution_profiles: vec![],
         })
         .expect("normalize provider config");
 
@@ -2769,21 +4458,21 @@ mod tests {
             project: "".to_string(),
             unstructured_stores: vec![],
             structured_stores: vec![],
+            oci_auth_profiles: vec![],
             hosted_agent_profiles: vec![AiOracleHostedAgentProfile {
                 id: "hosted-agent-1".to_string(),
                 label: "Travel Agent".to_string(),
                 oci_region: "us-chicago-1".to_string(),
                 hosted_application_ocid:
-                    "ocid1.generativeaihostedapplication.oc1.us-chicago-1.amaaaaaatest"
-                        .to_string(),
+                    "ocid1.generativeaihostedapplication.oc1.us-chicago-1.amaaaaaatest".to_string(),
                 api_version: "20251112".to_string(),
                 api_action: " /completion/ ".to_string(),
                 domain_url: "https://idcs.example.com".to_string(),
                 client_id: "client-id".to_string(),
                 scope: "scope".to_string(),
                 transport: "http-json".to_string(),
-                supported_contracts: vec!["chat-text".to_string()],
             }],
+            mcp_execution_profiles: vec![],
         })
         .expect("normalize provider config");
 
@@ -2792,6 +4481,32 @@ mod tests {
             .first()
             .expect("hosted agent profile");
         assert_eq!(profile.api_action, "completion");
+    }
+
+    #[test]
+    fn normalize_ai_provider_config_keeps_one_structured_store_default() {
+        let mut first = sample_structured_store();
+        first.id = "data-first".to_string();
+        first.is_default = true;
+        let mut duplicate = sample_structured_store();
+        duplicate.id = "data-duplicate".to_string();
+        duplicate.is_default = true;
+
+        let config = normalize_ai_provider_config(AiProviderConfig {
+            provider: "oci-responses".to_string(),
+            base_url: "https://example.com/openai/v1".to_string(),
+            model: "gpt-test".to_string(),
+            project: "".to_string(),
+            unstructured_stores: vec![],
+            structured_stores: vec![first, duplicate],
+            oci_auth_profiles: vec![],
+            hosted_agent_profiles: vec![],
+            mcp_execution_profiles: vec![],
+        })
+        .expect("normalize provider config");
+
+        assert!(config.structured_stores[0].is_default);
+        assert!(!config.structured_stores[1].is_default);
     }
 
     #[test]
@@ -2810,12 +4525,342 @@ mod tests {
 
     #[test]
     fn build_ai_generate_sql_url_uses_inference_root() {
-        let url = build_ai_generate_sql_url("https://example.com/openai/v1", "semantic-store-1")
-            .expect("build generate sql url");
+        let mut config = sample_unstructured_provider_config();
+        config.base_url = "https://genai.oci.us-chicago-1.oraclecloud.com/openai/v1".to_string();
+        let store = sample_structured_store();
+        let url = build_ai_generate_sql_url(&config, &store).expect("build generate sql url");
         assert_eq!(
             url.as_str(),
-            "https://example.com/20231130/semanticStores/semantic-store-1/actions/generateSqlFromNl"
+            "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20260325/semanticStores/semantic-store-1/actions/generateSqlFromNl"
         );
+    }
+
+    #[test]
+    fn build_ai_generate_sql_url_preserves_custom_non_oci_roots() {
+        let mut config = sample_unstructured_provider_config();
+        config.base_url = "https://example.com/openai/v1".to_string();
+        let store = sample_structured_store();
+        let url = build_ai_generate_sql_url(&config, &store).expect("build generate sql url");
+        assert_eq!(
+            url.as_str(),
+            "https://example.com/20260325/semanticStores/semantic-store-1/actions/generateSqlFromNl"
+        );
+    }
+
+    #[test]
+    fn build_ai_enrichment_job_urls_use_20260325_operation_paths() {
+        let mut config = sample_unstructured_provider_config();
+        config.base_url = "https://genai.oci.us-chicago-1.oraclecloud.com/openai/v1".to_string();
+        let store = sample_structured_store();
+
+        let list =
+            build_ai_enrichment_jobs_url(&config, &store, None).expect("build enrichment jobs url");
+        assert_eq!(
+            list.as_str(),
+            "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20260325/semanticStores/semantic-store-1/enrichmentJobs?compartmentId=ocid1.compartment.oc1..sales&sortBy=timeCreated&sortOrder=DESC&limit=10"
+        );
+
+        let list_with_override =
+            build_ai_enrichment_jobs_url(&config, &store, Some("ocid1.compartment.oc1..unsaved"))
+                .expect("build enrichment jobs url with current form value");
+        assert_eq!(
+            list_with_override.as_str(),
+            "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20260325/semanticStores/semantic-store-1/enrichmentJobs?compartmentId=ocid1.compartment.oc1..unsaved&sortBy=timeCreated&sortOrder=DESC&limit=10"
+        );
+
+        let generate = build_ai_generate_enrichment_job_url(&config, &store)
+            .expect("build generate enrichment url");
+        assert_eq!(
+            generate.as_str(),
+            "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20260325/semanticStores/semantic-store-1/actions/enrich"
+        );
+
+        let job = build_ai_enrichment_job_url(&config, &store, "enrichment-job-1")
+            .expect("build enrichment job url");
+        assert_eq!(
+            job.as_str(),
+            "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20260325/semanticStores/semantic-store-1/enrichmentJobs/enrichment-job-1"
+        );
+    }
+
+    #[test]
+    fn build_ai_enrichment_jobs_url_requires_compartment_id_for_list() {
+        let mut config = sample_unstructured_provider_config();
+        config.base_url = "https://genai.oci.us-chicago-1.oraclecloud.com/openai/v1".to_string();
+        let mut store = sample_structured_store();
+        store.compartment_id.clear();
+        store.store_ocid.clear();
+
+        let error = build_ai_enrichment_jobs_url(&config, &store, None)
+            .expect_err("list enrichment jobs requires compartment id");
+        assert_eq!(
+            error,
+            "Compartment OCID is required to refresh enrichment jobs"
+        );
+    }
+
+    #[test]
+    fn build_enrichment_job_payload_supports_full_and_partial_builds() {
+        let store = sample_structured_store();
+        let full = build_enrichment_job_payload(
+            &store,
+            &AiEnrichmentJobRequest {
+                structured_store_id: store.id.clone(),
+                mode: "full".to_string(),
+                schema_name: "".to_string(),
+                database_objects: vec![],
+            },
+        )
+        .expect("full payload");
+        assert_eq!(full["enrichmentJobType"], "FULL_BUILD");
+        assert_eq!(
+            full["enrichmentJobConfiguration"]["enrichmentJobType"],
+            "FULL_BUILD"
+        );
+        assert_eq!(full["enrichmentJobConfiguration"]["schemaName"], "SALES");
+
+        let delta = build_enrichment_job_payload(
+            &store,
+            &AiEnrichmentJobRequest {
+                structured_store_id: store.id.clone(),
+                mode: "delta".to_string(),
+                schema_name: "OPS".to_string(),
+                database_objects: vec![],
+            },
+        );
+        assert!(delta
+            .expect_err("delta needs a schedule")
+            .contains("Delta enrichment requires a refresh schedule"));
+
+        let partial = build_enrichment_job_payload(
+            &store,
+            &AiEnrichmentJobRequest {
+                structured_store_id: store.id.clone(),
+                mode: "partial".to_string(),
+                schema_name: "".to_string(),
+                database_objects: vec!["ORDERS".to_string()],
+            },
+        )
+        .expect("partial payload");
+        assert_eq!(partial["enrichmentJobType"], "PARTIAL_BUILD");
+        assert_eq!(
+            partial["enrichmentJobConfiguration"]["enrichmentJobType"],
+            "PARTIAL_BUILD"
+        );
+        assert_eq!(
+            partial["enrichmentJobConfiguration"]["databaseObjects"],
+            json!([{ "name": "ORDERS", "type": "TABLE" }])
+        );
+    }
+
+    #[test]
+    fn parse_oci_config_profile_reads_default_and_named_profiles() {
+        let raw = r#"
+[DEFAULT]
+region = us-chicago-1
+tenancy = ocid1.tenancy.oc1..default
+user = ocid1.user.oc1..default
+
+[SALES]
+region = us-ashburn-1
+fingerprint = aa:bb
+key_file = ~/.oci/sales.pem
+"#;
+
+        let default_profile = parse_oci_config_profile(raw, "DEFAULT");
+        assert_eq!(
+            default_profile.get("region").map(String::as_str),
+            Some("us-chicago-1")
+        );
+        assert_eq!(
+            default_profile.get("tenancy").map(String::as_str),
+            Some("ocid1.tenancy.oc1..default")
+        );
+
+        let sales_profile = parse_oci_config_profile(raw, "SALES");
+        assert_eq!(
+            sales_profile.get("region").map(String::as_str),
+            Some("us-ashburn-1")
+        );
+        assert_eq!(
+            sales_profile.get("fingerprint").map(String::as_str),
+            Some("aa:bb")
+        );
+        assert_eq!(
+            sales_profile.get("key_file").map(String::as_str),
+            Some("~/.oci/sales.pem")
+        );
+    }
+
+    #[test]
+    fn build_oci_request_target_preserves_query_string() {
+        let url = reqwest::Url::parse("https://example.com/20260325/resource?limit=10&page=abc")
+            .expect("url");
+        assert_eq!(
+            build_oci_request_target("GET", &url),
+            "get /20260325/resource?limit=10&page=abc"
+        );
+    }
+
+    #[test]
+    fn build_oci_signature_headers_uses_minimal_get_headers() {
+        let url = reqwest::Url::parse(
+            "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20260325/semanticStores/store/enrichmentJobs?compartmentId=ocid1.compartment.oc1..sales",
+        )
+        .expect("url");
+        let headers = build_oci_signature_headers("GET", &url, "Tue, 28 Apr 2026 08:39:00 GMT", "")
+            .expect("headers");
+        let names = headers.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+
+        assert_eq!(names, vec!["date", "(request-target)", "host"]);
+        assert_eq!(
+            headers.get(1).map(|(_, value)| value.as_str()),
+            Some("get /20260325/semanticStores/store/enrichmentJobs?compartmentId=ocid1.compartment.oc1..sales")
+        );
+    }
+
+    #[test]
+    fn build_oci_signature_headers_includes_body_headers_for_post() {
+        let url = reqwest::Url::parse(
+            "https://inference.generativeai.us-chicago-1.oci.oraclecloud.com/20260325/semanticStores/store/actions/enrich",
+        )
+        .expect("url");
+        let headers = build_oci_signature_headers(
+            "POST",
+            &url,
+            "Tue, 28 Apr 2026 08:39:00 GMT",
+            "{\"enrichmentJobType\":\"FULL_BUILD\"}",
+        )
+        .expect("headers");
+        let names = headers.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "date",
+                "(request-target)",
+                "host",
+                "x-content-sha256",
+                "content-type",
+                "content-length"
+            ]
+        );
+        assert_eq!(
+            headers
+                .iter()
+                .find(|(name, _)| *name == "content-length")
+                .map(|(_, value)| value.as_str()),
+            Some("34")
+        );
+    }
+
+    #[test]
+    fn mcp_helpers_resolve_tool_names_and_text_content() {
+        let single_tool = json!({
+            "result": { "tools": [{ "name": "query_sales_database" }] }
+        });
+        assert_eq!(
+            resolve_mcp_tool_name(&single_tool, "").expect("single tool"),
+            "query_sales_database"
+        );
+
+        let ambiguous = json!({
+            "result": { "tools": [{ "name": "query_a" }, { "name": "query_b" }] }
+        });
+        assert!(resolve_mcp_tool_name(&ambiguous, "").is_err());
+        assert_eq!(
+            resolve_mcp_tool_name(&ambiguous, "query_b").expect("configured tool"),
+            "query_b"
+        );
+
+        let call_response = json!({
+            "result": {
+                "content": [
+                    { "type": "text", "text": "Answer line 1" },
+                    { "type": "text", "text": "Answer line 2" }
+                ]
+            }
+        });
+        assert_eq!(
+            extract_mcp_text_response(&call_response).as_deref(),
+            Some("Answer line 1\nAnswer line 2")
+        );
+    }
+
+    #[test]
+    fn mcp_process_error_includes_stderr_and_npm_offline_hint() {
+        let error = format_mcp_process_error(
+            "Failed to read MCP response header: failed to fill whole buffer",
+            Some("exit code 1"),
+            "npm error code ENOTCACHED\nnpm error request to https://registry.npmjs.org/mcp-remote failed: cache mode is 'only-if-cached' but no cached response is available.",
+        );
+
+        assert!(error.contains("MCP process exited before sending a response header"));
+        assert!(error.contains("MCP process status: exit code 1"));
+        assert!(error.contains("npm is running in offline/cache-only mode"));
+        assert!(error.contains("ENOTCACHED"));
+    }
+
+    #[test]
+    fn mcp_process_error_includes_remote_dns_hint() {
+        let error = format_mcp_process_error(
+            "Failed to read MCP response header: failed to fill whole buffer",
+            Some("exit code 1"),
+            "TypeError: fetch failed\nCaused by: Error: getaddrinfo ENOTFOUND genai.oci.us-chicago-1.oraclecloud.com",
+        );
+
+        assert!(error.contains("MCP process exited before sending a response header"));
+        assert!(error.contains("MCP remote server hostname could not be resolved"));
+        assert!(error.contains("DNS/network/proxy"));
+        assert!(error.contains("Oracle GenAI MCP server URL/region"));
+        assert!(error.contains("ENOTFOUND"));
+    }
+
+    #[test]
+    fn read_only_sql_guard_blocks_non_select_statements() {
+        assert!(is_read_only_select_sql("SELECT * FROM orders"));
+        assert!(is_read_only_select_sql(
+            "WITH recent AS (SELECT * FROM orders) SELECT * FROM recent"
+        ));
+        assert!(!is_read_only_select_sql("DELETE FROM orders"));
+        assert!(!is_read_only_select_sql(
+            "SELECT * FROM orders; DROP TABLE orders"
+        ));
+    }
+
+    #[test]
+    fn user_supplied_select_sql_becomes_local_sql_draft() {
+        let store = sample_structured_store();
+        let mut request = sample_unstructured_request("select * from employees");
+        request.knowledge_selection = AiKnowledgeSelection {
+            kind: "oracle-structured-store".to_string(),
+            registration_id: Some(store.id.clone()),
+            mode: Some("sql-draft".to_string()),
+        };
+
+        let response = build_user_supplied_sql_draft_response(&store, &request)
+            .expect("read-only SQL prompt should become a local draft");
+
+        assert_eq!(response.text, "select * from employees");
+        assert_eq!(response.content_type, "sql");
+        assert_eq!(
+            response.generated_sql.as_deref(),
+            Some("select * from employees")
+        );
+        assert_eq!(response.model.as_deref(), Some("user-supplied-sql"));
+        assert!(response
+            .explanation_text
+            .as_deref()
+            .unwrap_or_default()
+            .contains("No NL2SQL request was sent"));
+    }
+
+    #[test]
+    fn user_supplied_non_select_sql_is_not_used_as_a_local_sql_draft() {
+        let store = sample_structured_store();
+        let request = sample_unstructured_request("delete from employees");
+
+        assert!(build_user_supplied_sql_draft_response(&store, &request).is_none());
     }
 
     #[test]
@@ -2832,7 +4877,6 @@ mod tests {
             client_id: "client-id".to_string(),
             scope: "scope".to_string(),
             transport: "http-json".to_string(),
-            supported_contracts: vec!["chat-text".to_string()],
         })
         .expect("build oci hosted invoke url");
         assert_eq!(
@@ -2857,7 +4901,6 @@ mod tests {
                 client_id: "client-id".to_string(),
                 scope: "scope".to_string(),
                 transport: "http-json".to_string(),
-                supported_contracts: vec!["chat-text".to_string()],
             },
             Some(StatusCode::NOT_FOUND),
             "https://application.generativeai.us-chicago-1.oci.oraclecloud.com/20251112/hostedApplications/ocid1.generativeaihostedapplication.oc1.us-chicago-1.amaaaaaatest/actions/invoke/chat",
@@ -2888,7 +4931,6 @@ mod tests {
                 client_id: "client-id".to_string(),
                 scope: "https://k8scloud.site/invoke".to_string(),
                 transport: "http-json".to_string(),
-                supported_contracts: vec!["chat-text".to_string()],
             },
             Some(StatusCode::UNAUTHORIZED),
             "https://application.generativeai.us-chicago-1.oci.oraclecloud.com/20251112/hostedApplications/ocid1.generativeaihostedapplication.oc1.us-chicago-1.amaaaaaatest/actions/invoke/chat",
@@ -2951,6 +4993,17 @@ mod tests {
         assert_eq!(
             extract_nl2sql_sql_text(&json!({ "sql": "SELECT 2" })).as_deref(),
             Some("SELECT 2")
+        );
+        assert_eq!(
+            extract_nl2sql_sql_text(&json!({ "jobOutput": { "content": "SELECT 3" } })).as_deref(),
+            Some("SELECT 3")
+        );
+        assert_eq!(
+            extract_nl2sql_sql_text(
+                &json!({ "jobOutput": { "content": [{ "text": "SELECT 4" }] } })
+            )
+            .as_deref(),
+            Some("SELECT 4")
         );
     }
 
@@ -3130,6 +5183,42 @@ mod tests {
         assert_eq!(
             normalize_ai_status_error_message(Some(StatusCode::BAD_GATEWAY), "bad gateway"),
             "AI service is temporarily unavailable. Try again later"
+        );
+    }
+
+    #[test]
+    fn normalize_ai_status_error_message_surfaces_provider_error_body() {
+        let message = normalize_ai_status_error_message_with_provider_detail(
+            Some(StatusCode::NOT_FOUND),
+            r#"{"code":"NotAuthorizedOrNotFound","message":"resource not found","opc-request-id":"req-123"}"#,
+            "ai:get-enrichment-job",
+            None,
+        );
+
+        assert!(message.contains("OCI structured data endpoint or resource was not found"));
+        assert!(message.contains("Provider detail (ai:get-enrichment-job)"));
+        assert!(message.contains("code=NotAuthorizedOrNotFound"));
+        assert!(message.contains("message=resource not found"));
+        assert!(message.contains("opc-request-id=req-123"));
+    }
+
+    #[test]
+    fn normalize_ai_operation_status_error_message_explains_structured_data_404() {
+        assert_eq!(
+            normalize_ai_operation_status_error_message(
+                "ai:generate-sql-from-nl",
+                Some(StatusCode::NOT_FOUND),
+                "not found"
+            ),
+            "OCI structured data endpoint or resource was not found. Check the Semantic Store OCID, OCI region, base URL, compartment OCID, enrichment job ID, and IAM policy."
+        );
+        assert_eq!(
+            normalize_ai_operation_status_error_message(
+                "ai:chat",
+                Some(StatusCode::NOT_FOUND),
+                "not found"
+            ),
+            normalize_ai_status_error_message(Some(StatusCode::NOT_FOUND), "not found")
         );
     }
 

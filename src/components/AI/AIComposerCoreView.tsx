@@ -68,6 +68,7 @@ interface Props {
   hasInsertPreview: boolean
   diffBlocks: ReturnType<typeof import('../../lib/lineDiff.ts').diffTextByLine>
   canSubmit: boolean
+  canExecuteStructuredSql: boolean
   canApplyToEditor: boolean
   canApplyToAnyTarget: boolean
   canReplaceCurrentTarget: boolean
@@ -82,11 +83,13 @@ interface Props {
   onOpenAISetup: () => void
   onCancelRequest: () => Promise<void>
   onRun: () => Promise<void>
+  onExecuteStructuredSql: () => Promise<void>
   onResetAndClose: () => void
   onPromptChange: (value: string) => void
   onSelectKnowledgeType: (type: AIKnowledgeType) => void
   onSelectDocsStore: (storeId: string) => void
   onSelectDataStore: (registrationId: string) => void
+  onSelectDataMode: (mode: 'sql-draft' | 'agent-answer') => void
   onSelectHostedAgentProfile: (profileId: string | null) => void
   onSelectTemplate: (template: AITemplateModel) => void
   onRetry: () => Promise<void>
@@ -136,6 +139,7 @@ export default function AIComposerCoreView({
   hasInsertPreview,
   diffBlocks,
   canSubmit,
+  canExecuteStructuredSql,
   canApplyToEditor,
   canApplyToAnyTarget,
   canReplaceCurrentTarget,
@@ -150,11 +154,13 @@ export default function AIComposerCoreView({
   onOpenAISetup,
   onCancelRequest,
   onRun,
+  onExecuteStructuredSql,
   onResetAndClose,
   onPromptChange,
   onSelectKnowledgeType,
   onSelectDocsStore,
   onSelectDataStore,
+  onSelectDataMode,
   onSelectHostedAgentProfile,
   onSelectTemplate,
   onRetry,
@@ -413,34 +419,72 @@ export default function AIComposerCoreView({
               )}
 
               {knowledgeType === 'data' && (
-                <label className="flex flex-col gap-1">
-                  <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                    {t('ai.knowledge.dataLabel')}
-                  </span>
-                  <select
-                    value={
-                      composer.knowledgeSelection.kind === 'oracle-structured-store'
-                        ? composer.knowledgeSelection.registrationId
-                        : ''
-                    }
-                    onChange={(event) => onSelectDataStore(event.target.value)}
-                    className="rounded-2xl border px-3 py-2 text-xs outline-none"
-                    style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--bg-primary)',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    <option value="">{t('ai.connection.noneOption')}</option>
-                    {oracleProviderConfig.structuredStores
-                      .filter((store) => store.enabled)
-                      .map((store) => (
-                        <option key={store.id} value={store.id}>
-                          {store.label || store.id}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+                <div className="grid gap-2">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      {t('ai.knowledge.dataLabel')}
+                    </span>
+                    <select
+                      value={
+                        composer.knowledgeSelection.kind === 'oracle-structured-store'
+                          ? composer.knowledgeSelection.registrationId
+                          : ''
+                      }
+                      onChange={(event) => onSelectDataStore(event.target.value)}
+                      className="rounded-2xl border px-3 py-2 text-xs outline-none"
+                      style={{
+                        borderColor: 'var(--border)',
+                        background: 'var(--bg-primary)',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      <option value="">{t('ai.connection.noneOption')}</option>
+                      {oracleProviderConfig.structuredStores
+                        .filter((store) => store.enabled)
+                        .map((store) => (
+                          <option key={store.id} value={store.id}>
+                            {store.label || store.id}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  {composer.knowledgeSelection.kind === 'oracle-structured-store' ? (
+                    <div className="grid gap-1">
+                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                        {t('ai.knowledge.action')}
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          { mode: 'sql-draft', label: t('ai.knowledge.structuredAction.sqlDraft') },
+                          { mode: 'agent-answer', label: t('ai.knowledge.structuredAction.agentAnswer') },
+                        ] as const).map((option) => (
+                          <button
+                            key={option.mode}
+                            type="button"
+                            data-ai-structured-mode={option.mode}
+                            onClick={() => onSelectDataMode(option.mode)}
+                            className="rounded-lg border px-3 py-2 text-xs font-medium transition-colors"
+                            style={{
+                              borderColor:
+                                composer.knowledgeSelection.kind === 'oracle-structured-store' &&
+                                composer.knowledgeSelection.mode === option.mode
+                                  ? 'var(--accent)'
+                                  : 'var(--border)',
+                              background:
+                                composer.knowledgeSelection.kind === 'oracle-structured-store' &&
+                                composer.knowledgeSelection.mode === option.mode
+                                  ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-primary))'
+                                  : 'var(--bg-primary)',
+                              color: 'var(--text-primary)',
+                            }}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               )}
 
               {knowledgeType === 'agent' && (
@@ -782,7 +826,10 @@ export default function AIComposerCoreView({
                   </p>
                 )}
                 {composer.errorMessage && (
-                  <p className="text-sm" style={{ ...composerContentTypography.text, color: '#dc2626' }}>
+                  <p
+                    className="whitespace-pre-wrap break-words text-sm"
+                    style={{ ...composerContentTypography.text, color: '#dc2626' }}
+                  >
                     {composer.errorMessage}
                   </p>
                 )}
@@ -796,6 +843,22 @@ export default function AIComposerCoreView({
                         explanationText={composer.explanationText}
                         warningText={composer.warningText}
                         sourceLabel={composer.sourceLabel}
+                        generatedSql={composer.generatedSql}
+                        executionStatus={composer.structuredExecutionStatus}
+                        executionToolName={composer.structuredExecutionToolName}
+                        canExecuteStructuredSql={canExecuteStructuredSql}
+                        onExecuteStructuredSql={onExecuteStructuredSql}
+                        typography={composerContentTypography}
+                      />
+                    ) : composer.generatedSql ? (
+                      <AIStructuredExecutionPreview
+                        answer={normalizedDraft}
+                        generatedSql={composer.generatedSql}
+                        explanationText={composer.explanationText}
+                        warningText={composer.warningText}
+                        sourceLabel={composer.sourceLabel}
+                        executionStatus={composer.structuredExecutionStatus}
+                        executionToolName={composer.structuredExecutionToolName}
                         typography={composerContentTypography}
                       />
                     ) : (
@@ -1333,18 +1396,157 @@ function AISqlDraftPreview({
   explanationText,
   warningText,
   sourceLabel,
+  generatedSql,
+  executionStatus,
+  executionToolName,
+  canExecuteStructuredSql,
+  onExecuteStructuredSql,
   typography,
 }: {
   sql: string
   explanationText: string
   warningText: string | null
   sourceLabel: string | null
+  generatedSql: string | null
+  executionStatus: string | null
+  executionToolName: string | null
+  canExecuteStructuredSql: boolean
+  onExecuteStructuredSql: () => Promise<void>
+  typography: AIComposerContentTypography
+}) {
+  const { t } = useTranslation()
+  const visibleSql = sql || generatedSql || ''
+
+  return (
+    <div className="grid gap-3">
+      <div
+        data-ai-sql-draft-card="true"
+        className="min-w-0 overflow-hidden rounded-2xl border px-3 py-3"
+        style={{
+          borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
+          background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
+        }}
+      >
+        <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+            {t('ai.knowledge.structuredAction.sqlDraft')}
+          </div>
+          <div
+            data-ai-sql-draft-header-actions="true"
+            className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2"
+          >
+            {sourceLabel ? (
+              <span
+                className="min-w-0 max-w-full truncate rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
+                  background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
+                  color: 'var(--text-muted)',
+                }}
+                title={sourceLabel}
+              >
+                {sourceLabel}
+              </span>
+            ) : null}
+            {canExecuteStructuredSql ? (
+              <button
+                type="button"
+                data-ai-action="execute-structured-sql"
+                onClick={() => void onExecuteStructuredSql()}
+                className="inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors"
+                style={{
+                  background: 'var(--accent)',
+                  color: 'white',
+                }}
+                title={t('ai.knowledge.structuredExecution.execute')}
+              >
+                <AppIcon name="table" size={13} />
+                <span className="min-w-0 truncate">{t('ai.knowledge.structuredExecution.execute')}</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <pre
+          data-ai-sql-draft="true"
+          className="mt-3 max-w-full overflow-x-auto whitespace-pre-wrap break-words rounded-xl px-3 py-3"
+          style={{
+            ...typography.code,
+            background: 'color-mix(in srgb, var(--bg-primary) 94%, transparent)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {visibleSql || t('ai.result.empty')}
+        </pre>
+      </div>
+      {executionStatus ? (
+        <AIExecutionStatusCard
+          status={executionStatus}
+          toolName={executionToolName}
+          typography={typography}
+        />
+      ) : null}
+      {explanationText ? (
+        <div className="text-[11px] leading-5" style={{ ...typography.meta, color: 'var(--text-secondary)' }}>
+          {explanationText}
+        </div>
+      ) : null}
+      {warningText ? (
+        <div
+          className="rounded-xl border px-3 py-2 text-[11px] leading-5"
+          style={{
+            ...typography.meta,
+            borderColor: 'color-mix(in srgb, #f59e0b 28%, var(--border))',
+            background: 'color-mix(in srgb, #f59e0b 10%, var(--bg-secondary))',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {warningText}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function AIStructuredExecutionPreview({
+  answer,
+  generatedSql,
+  explanationText,
+  warningText,
+  sourceLabel,
+  executionStatus,
+  executionToolName,
+  typography,
+}: {
+  answer: string
+  generatedSql: string
+  explanationText: string
+  warningText: string | null
+  sourceLabel: string | null
+  executionStatus: string | null
+  executionToolName: string | null
   typography: AIComposerContentTypography
 }) {
   const { t } = useTranslation()
 
   return (
     <div className="grid gap-3">
+      <AISqlDraftPreview
+        sql={generatedSql}
+        generatedSql={generatedSql}
+        explanationText=""
+        warningText={null}
+        sourceLabel={sourceLabel}
+        executionStatus={null}
+        executionToolName={null}
+        canExecuteStructuredSql={false}
+        onExecuteStructuredSql={async () => undefined}
+        typography={typography}
+      />
+      <AIExecutionStatusCard
+        status={executionStatus ?? t('ai.knowledge.structuredExecution.completed')}
+        toolName={executionToolName}
+        typography={typography}
+      />
       <div
         className="rounded-2xl border px-3 py-3"
         style={{
@@ -1352,33 +1554,18 @@ function AISqlDraftPreview({
           background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
         }}
       >
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
-            {t('ai.knowledge.structuredAction.sqlDraft')}
-          </div>
-          {sourceLabel ? (
-            <span
-              className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-              style={{
-                borderColor: 'color-mix(in srgb, var(--border) 72%, transparent)',
-                background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
-                color: 'var(--text-muted)',
-              }}
-            >
-              {sourceLabel}
-            </span>
-          ) : null}
+        <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+          {t('ai.knowledge.structuredExecution.answer')}
         </div>
         <pre
-          data-ai-sql-draft="true"
-          className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-xl px-3 py-3"
+          className="mt-3 m-0 whitespace-pre-wrap break-words text-sm"
           style={{
-            ...typography.code,
-            background: 'color-mix(in srgb, var(--bg-primary) 94%, transparent)',
+            ...typography.text,
             color: 'var(--text-primary)',
+            fontFamily: 'inherit',
           }}
         >
-          {sql || t('ai.result.empty')}
+          {answer || t('ai.result.empty')}
         </pre>
       </div>
       {explanationText ? (
@@ -1397,6 +1584,41 @@ function AISqlDraftPreview({
           }}
         >
           {warningText}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function AIExecutionStatusCard({
+  status,
+  toolName,
+  typography,
+}: {
+  status: string
+  toolName: string | null
+  typography: AIComposerContentTypography
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div
+      data-ai-structured-execution-status="true"
+      className="rounded-2xl border px-3 py-2"
+      style={{
+        borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--border))',
+        background: 'color-mix(in srgb, var(--accent) 7%, var(--bg-secondary))',
+      }}
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: 'var(--text-muted)' }}>
+        {t('ai.knowledge.structuredExecution.status')}
+      </div>
+      <div className="mt-1 text-[11px] leading-5" style={{ ...typography.meta, color: 'var(--text-primary)' }}>
+        {status}
+      </div>
+      {toolName ? (
+        <div className="mt-1 text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
+          {toolName}
         </div>
       ) : null}
     </div>

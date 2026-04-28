@@ -141,6 +141,12 @@ test('toolbar AI entry and setup panel locale copy exist across en, ja, and zh',
   assert.equal(getNestedValue(locales[0], 'ai.connection.save'), 'Save')
   assert.equal(getNestedValue(locales[1], 'ai.connection.save'), '保存')
   assert.equal(getNestedValue(locales[2], 'ai.connection.save'), '保存')
+  assert.equal(getNestedValue(locales[0], 'ai.connection.title'), 'AI Provider')
+  assert.equal(
+    getNestedValue(locales[0], 'ai.connection.providerDescription'),
+    'Configure the model provider, endpoint, project, and API key used by AI features.'
+  )
+  assert.equal(getNestedValue(locales[0], 'ai.connection.saveProvider'), 'Save Provider')
   assert.equal(getNestedValue(locales[0], 'ai.connection.clearClientSecret'), 'Clear Client Secret')
   assert.equal(getNestedValue(locales[1], 'ai.connection.clearClientSecret'), 'Client Secret を削除')
   assert.equal(getNestedValue(locales[2], 'ai.connection.clearClientSecret'), '清除 Client Secret')

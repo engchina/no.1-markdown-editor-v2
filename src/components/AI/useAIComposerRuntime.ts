@@ -10,6 +10,8 @@ import { buildAIRequestMessages, normalizeAIDraftText } from '../../lib/ai/promp
 import { extractLegacyAIRetrievalMetadata } from '../../lib/ai/retrievalMetadata.ts'
 import {
   findHostedAgentProfile,
+  getDefaultStructuredStoreRegistration,
+  getDefaultUnstructuredStoreRegistration,
   getAIKnowledgeType,
   isAIProviderConnectionReady,
   isOCIResponsesProviderConfig,
@@ -52,8 +54,10 @@ interface UseAIComposerRuntimeResult {
   handleSelectKnowledgeType: (nextType: AIKnowledgeType) => void
   handleSelectDocsStore: (storeId: string) => void
   handleSelectDataStore: (registrationId: string) => void
+  handleSelectDataMode: (mode: 'sql-draft' | 'agent-answer') => void
   handleSelectHostedAgentProfile: (profileId: string | null) => void
   handleSubmit: () => Promise<void>
+  handleExecuteStructuredSql: () => Promise<void>
   handleCancelRequest: () => Promise<void>
   handleCopy: () => Promise<void>
 }
@@ -84,6 +88,9 @@ export function useAIComposerRuntime({
     setRetrievalQuery,
     setRetrievalResults,
     setRetrievalResultCount,
+    setGeneratedSql,
+    setStructuredExecutionStatus,
+    setStructuredExecutionToolName,
     setDiffBaseText,
     startRequest,
     finishRequest,
@@ -119,9 +126,24 @@ export function useAIComposerRuntime({
   const selectedHostedAgentProfile = findHostedAgentProfile(oracleProviderConfig, composer.hostedAgentProfileId)
   const defaultHostedAgentProfile = oracleProviderConfig?.hostedAgentProfiles[0] ?? null
   const isHostedAgentKnowledge = knowledgeType === 'agent'
+  const isStructuredKnowledge = composer.knowledgeSelection.kind === 'oracle-structured-store'
+  const selectedOciAuthProfile = selectedStructuredStore?.ociAuthProfileId
+    ? oracleProviderConfig?.ociAuthProfiles.find((profile) => profile.id === selectedStructuredStore.ociAuthProfileId && profile.enabled) ?? null
+    : oracleProviderConfig?.ociAuthProfiles.find((profile) => profile.enabled) ?? null
+  const selectedMcpExecutionProfile = selectedStructuredStore?.executionProfileId
+    ? oracleProviderConfig?.mcpExecutionProfiles.find((profile) => profile.id === selectedStructuredStore.executionProfileId && profile.enabled) ?? null
+    : null
+  const hasStructuredConnection =
+    !!selectedStructuredStore?.semanticStoreId &&
+    !!selectedOciAuthProfile &&
+    (composer.knowledgeSelection.kind !== 'oracle-structured-store' ||
+      composer.knowledgeSelection.mode !== 'agent-answer' ||
+      !!selectedMcpExecutionProfile)
   const hasConnection = isHostedAgentKnowledge
     ? !!selectedHostedAgentProfile &&
       providerState?.hasHostedAgentClientSecretById?.[selectedHostedAgentProfile.id] === true
+    : isStructuredKnowledge
+      ? hasStructuredConnection
     : isAIProviderConnectionReady(providerState)
   const desktopOnlyMode = !isAIRuntimeAvailable()
   const showConnectionHint = !connectionLoading && (!hasConnection || connectionError !== null)
@@ -131,6 +153,8 @@ export function useAIComposerRuntime({
       ? t('notices.aiDesktopOnlyTitle')
       : isHostedAgentKnowledge
         ? t('ai.connection.hostedAgentMissingTitle')
+        : isStructuredKnowledge
+          ? t('ai.connection.structuredMissingTitle')
         : t('notices.aiProviderMissingTitle')
   const connectionHintMessage = connectionError
     ? connectionError
@@ -138,6 +162,8 @@ export function useAIComposerRuntime({
       ? t('notices.aiDesktopOnlyMessage')
       : isHostedAgentKnowledge
         ? t('ai.connection.hostedAgentMissingMessage')
+        : isStructuredKnowledge
+          ? t('ai.connection.structuredMissingMessage')
         : t('notices.aiProviderMissingMessage')
 
   useEffect(() => {
@@ -261,18 +287,13 @@ export function useAIComposerRuntime({
         return
       }
 
-      if (composer.knowledgeSelection.mode !== 'sql-draft') {
-        setKnowledgeSelection({
-          kind: 'oracle-structured-store',
-          registrationId: store.id,
-          mode: 'sql-draft',
-        })
-      }
       if (composer.executionTargetKind !== 'direct-provider') {
         setExecutionTargetKind('direct-provider')
       }
-      if (composer.invocationCapability !== 'nl2sql-draft') {
-        setInvocationCapability('nl2sql-draft')
+      const nextCapability =
+        composer.knowledgeSelection.mode === 'agent-answer' ? 'structured-execution' : 'nl2sql-draft'
+      if (composer.invocationCapability !== nextCapability) {
+        setInvocationCapability(nextCapability)
       }
       return
     }
@@ -326,7 +347,7 @@ export function useAIComposerRuntime({
     }
 
     if (nextType === 'docs') {
-      const fallback = oracleProviderConfig.unstructuredStores.find((store) => store.enabled) ?? null
+      const fallback = getDefaultUnstructuredStoreRegistration(oracleProviderConfig)
       if (!fallback) return
       setKnowledgeSelection({
         kind: 'oracle-unstructured-store',
@@ -345,15 +366,15 @@ export function useAIComposerRuntime({
       return
     }
 
-    const fallback = oracleProviderConfig.structuredStores.find((store) => store.enabled) ?? null
+    const fallback = getDefaultStructuredStoreRegistration(oracleProviderConfig)
     if (!fallback) return
     setKnowledgeSelection({
       kind: 'oracle-structured-store',
       registrationId: fallback.id,
-      mode: 'sql-draft',
+      mode: fallback.defaultMode,
     })
     setExecutionTargetKind('direct-provider')
-    setInvocationCapability('nl2sql-draft')
+    setInvocationCapability(fallback.defaultMode === 'agent-answer' ? 'structured-execution' : 'nl2sql-draft')
     if (composer.outputTarget === 'replace-selection' || composer.outputTarget === 'replace-current-block') {
       setOutputTarget('insert-below')
     }
@@ -389,10 +410,10 @@ export function useAIComposerRuntime({
     setKnowledgeSelection({
       kind: 'oracle-structured-store',
       registrationId,
-      mode: 'sql-draft',
+      mode: store.defaultMode,
     })
     setExecutionTargetKind('direct-provider')
-    setInvocationCapability('nl2sql-draft')
+    setInvocationCapability(store.defaultMode === 'agent-answer' ? 'structured-execution' : 'nl2sql-draft')
     if (composer.outputTarget === 'replace-selection' || composer.outputTarget === 'replace-current-block') {
       setOutputTarget('insert-below')
     }
@@ -400,6 +421,26 @@ export function useAIComposerRuntime({
     composer.outputTarget,
     handleSelectKnowledgeType,
     oracleProviderConfig?.structuredStores,
+    setExecutionTargetKind,
+    setInvocationCapability,
+    setKnowledgeSelection,
+    setOutputTarget,
+  ])
+
+  const handleSelectDataMode = useCallback((mode: 'sql-draft' | 'agent-answer') => {
+    if (composer.knowledgeSelection.kind !== 'oracle-structured-store') return
+    setKnowledgeSelection({
+      kind: 'oracle-structured-store',
+      registrationId: composer.knowledgeSelection.registrationId,
+      mode,
+    })
+    setExecutionTargetKind('direct-provider')
+    setInvocationCapability(mode === 'agent-answer' ? 'structured-execution' : 'nl2sql-draft')
+    if (mode === 'agent-answer') {
+      setOutputTarget('chat-only')
+    }
+  }, [
+    composer.knowledgeSelection,
     setExecutionTargetKind,
     setInvocationCapability,
     setKnowledgeSelection,
@@ -423,8 +464,16 @@ export function useAIComposerRuntime({
 
     if (!hasConnection) {
       pushInfoNotice(
-        isHostedAgentKnowledge ? 'ai.connection.hostedAgentMissingTitle' : 'notices.aiProviderMissingTitle',
-        isHostedAgentKnowledge ? 'ai.connection.hostedAgentMissingMessage' : 'notices.aiProviderMissingMessage'
+        isHostedAgentKnowledge
+          ? 'ai.connection.hostedAgentMissingTitle'
+          : isStructuredKnowledge
+            ? 'ai.connection.structuredMissingTitle'
+            : 'notices.aiProviderMissingTitle',
+        isHostedAgentKnowledge
+          ? 'ai.connection.hostedAgentMissingMessage'
+          : isStructuredKnowledge
+            ? 'ai.connection.structuredMissingMessage'
+            : 'notices.aiProviderMissingMessage'
       )
       return
     }
@@ -467,6 +516,12 @@ export function useAIComposerRuntime({
     startRequest()
 
     try {
+      const knowledgeSelectionForRun =
+        composer.knowledgeSelection.kind === 'oracle-structured-store' &&
+        composer.knowledgeSelection.mode === 'agent-answer'
+          ? { ...composer.knowledgeSelection, mode: 'sql-draft' as const }
+          : composer.knowledgeSelection
+
       const response = await runAICompletion({
         requestId,
         intent: effectiveContext.intent,
@@ -479,8 +534,12 @@ export function useAIComposerRuntime({
           context: effectiveContext,
         }),
         executionTargetKind: composer.executionTargetKind,
-        invocationCapability: composer.invocationCapability,
-        knowledgeSelection: composer.knowledgeSelection,
+        invocationCapability:
+          knowledgeSelectionForRun.kind === 'oracle-structured-store' &&
+          knowledgeSelectionForRun.mode === 'sql-draft'
+            ? 'nl2sql-draft'
+            : composer.invocationCapability,
+        knowledgeSelection: knowledgeSelectionForRun,
         threadId: composer.threadId,
         hostedAgentProfileId:
           composer.executionTargetKind === 'oracle-hosted-agent'
@@ -510,6 +569,9 @@ export function useAIComposerRuntime({
       setRetrievalQuery(response.retrievalQuery ?? legacyRetrieval.query)
       setRetrievalResults(response.retrievalResults)
       setRetrievalResultCount(response.retrievalResultCount)
+      setGeneratedSql(response.generatedSql)
+      setStructuredExecutionStatus(response.structuredExecutionStatus)
+      setStructuredExecutionToolName(response.structuredExecutionToolName)
       setThreadId(response.threadId ?? threadId)
       if (response.contentType === 'sql') {
         setDiffBaseText(null)
@@ -525,7 +587,7 @@ export function useAIComposerRuntime({
         status: 'done',
         resultPreview: draft,
         errorMessage: null,
-        generatedSqlPreview: response.contentType === 'sql' ? draft : null,
+        generatedSqlPreview: response.generatedSql ?? (response.contentType === 'sql' ? draft : null),
         executionAgentLabel:
           composer.executionTargetKind === 'oracle-hosted-agent' ? selectedHostedAgentProfile?.label ?? null : null,
       })
@@ -566,6 +628,7 @@ export function useAIComposerRuntime({
     finishRequest,
     hasConnection,
     isHostedAgentKnowledge,
+    isStructuredKnowledge,
     oracleProviderConfig?.unstructuredStores,
     selectedHostedAgentProfile?.id,
     selectedHostedAgentProfile?.label,
@@ -580,11 +643,146 @@ export function useAIComposerRuntime({
     setRetrievalResultCount,
     setRetrievalResults,
     setSourceLabel,
+    setGeneratedSql,
+    setStructuredExecutionStatus,
+    setStructuredExecutionToolName,
     setThreadId,
     setWarningText,
     startRequest,
     startSessionHistory,
     t,
+    updateActiveSessionHistory,
+  ])
+
+  const handleExecuteStructuredSql = useCallback(async () => {
+    if (!effectiveContext) return
+    if (composer.knowledgeSelection.kind !== 'oracle-structured-store') return
+
+    const sqlToExecute = (composer.generatedSql ?? (composer.draftFormat === 'sql' ? normalizedDraft : '')).trim()
+    if (!sqlToExecute) {
+      pushInfoNotice('ai.knowledge.structuredExecution.missingSqlTitle', 'ai.knowledge.structuredExecution.missingSqlMessage')
+      return
+    }
+
+    if (desktopOnlyMode) {
+      pushInfoNotice('notices.aiDesktopOnlyTitle', 'notices.aiDesktopOnlyMessage')
+      return
+    }
+
+    if (!hasConnection) {
+      pushInfoNotice('ai.connection.structuredMissingTitle', 'ai.connection.structuredMissingMessage')
+      return
+    }
+
+    const runId = requestRunIdRef.current + 1
+    requestRunIdRef.current = runId
+    const requestId = `${activeTab?.id ?? 'ai'}-${runId}-${Date.now()}`
+    activeRequestIdRef.current = requestId
+    startRequest()
+
+    try {
+      const response = await runAICompletion({
+        requestId,
+        intent: effectiveContext.intent,
+        scope: effectiveContext.scope,
+        outputTarget: 'chat-only',
+        prompt: effectivePrompt,
+        context: effectiveContext,
+        messages: buildAIRequestMessages({
+          prompt: effectivePrompt,
+          context: effectiveContext,
+        }),
+        executionTargetKind: 'direct-provider',
+        invocationCapability: 'structured-execution',
+        knowledgeSelection: {
+          kind: 'oracle-structured-store',
+          registrationId: composer.knowledgeSelection.registrationId,
+          mode: 'agent-answer',
+        },
+        threadId: composer.threadId,
+        hostedAgentProfileId: null,
+        generatedSql: sqlToExecute,
+      }, {
+        onChunk: (chunk) => {
+          if (disposedRef.current || runId !== requestRunIdRef.current) return
+          appendDraftText(chunk)
+        },
+      })
+
+      if (disposedRef.current || runId !== requestRunIdRef.current) return
+      activeRequestIdRef.current = null
+
+      const legacyRetrieval = extractLegacyAIRetrievalMetadata(response.text)
+      const draft = normalizedDraftTextForContext(legacyRetrieval.text, 'chat-only')
+      setDraftText(draft)
+      setDraftFormat(response.contentType)
+      setExplanationText(response.explanationText ?? '')
+      setWarningText(response.warningText)
+      setSourceLabel(response.sourceLabel)
+      setRetrievalExecuted(response.retrievalExecuted || legacyRetrieval.query !== null)
+      setRetrievalQuery(response.retrievalQuery ?? legacyRetrieval.query)
+      setRetrievalResults(response.retrievalResults)
+      setRetrievalResultCount(response.retrievalResultCount)
+      setGeneratedSql(response.generatedSql ?? sqlToExecute)
+      setStructuredExecutionStatus(response.structuredExecutionStatus)
+      setStructuredExecutionToolName(response.structuredExecutionToolName)
+      setThreadId(response.threadId ?? composer.threadId)
+      setDiffBaseText(null)
+      finishRequest()
+      updateActiveSessionHistory({
+        status: 'done',
+        resultPreview: draft,
+        errorMessage: null,
+        generatedSqlPreview: response.generatedSql ?? sqlToExecute,
+      })
+    } catch (error) {
+      if (disposedRef.current || runId !== requestRunIdRef.current) return
+      activeRequestIdRef.current = null
+      const message = error instanceof Error ? error.message : String(error)
+      failRequest(message)
+      setDraftText(sqlToExecute)
+      setDraftFormat('sql')
+      setGeneratedSql(sqlToExecute)
+      setDiffBaseText(null)
+      updateActiveSessionHistory({
+        status: 'error',
+        errorMessage: message,
+        resultPreview: null,
+        generatedSqlPreview: sqlToExecute,
+      })
+      pushErrorNotice('notices.aiRequestErrorTitle', 'notices.aiRequestErrorMessage', {
+        values: { reason: message },
+      })
+    }
+  }, [
+    activeTab?.id,
+    appendDraftText,
+    composer.draftFormat,
+    composer.generatedSql,
+    composer.knowledgeSelection,
+    composer.threadId,
+    desktopOnlyMode,
+    effectiveContext,
+    effectivePrompt,
+    failRequest,
+    finishRequest,
+    hasConnection,
+    normalizedDraft,
+    setDiffBaseText,
+    setDraftFormat,
+    setDraftText,
+    setExplanationText,
+    setGeneratedSql,
+    setRetrievalExecuted,
+    setRetrievalQuery,
+    setRetrievalResultCount,
+    setRetrievalResults,
+    setSourceLabel,
+    setStructuredExecutionStatus,
+    setStructuredExecutionToolName,
+    setThreadId,
+    setWarningText,
+    startRequest,
     updateActiveSessionHistory,
   ])
 
@@ -631,8 +829,10 @@ export function useAIComposerRuntime({
     handleSelectKnowledgeType,
     handleSelectDocsStore,
     handleSelectDataStore,
+    handleSelectDataMode,
     handleSelectHostedAgentProfile,
     handleSubmit,
+    handleExecuteStructuredSql,
     handleCancelRequest,
     handleCopy,
   }

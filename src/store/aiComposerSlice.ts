@@ -40,6 +40,9 @@ export interface AIComposerSliceState {
   setRetrievalQuery: (retrievalQuery: string | null) => void
   setRetrievalResults: (retrievalResults: AIRetrievalResultPreview[]) => void
   setRetrievalResultCount: (retrievalResultCount: number | null) => void
+  setGeneratedSql: (generatedSql: string | null) => void
+  setStructuredExecutionStatus: (structuredExecutionStatus: string | null) => void
+  setStructuredExecutionToolName: (structuredExecutionToolName: string | null) => void
   setDiffBaseText: (diffBaseText: string | null) => void
   setThreadId: (threadId: string | null) => void
   setSourceSnapshot: (sourceSnapshot: AIApplySnapshot | null) => void
@@ -73,6 +76,9 @@ export function createInitialAIComposerState(): AIComposerState {
     retrievalQuery: null,
     retrievalResults: [],
     retrievalResultCount: null,
+    generatedSql: null,
+    structuredExecutionStatus: null,
+    structuredExecutionToolName: null,
     diffBaseText: null,
     threadId: null,
     startedAt: null,
@@ -141,6 +147,12 @@ export function createAIComposerSlice<T extends AIComposerSliceState>(
       set((state) => ({ composer: { ...state.composer, retrievalResults } })),
     setRetrievalResultCount: (retrievalResultCount) =>
       set((state) => ({ composer: { ...state.composer, retrievalResultCount } })),
+    setGeneratedSql: (generatedSql) =>
+      set((state) => ({ composer: { ...state.composer, generatedSql } })),
+    setStructuredExecutionStatus: (structuredExecutionStatus) =>
+      set((state) => ({ composer: { ...state.composer, structuredExecutionStatus } })),
+    setStructuredExecutionToolName: (structuredExecutionToolName) =>
+      set((state) => ({ composer: { ...state.composer, structuredExecutionToolName } })),
     setDiffBaseText: (diffBaseText) => set((state) => ({ composer: { ...state.composer, diffBaseText } })),
     setThreadId: (threadId) => set((state) => ({ composer: { ...state.composer, threadId } })),
     setSourceSnapshot: (sourceSnapshot) => set((state) => ({ composer: { ...state.composer, sourceSnapshot } })),
@@ -168,6 +180,9 @@ export function createAIComposerSlice<T extends AIComposerSliceState>(
           retrievalQuery: null,
           retrievalResults: [],
           retrievalResultCount: null,
+          generatedSql: null,
+          structuredExecutionStatus: null,
+          structuredExecutionToolName: null,
         },
       })),
     finishRequest: () =>
@@ -200,6 +215,9 @@ export function createAIComposerSlice<T extends AIComposerSliceState>(
           retrievalQuery: null,
           retrievalResults: [],
           retrievalResultCount: null,
+          generatedSql: null,
+          structuredExecutionStatus: null,
+          structuredExecutionToolName: null,
           diffBaseText: null,
           errorMessage: null,
           startedAt: null,
