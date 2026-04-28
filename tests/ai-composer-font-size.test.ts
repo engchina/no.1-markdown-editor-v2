@@ -14,7 +14,7 @@ test('AI Composer binds document font size to content text while keeping the wid
   assert.match(coreView, /data-ai-composer-prompt="true"[\s\S]*style=\{\{\s*\.\.\.composerContentTypography\.text,/)
   assert.match(coreView, /<AIDiffPreview[\s\S]*typography=\{composerContentTypography\}/)
   assert.match(coreView, /<AIInsertionPreview[\s\S]*typography=\{composerContentTypography\}/)
-  assert.match(coreView, /maxWidth: 'min\(960px, calc\(100vw - 4rem\)\)'/)
+  assert.match(coreView, /maxWidth: 'min\(960px, calc\(100vw - 1rem\)\)'/)
   assert.doesNotMatch(coreView, /data-ai-composer="true"[\s\S]{0,260}fontSize:/)
 })
 

@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useMemo, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppIcon from '../Icons/AppIcon'
 import {
@@ -169,14 +169,54 @@ export default function AIComposerCoreView({
   onApplyNewNote,
 }: Props) {
   const { t } = useTranslation()
+  const formScrollerRef = useRef<HTMLDivElement>(null)
+  const resultPanelRef = useRef<HTMLDivElement>(null)
+  const retrievalPanelRef = useRef<HTMLDivElement>(null)
   const showResultPanel =
     composer.requestState !== 'idle' || normalizedDraft.trim().length > 0 || composer.errorMessage !== null
+  const showRetrievalPanel = showResultPanel && hasRetrievalDetails && !composer.errorMessage && !workspaceExecutionPanel
+  const retrievalVisibleResultCount = composer.retrievalResults.length
+  const retrievalSummaryCount = composer.retrievalResultCount ?? retrievalVisibleResultCount
+  const retrievalSummaryLabel =
+    composer.retrievalResultCount === null && retrievalVisibleResultCount === 0
+      ? t('ai.retrieval.sourcesSummaryUnavailable')
+      : t('ai.retrieval.sourcesSummary', { count: retrievalSummaryCount })
   const composerFrameStyle: CSSProperties = {
     top: `${composerFrameBounds.top}px`,
     bottom: `${composerFrameBounds.bottom}px`,
     paddingTop: `${AI_COMPOSER_SOURCE_EDGE_GAP_PX}px`,
     paddingBottom: `${AI_COMPOSER_SOURCE_EDGE_GAP_PX}px`,
   }
+  const handleViewRetrievalSources = () => {
+    setRetrievalPanelOpen(true)
+
+    const scrollToRetrievalPanel = () => {
+      retrievalPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+
+    if (typeof window === 'undefined') {
+      scrollToRetrievalPanel()
+      return
+    }
+
+    window.requestAnimationFrame(scrollToRetrievalPanel)
+  }
+
+  useEffect(() => {
+    if (!showResultPanel) return
+
+    const scroller = formScrollerRef.current
+    const panel = resultPanelRef.current
+    if (!scroller || !panel) return
+
+    const scrollerRect = scroller.getBoundingClientRect()
+    const panelRect = panel.getBoundingClientRect()
+    const alreadyAnswerAnchored = Math.abs(panelRect.top - scrollerRect.top) <= 16
+    if (alreadyAnswerAnchored) return
+
+    const targetScrollTop = scroller.scrollTop + panelRect.top - scrollerRect.top - 12
+    scroller.scrollTo({ top: Math.max(0, targetScrollTop), behavior: 'auto' })
+  }, [composer.requestState, composer.startedAt, showResultPanel])
 
   return (
     <div
@@ -188,7 +228,7 @@ export default function AIComposerCoreView({
     >
       <div
         data-ai-composer-frame="source-editor"
-        className="pointer-events-none fixed inset-x-0 flex items-center justify-center px-4 sm:px-6"
+        className="pointer-events-none fixed inset-x-0 flex items-center justify-center px-2 sm:px-6"
         style={composerFrameStyle}
       >
         <div
@@ -200,7 +240,7 @@ export default function AIComposerCoreView({
           tabIndex={-1}
           className="glass-panel pointer-events-auto flex w-full flex-col overflow-hidden rounded-[20px] border shadow-2xl"
           style={{
-            maxWidth: 'min(960px, calc(100vw - 4rem))',
+            maxWidth: 'min(960px, calc(100vw - 1rem))',
             minHeight: 'min(540px, 100%)',
             maxHeight: '100%',
             background: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)',
@@ -237,6 +277,7 @@ export default function AIComposerCoreView({
           </div>
 
           <div
+            ref={formScrollerRef}
             data-ai-composer-scroll="form"
             className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-5 py-4"
           >
@@ -511,24 +552,17 @@ export default function AIComposerCoreView({
             </div>
           </div>
 
-          {showResultPanel && hasRetrievalDetails && !composer.errorMessage && !workspaceExecutionPanel && (
-            <AIRetrievalDisclosure
-              expanded={retrievalPanelOpen}
-              onToggle={() => setRetrievalPanelOpen((value) => !value)}
-              retrievalExecuted={composer.retrievalExecuted}
-              query={composer.retrievalQuery}
-              results={composer.retrievalResults}
-              totalResultCount={composer.retrievalResultCount}
-              typography={composerContentTypography}
-            />
-          )}
-
           {showResultPanel && (
             <div
+              ref={resultPanelRef}
               data-ai-result-panel="true"
-              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border"
+              className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border ${
+                showRetrievalPanel ? 'shrink-0' : 'flex-1'
+              }`}
               style={{
                 minHeight: resultPanelMinHeight,
+                maxHeight: showRetrievalPanel ? 'min(52vh, 460px)' : undefined,
+                flex: showRetrievalPanel ? '0 0 auto' : undefined,
                 borderColor: 'color-mix(in srgb, var(--border) 86%, transparent)',
                 background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
               }}
@@ -575,6 +609,28 @@ export default function AIComposerCoreView({
                   >
                     {composer.sourceLabel}
                   </span>
+                )}
+                {showRetrievalPanel && (
+                  <button
+                    type="button"
+                    onClick={handleViewRetrievalSources}
+                    data-ai-result-source-summary="true"
+                    aria-expanded={retrievalPanelOpen}
+                    className="inline-flex max-w-full shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors"
+                    style={{
+                      borderColor: 'color-mix(in srgb, var(--accent) 24%, var(--border))',
+                      background: 'color-mix(in srgb, var(--accent) 7%, var(--bg-primary))',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    <AppIcon name="search" size={12} />
+                    <span className="min-w-0 truncate" style={{ color: 'var(--text-primary)' }}>
+                      {retrievalSummaryLabel}
+                    </span>
+                    <span className="hidden shrink-0 sm:inline" style={{ color: 'var(--text-muted)' }}>
+                      {t('ai.retrieval.viewSources')}
+                    </span>
+                  </button>
                 )}
                 {normalizedDraft && (
                   <div
@@ -715,7 +771,11 @@ export default function AIComposerCoreView({
                 )}
               </div>
 
-              <div data-ai-result-body="true" className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <div
+                data-ai-result-body="true"
+                className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
+                style={{ maxHeight: showRetrievalPanel ? 'min(34vh, 320px)' : undefined }}
+              >
                 {composer.requestState === 'streaming' && (
                   <p className="text-sm" style={{ ...composerContentTypography.text, color: 'var(--text-muted)' }}>
                     {t('ai.loading')}
@@ -778,6 +838,18 @@ export default function AIComposerCoreView({
               </div>
             </div>
           )}
+          {showRetrievalPanel && (
+            <AIRetrievalDisclosure
+              panelRef={retrievalPanelRef}
+              expanded={retrievalPanelOpen}
+              onToggle={() => setRetrievalPanelOpen((value) => !value)}
+              retrievalExecuted={composer.retrievalExecuted}
+              query={composer.retrievalQuery}
+              results={composer.retrievalResults}
+              totalResultCount={composer.retrievalResultCount}
+              typography={composerContentTypography}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -786,6 +858,7 @@ export default function AIComposerCoreView({
 }
 
 function AIRetrievalDisclosure({
+  panelRef,
   expanded,
   onToggle,
   retrievalExecuted,
@@ -794,6 +867,7 @@ function AIRetrievalDisclosure({
   totalResultCount,
   typography,
 }: {
+  panelRef: RefObject<HTMLDivElement>
   expanded: boolean
   onToggle: () => void
   retrievalExecuted: boolean
@@ -803,9 +877,9 @@ function AIRetrievalDisclosure({
   typography: AIComposerContentTypography
 }) {
   const { t } = useTranslation()
+  const bodyId = useId()
   const visibleResultCount = results.length
   const summaryCount = totalResultCount ?? visibleResultCount
-  const showResultsList = visibleResultCount > 0
   const summaryLabel =
     totalResultCount === null && visibleResultCount === 0
       ? t('ai.retrieval.summaryUnavailable')
@@ -813,11 +887,12 @@ function AIRetrievalDisclosure({
 
   return (
     <div
+      ref={panelRef}
       data-ai-retrieval-panel="true"
-      className="min-w-0 overflow-hidden rounded-2xl border"
+      className="min-w-0 shrink-0 overflow-hidden rounded-2xl border"
       style={{
-        borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--border))',
-        background: 'color-mix(in srgb, var(--bg-secondary) 84%, var(--bg-primary))',
+        borderColor: 'color-mix(in srgb, var(--accent) 20%, var(--border))',
+        background: 'color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-primary))',
         boxShadow: 'var(--shadow-sm)',
       }}
     >
@@ -825,17 +900,18 @@ function AIRetrievalDisclosure({
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
+        aria-controls={bodyId}
         data-ai-retrieval-toggle="true"
-        className="group flex w-full min-w-0 items-center gap-3 px-4 py-3 text-left transition-colors"
+        className="group flex w-full min-w-0 cursor-pointer items-center gap-3 px-3.5 py-2.5 text-left transition-colors"
         style={{
           background: expanded
-            ? 'color-mix(in srgb, var(--accent) 10%, var(--bg-primary))'
-            : 'color-mix(in srgb, var(--accent) 4%, var(--bg-primary))',
+            ? 'color-mix(in srgb, var(--accent) 9%, var(--bg-primary))'
+            : 'color-mix(in srgb, var(--accent) 5%, var(--bg-primary))',
           color: 'var(--text-primary)',
         }}
       >
         <span
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
           style={{
             borderColor: 'color-mix(in srgb, var(--accent) 24%, var(--border))',
             background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
@@ -846,19 +922,19 @@ function AIRetrievalDisclosure({
         </span>
         <div className="min-w-0 flex-1">
           <div
-            className="text-sm font-semibold"
+            className="truncate text-sm font-semibold"
             style={{ ...typography.text, color: 'var(--text-primary)' }}
           >
             {t('ai.retrieval.title')}
           </div>
-          <div className="mt-1 text-xs" style={{ ...typography.meta, color: 'var(--text-secondary)' }}>
+          <div className="mt-1 truncate text-xs" style={{ ...typography.meta, color: 'var(--text-secondary)' }}>
             {summaryLabel}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5">
           {query ? (
             <span
-              className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+              className="hidden rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] sm:inline-flex"
               style={{
                 borderColor: 'color-mix(in srgb, var(--accent) 22%, var(--border))',
                 background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
@@ -869,7 +945,7 @@ function AIRetrievalDisclosure({
             </span>
           ) : null}
           <span
-            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            className="hidden rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] sm:inline-flex"
             style={{
               borderColor: 'color-mix(in srgb, var(--border) 76%, transparent)',
               background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
@@ -879,7 +955,17 @@ function AIRetrievalDisclosure({
             {t('ai.retrieval.resultsCount', { count: summaryCount })}
           </span>
           <span
-            className="flex h-9 w-9 items-center justify-center rounded-full border transition-transform"
+            className="hidden rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] sm:inline-flex"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--border) 76%, transparent)',
+              background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {expanded ? t('ai.retrieval.hide') : t('ai.retrieval.show')}
+          </span>
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-full border transition-transform"
             style={{
               borderColor: 'color-mix(in srgb, var(--accent) 20%, var(--border))',
               background: 'color-mix(in srgb, var(--bg-primary) 92%, transparent)',
@@ -892,115 +978,259 @@ function AIRetrievalDisclosure({
           </span>
         </div>
       </button>
-      {expanded ? (
+      {!expanded ? (
         <div
-          data-ai-retrieval-body="true"
-          className="grid gap-3 border-t px-4 py-4"
+          data-ai-retrieval-peek="true"
+          className="grid gap-2 border-t px-3.5 py-3 md:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]"
           style={{ borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)' }}
         >
-          {query ? (
-            <section
-              data-ai-retrieval-query="true"
-              className="rounded-xl border px-3 py-3"
-              style={{
-                borderColor: 'color-mix(in srgb, var(--accent) 18%, var(--border))',
-                background: 'color-mix(in srgb, var(--accent) 6%, var(--bg-primary))',
-              }}
-            >
-              <div
-                className="text-[11px] font-semibold uppercase tracking-[0.16em]"
-                style={{ ...typography.meta, color: 'var(--text-muted)' }}
-              >
-                {t('ai.retrieval.query')}
-              </div>
-              <pre
-                className="mt-2 whitespace-pre-wrap break-words"
-                style={{
-                  ...typography.code,
-                  color: 'var(--text-primary)',
-                  fontFamily: 'var(--font-mono, JetBrains Mono, monospace)',
-                  margin: 0,
-                }}
-              >
-                {query}
-              </pre>
-            </section>
-          ) : retrievalExecuted ? (
-            <section
-              data-ai-retrieval-query="true"
-              className="rounded-xl border px-3 py-3"
-              style={{
-                borderColor: 'color-mix(in srgb, var(--accent) 18%, var(--border))',
-                background: 'color-mix(in srgb, var(--accent) 6%, var(--bg-primary))',
-              }}
-            >
-              <div
-                className="text-[11px] font-semibold uppercase tracking-[0.16em]"
-                style={{ ...typography.meta, color: 'var(--text-muted)' }}
-              >
-                {t('ai.retrieval.query')}
-              </div>
-              <p className="mt-2 text-sm" style={{ ...typography.text, color: 'var(--text-muted)', margin: 0 }}>
-                {t('ai.retrieval.noQuery')}
-              </p>
-            </section>
-          ) : null}
-
-          <section data-ai-retrieval-results="true" className="grid gap-2">
-            <div
-              className="flex items-center justify-between gap-3"
-              style={{ ...typography.meta, color: 'var(--text-muted)' }}
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">
-                {t('ai.retrieval.results')}
-              </span>
-              <span>{t('ai.retrieval.resultsCount', { count: summaryCount })}</span>
-            </div>
-            {showResultsList ? (
-              results.map((result, index) => (
-                <article
-                  key={`${result.title}-${result.detail ?? index}`}
-                  data-ai-retrieval-result={index}
-                  className="rounded-xl border px-3 py-3"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
-                    background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
-                  }}
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold" style={typography.text}>
-                      {result.title}
-                    </div>
-                    {result.detail ? (
-                      <div className="mt-1 text-xs" style={{ ...typography.meta, color: 'var(--text-muted)' }}>
-                        {result.detail}
-                      </div>
-                    ) : null}
-                    {result.snippet ? (
-                      <p className="mt-2 text-sm" style={{ ...typography.text, color: 'var(--text-secondary)', margin: 0 }}>
-                        {result.snippet}
-                      </p>
-                    ) : null}
-                  </div>
-                </article>
-              ))
-            ) : (
-              <div
-                className="rounded-xl border px-3 py-3 text-sm"
-                style={{
-                  ...typography.text,
-                  borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
-                  background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {t('ai.retrieval.noResults')}
-              </div>
-            )}
-          </section>
+          <AIRetrievalQueryCard
+            compact
+            retrievalExecuted={retrievalExecuted}
+            query={query}
+            typography={typography}
+          />
+          <AIRetrievalResultsList
+            compact
+            results={results}
+            summaryCount={summaryCount}
+            typography={typography}
+          />
+        </div>
+      ) : null}
+      {expanded ? (
+        <div
+          id={bodyId}
+          data-ai-retrieval-body="true"
+          className="grid gap-3 border-t px-4 py-4"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
+            maxHeight: 'min(42vh, 380px)',
+            overflowY: 'auto',
+          }}
+        >
+          <AIRetrievalQueryCard
+            retrievalExecuted={retrievalExecuted}
+            query={query}
+            typography={typography}
+          />
+          <AIRetrievalResultsList
+            results={results}
+            summaryCount={summaryCount}
+            typography={typography}
+          />
         </div>
       ) : null}
     </div>
+  )
+}
+
+function AIRetrievalQueryCard({
+  compact = false,
+  retrievalExecuted,
+  query,
+  typography,
+}: {
+  compact?: boolean
+  retrievalExecuted: boolean
+  query: string | null
+  typography: AIComposerContentTypography
+}) {
+  const { t } = useTranslation()
+  if (!query && !retrievalExecuted) return null
+  const compactClampStyle: CSSProperties = compact
+    ? {
+        display: '-webkit-box',
+        WebkitBoxOrient: 'vertical',
+        WebkitLineClamp: 2,
+        overflow: 'hidden',
+      }
+    : {}
+
+  return (
+    <section
+      data-ai-retrieval-query="true"
+      className={`min-w-0 rounded-xl border ${compact ? 'px-3 py-2.5' : 'px-3 py-3'}`}
+      style={{
+        borderColor: 'color-mix(in srgb, var(--accent) 18%, var(--border))',
+        background: 'color-mix(in srgb, var(--accent) 6%, var(--bg-primary))',
+      }}
+    >
+      <div
+        className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+        style={{ ...typography.meta, color: 'var(--text-muted)' }}
+      >
+        {t('ai.retrieval.query')}
+      </div>
+      {query ? (
+        <pre
+          className="whitespace-pre-wrap break-words"
+          style={{
+            ...typography.code,
+            ...compactClampStyle,
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-mono, JetBrains Mono, monospace)',
+            margin: 0,
+            marginTop: compact ? '0.375rem' : '0.5rem',
+          }}
+        >
+          {query}
+        </pre>
+      ) : (
+        <p
+          className={compact ? 'text-xs' : 'text-sm'}
+          style={{
+            ...typography.text,
+            color: 'var(--text-muted)',
+            margin: 0,
+            marginTop: compact ? '0.375rem' : '0.5rem',
+          }}
+        >
+          {t('ai.retrieval.noQuery')}
+        </p>
+      )}
+    </section>
+  )
+}
+
+function AIRetrievalResultsList({
+  compact = false,
+  results,
+  summaryCount,
+  typography,
+}: {
+  compact?: boolean
+  results: AIRetrievalResultPreview[]
+  summaryCount: number
+  typography: AIComposerContentTypography
+}) {
+  const { t } = useTranslation()
+  const visibleResults = compact ? results.slice(0, 2) : results
+  const remainingResultCount = compact ? Math.max(summaryCount - visibleResults.length, 0) : 0
+  const showResultsList = visibleResults.length > 0
+
+  return (
+    <section data-ai-retrieval-results="true" className="min-w-0 grid gap-2">
+      <div
+        className="flex min-w-0 items-center justify-between gap-3"
+        style={{ ...typography.meta, color: 'var(--text-muted)' }}
+      >
+        <span className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.16em]">
+          {t('ai.retrieval.results')}
+        </span>
+        <span className="shrink-0">{t('ai.retrieval.resultsCount', { count: summaryCount })}</span>
+      </div>
+      {showResultsList ? (
+        <div className={compact ? 'grid gap-1.5 sm:grid-cols-2' : 'grid gap-2 sm:grid-cols-2'}>
+          {visibleResults.map((result, index) => (
+            <AIRetrievalResultCard
+              key={`${result.title}-${result.detail ?? index}`}
+              compact={compact}
+              index={index}
+              result={result}
+              typography={typography}
+            />
+          ))}
+          {remainingResultCount > 0 ? (
+            <div
+              data-ai-retrieval-more-count="true"
+              className="rounded-xl border px-3 py-2 text-xs font-medium"
+              style={{
+                ...typography.meta,
+                borderColor: 'color-mix(in srgb, var(--border) 78%, transparent)',
+                background: 'color-mix(in srgb, var(--bg-primary) 90%, transparent)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              {t('ai.retrieval.moreResults', { count: remainingResultCount })}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div
+          className="rounded-xl border px-3 py-3 text-sm"
+          style={{
+            ...typography.text,
+            borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
+            background: 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {t('ai.retrieval.noResults')}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function AIRetrievalResultCard({
+  compact,
+  index,
+  result,
+  typography,
+}: {
+  compact: boolean
+  index: number
+  result: AIRetrievalResultPreview
+  typography: AIComposerContentTypography
+}) {
+  const snippetClampStyle: CSSProperties = compact
+    ? {
+        display: '-webkit-box',
+        WebkitBoxOrient: 'vertical',
+        WebkitLineClamp: 2,
+        overflow: 'hidden',
+      }
+    : {}
+
+  return (
+    <article
+      data-ai-retrieval-result={index}
+      data-ai-retrieval-result-mode={compact ? 'preview' : 'detail'}
+      className={`min-w-0 rounded-xl border ${compact ? 'px-2.5 py-2' : 'px-3 py-3'}`}
+      style={{
+        borderColor: 'color-mix(in srgb, var(--border) 82%, transparent)',
+        borderLeft: '3px solid color-mix(in srgb, var(--accent) 46%, var(--border))',
+        background: compact
+          ? 'color-mix(in srgb, var(--bg-primary) 88%, transparent)'
+          : 'color-mix(in srgb, var(--bg-secondary) 72%, transparent)',
+      }}
+    >
+      <div className="flex min-w-0 items-start gap-2">
+        <span
+          className="mt-0.5 shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums"
+          style={{
+            background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+            color: 'var(--accent)',
+          }}
+        >
+          {index + 1}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className={`${compact ? 'text-xs' : 'text-sm'} truncate font-semibold`} style={typography.text}>
+            {result.title}
+          </div>
+          {result.detail ? (
+            <div className="mt-0.5 truncate text-xs" style={{ ...typography.meta, color: 'var(--text-muted)' }}>
+              {result.detail}
+            </div>
+          ) : null}
+          {result.snippet ? (
+            <p
+              className={`${compact ? 'mt-1 text-xs leading-5' : 'mt-2 text-sm'} break-words`}
+              style={{
+                ...typography.text,
+                ...snippetClampStyle,
+                color: 'var(--text-secondary)',
+                marginBottom: 0,
+              }}
+            >
+              {result.snippet}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </article>
   )
 }
 
