@@ -1,6 +1,6 @@
 # Upcoming Release Notes Draft
 
-This document is a draft for the next public release after `v0.19.3`.
+This document is a draft for the next public release after `v0.19.4`.
 
 It is intentionally written in release-note language rather than implementation language.
 
@@ -8,43 +8,37 @@ Start from `CHANGELOG.md` `## Unreleased`, then rewrite the user-visible changes
 
 ## Suggested Release Title
 
-`No.1 Markdown Editor v0.19.4`
+`No.1 Markdown Editor v0.19.5`
 
 ## Short Summary
 
-No.1 Markdown Editor v0.19.4 clarifies export clipboard behavior and tightens WYSIWYG image and invisible-character handling. It separates rich HTML copy from plain-text HTML source copy, keeps WYSIWYG whitespace markers focused on the active writing point, and improves Windows local image preservation in inline Markdown rendering.
+No.1 Markdown Editor v0.19.5 improves the AI Composer result layout so generated answers stay first while retrieval sources remain easy to inspect. It also adds detailed implementation notes for strict Markdown line break semantics, Typora compatibility, visual soft-break preview, WYSIWYG hard breaks, and export/clipboard separation.
 
 ## Suggested GitHub Release Body
 
 ### Highlights
 
-- Export now includes a dedicated Copy HTML Source action for rendered HTML markup as plain text.
-- Copy Preview as HTML is now labeled Copy Rich HTML to clarify that it uses the rich clipboard path.
-- WYSIWYG invisible-character markers now appear only on the focused cursor line.
-- Windows absolute and UNC image paths in WYSIWYG inline Markdown are normalized before sanitization so local images can hydrate like Preview images.
-- New implementation notes document export, clipboard, image handling, Mermaid, syntax highlighting, and WYSIWYG behavior.
+- AI Composer now keeps the generated answer anchored ahead of retrieval details.
+- Retrieval source summaries are available from the answer header without pushing the answer out of view.
+- Expanded retrieval details now sit below the result panel with compact previews and localized source labels.
+- New implementation notes document line break semantics, Typora compatibility, visual soft-break preview, WYSIWYG hard breaks, and export/clipboard behavior.
 
 ### Why This Release Matters
 
-Copying rendered content can mean two different things: placing rich HTML on the clipboard for apps that accept formatted paste, or copying the literal HTML source for publishing and debugging. This release makes that distinction explicit while also smoothing WYSIWYG writing details around whitespace and local image rendering.
+AI answers should remain the primary writing surface even when retrieval metadata is available. This release keeps sources inspectable without letting reference details displace the draft, and documents the line-break compatibility rules that keep writing preview comfort separate from portable Markdown output.
 
 ### User-Facing Improvements
 
-#### Export and Clipboard
+#### AI Composer
 
-- Copy Rich HTML keeps the existing rich clipboard behavior for formatted paste targets.
-- Copy HTML Source copies rendered HTML as plain text.
-- Toolbar, command palette, notices, and English, Japanese, and Chinese labels now use explicit wording for both copy paths.
-
-#### WYSIWYG Editing
-
-- Invisible tabs, trailing spaces, and special whitespace markers now stay limited to the focused cursor line.
-- Markers clear when the editor loses focus, keeping inactive WYSIWYG lines visually closer to Preview.
-- Windows local image paths in inline Markdown are preserved for local image hydration instead of being dropped by sanitization.
+- Result panels now stay answer-first when retrieval details are available.
+- Source summaries are shown as compact header actions with English, Japanese, and Chinese labels.
+- Retrieval details can be expanded below the answer and include compact previews before the full detail view.
 
 #### Documentation
 
-- Added Qiita implementation notes for export and clipboard behavior, image handling, Mermaid rendering, syntax highlighting, and WYSIWYG editing.
+- Added Qiita implementation notes for line break semantics and Typora compatibility.
+- Documented how strict Markdown semantics, Preview visual soft breaks, WYSIWYG hard breaks, tables, clipboard, and export stay separated.
 
 ### Suggested "Upgrade Notes" Section
 
@@ -55,21 +49,21 @@ Copying rendered content can mean two different things: placing rich HTML on the
 
 This release is especially relevant for users who:
 
-- copy rendered Markdown into other applications
-- need literal HTML source for publishing workflows
-- use WYSIWYG mode with invisible-character markers enabled
-- work with local images on Windows paths
+- use AI Composer with retrieval-backed answers
+- review or cite source material before applying AI output
+- want Typora-like line break preview without changing saved Markdown semantics
+- need export and clipboard output to stay portable Markdown-compatible
 
 ## Packaging Checklist Before Release
 
 - Fill this draft using the current `CHANGELOG.md` `## Unreleased` section.
-- Run `npm run release:prepare -- 0.19.4 --date 2026-04-27` to sync the app version files and roll the current `## Unreleased` notes into a dated changelog section.
+- Run `npm run release:prepare -- 0.19.5 --date 2026-04-28` to sync the app version files and roll the current `## Unreleased` notes into a dated changelog section.
 - Confirm the final version in:
   - `package.json`
   - `src-tauri/tauri.conf.json`
   - `src-tauri/Cargo.toml`
 - Run `npm run release:validate` after the version bump so local metadata checks, changelog checks, and scaffold-placeholder checks fail before CI does.
-- Run `npm run release:notes:preview -- 0.19.4` if you want to inspect the generated GitHub release body before pushing the tag.
-- Review the `0.19.4` release notes before tagging.
+- Run `npm run release:notes:preview -- 0.19.5` if you want to inspect the generated GitHub release body before pushing the tag.
+- Review the `0.19.5` release notes before tagging.
 - Capture fresh screenshots for the product surfaces this release highlights.
-- After the release is published, run `npm run release:draft:advance -- 0.19.4` to reset this file and refresh `CHANGELOG.md` `## Unreleased` for the next release cycle.
+- After the release is published, run `npm run release:draft:advance -- 0.19.5` to reset this file and refresh `CHANGELOG.md` `## Unreleased` for the next release cycle.

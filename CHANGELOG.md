@@ -20,6 +20,21 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
 
+## 0.19.5 - 2026-04-28
+
+### Added
+
+### Changed
+
+- AI Composer now keeps the generated answer anchored ahead of retrieval details and exposes source summaries without pushing the answer out of view.
+
+### Fixed
+
+### Internal
+
+- Added regression coverage for the AI Composer retrieval layout and compact source summary behavior.
+- Added Qiita implementation notes for line break semantics, Typora compatibility, Preview soft breaks, WYSIWYG hard breaks, and export/clipboard separation.
+
 ## 0.19.4 - 2026-04-27
 
 ### Added
