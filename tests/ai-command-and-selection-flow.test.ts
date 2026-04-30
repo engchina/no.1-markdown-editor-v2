@@ -43,6 +43,31 @@ test('CodeMirrorEditor resolves AI open defaults from persisted write-target and
   assert.match(editor, /resolveAISelectedTextRole\(detail\.selectedTextRole, aiDefaultSelectedTextRole\)/)
 })
 
+test('AIComposer surfaces selected text context before the prompt area', async () => {
+  const [composer, core] = await Promise.all([
+    readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
+  ])
+
+  assert.match(composer, /const hasSelectedTextContext = !!composer\.context\?\.selectedText\?\.trim\(\)/)
+  assert.match(composer, /const hasEnabledSelectedTextContext = hasSelectedTextContext && composer\.useSelectedTextContext/)
+  assert.match(composer, /includeSelectedTextContext: hasEnabledSelectedTextContext/)
+  assert.match(composer, /showSelectedTextContextToggle=\{hasSelectionRange\}/)
+  assert.match(composer, /canToggleSelectedTextContext=\{hasSelectedTextContext\}/)
+  assert.match(composer, /onToggleSelectedTextContext=\{setUseSelectedTextContext\}/)
+  assert.match(core, /data-ai-selection-context="true"/)
+  assert.match(core, /data-ai-context-state=\{useSelectedTextContext \? 'selection-context' : 'prompt-only'\}/)
+  assert.match(core, /composer\.context\?\.selectedTextRole === 'reference-only'/)
+  assert.match(core, /composer\.outputTarget === 'replace-selection'/)
+  assert.match(core, /data-ai-action="toggle-selection-context"/)
+  assert.match(core, /aria-checked=\{useSelectedTextContext\}/)
+  assert.match(core, /disabled=\{composer\.requestState === 'streaming' \|\| !canToggleSelectedTextContext\}/)
+  assert.match(core, /t\('ai\.context\.selectionReference'\)/)
+  assert.match(core, /t\('ai\.context\.selectionTarget'\)/)
+  assert.match(core, /t\('ai\.context\.selectionContext'\)/)
+  assert.match(core, /t\('ai\.context\.useSelectionContext'\)/)
+})
+
 test('AIComposer cancel path both increments the local run id and attempts backend cancellation', async () => {
   const [composer, runtime] = await Promise.all([
     readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
@@ -148,7 +173,7 @@ test('slash-command AI entry can use slash-prefix text as context and exposes a 
   assert.match(core, /disabled=\{composer\.requestState === 'streaming' \|\| !canToggleSlashCommandContext\}/)
   assert.doesNotMatch(composer, /buildAIContextChipModels\(/)
   assert.match(core, /t\('ai\.context\.promptOnly'\)/)
-  assert.equal((core.match(/t\('ai\.context\.promptOnly'\)/g) ?? []).length, 1)
+  assert.ok((core.match(/t\('ai\.context\.promptOnly'\)/g) ?? []).length >= 2)
   assert.match(core, /t\('ai\.context\.slashBefore'\)/)
   assert.match(core, /t\('ai\.context\.useSlashBefore'\)/)
   assert.match(prompt, /Input source: slash-prefix/)

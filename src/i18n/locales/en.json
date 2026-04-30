@@ -406,7 +406,11 @@
       "language": "Document Language",
       "frontMatter": "Front Matter",
       "promptOnly": "No context attached. AI will only receive your instruction.",
+      "selectionContext": "Using selected text as context.",
+      "selectionReference": "Using selected text as reference.",
+      "selectionTarget": "Using selected text as the edit target.",
       "slashBefore": "Using text before / as context.",
+      "useSelectionContext": "Use selection context",
       "useSlashBefore": "Use / context"
     },
     "documentLanguageValue": {

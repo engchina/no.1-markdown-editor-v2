@@ -401,7 +401,11 @@
       "language": "文書言語",
       "frontMatter": "フロントマター",
       "promptOnly": "コンテキストは添付されていません。AI には入力した指示だけが送信されます。",
+      "selectionContext": "選択テキストをコンテキストとして使用しています。",
+      "selectionReference": "選択テキストを参照として使用しています。",
+      "selectionTarget": "選択テキストを編集対象として使用しています。",
       "slashBefore": "/ より前の内容をコンテキストとして使用しています。",
+      "useSelectionContext": "選択コンテキストを使用",
       "useSlashBefore": "/ コンテキストを使用"
     },
     "documentLanguageValue": {

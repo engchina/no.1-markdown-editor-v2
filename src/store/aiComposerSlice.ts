@@ -30,6 +30,7 @@ export interface AIComposerSliceState {
   setPrompt: (prompt: string) => void
   setContext: (context: AIContextPacket | null) => void
   setUseSlashCommandContext: (useSlashCommandContext: boolean) => void
+  setUseSelectedTextContext: (useSelectedTextContext: boolean) => void
   setSource: (source: AIComposerSource) => void
   setDraftText: (draftText: string) => void
   setDraftFormat: (draftFormat: AIDraftFormat) => void
@@ -68,6 +69,7 @@ export function createInitialAIComposerState(): AIComposerState {
     prompt: '',
     context: null,
     useSlashCommandContext: true,
+    useSelectedTextContext: true,
     requestState: 'idle',
     draftText: '',
     draftFormat: 'markdown',
@@ -104,6 +106,7 @@ export function createAIComposerSlice<T extends AIComposerSliceState>(
           ...args,
           open: true,
           useSlashCommandContext: args.useSlashCommandContext ?? true,
+          useSelectedTextContext: args.useSelectedTextContext ?? true,
           requestState: args.requestState ?? 'idle',
           startedAt: args.startedAt ?? null,
           errorMessage: args.errorMessage ?? null,
@@ -125,6 +128,8 @@ export function createAIComposerSlice<T extends AIComposerSliceState>(
     setContext: (context) => set((state) => ({ composer: { ...state.composer, context } })),
     setUseSlashCommandContext: (useSlashCommandContext) =>
       set((state) => ({ composer: { ...state.composer, useSlashCommandContext } })),
+    setUseSelectedTextContext: (useSelectedTextContext) =>
+      set((state) => ({ composer: { ...state.composer, useSelectedTextContext } })),
     setSource: (source) => set((state) => ({ composer: { ...state.composer, source } })),
     setDraftText: (draftText) => set((state) => ({ composer: { ...state.composer, draftText } })),
     setDraftFormat: (draftFormat) => set((state) => ({ composer: { ...state.composer, draftFormat } })),

@@ -298,6 +298,7 @@ export interface AIComposerState {
   prompt: string
   context: AIContextPacket | null
   useSlashCommandContext: boolean
+  useSelectedTextContext: boolean
   executionTargetKind: AIExecutionTargetKind
   invocationCapability: AIInvocationCapability
   knowledgeSelection: AIKnowledgeSelection

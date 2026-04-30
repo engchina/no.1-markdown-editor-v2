@@ -45,6 +45,9 @@ interface Props {
   showSlashCommandContextToggle: boolean
   canToggleSlashCommandContext: boolean
   useSlashCommandContext: boolean
+  showSelectedTextContextToggle: boolean
+  canToggleSelectedTextContext: boolean
+  useSelectedTextContext: boolean
   oracleProviderConfig: AIOCIResponsesProviderConfig | null
   knowledgeType: AIKnowledgeType
   hasWorkspaceExecutionTasks: boolean
@@ -90,6 +93,7 @@ interface Props {
   onResetAndClose: () => void
   onPromptChange: (value: string) => void
   onToggleSlashCommandContext: (value: boolean) => void
+  onToggleSelectedTextContext: (value: boolean) => void
   onSelectKnowledgeType: (type: AIKnowledgeType) => void
   onSelectDocsStore: (storeId: string) => void
   onSelectDataStore: (registrationId: string) => void
@@ -120,6 +124,9 @@ export default function AIComposerCoreView({
   showSlashCommandContextToggle,
   canToggleSlashCommandContext,
   useSlashCommandContext,
+  showSelectedTextContextToggle,
+  canToggleSelectedTextContext,
+  useSelectedTextContext,
   oracleProviderConfig,
   knowledgeType,
   hasWorkspaceExecutionTasks,
@@ -165,6 +172,7 @@ export default function AIComposerCoreView({
   onResetAndClose,
   onPromptChange,
   onToggleSlashCommandContext,
+  onToggleSelectedTextContext,
   onSelectKnowledgeType,
   onSelectDocsStore,
   onSelectDataStore,
@@ -195,6 +203,15 @@ export default function AIComposerCoreView({
     composer.retrievalResultCount === null && retrievalVisibleResultCount === 0
       ? t('ai.retrieval.sourcesSummaryUnavailable')
       : t('ai.retrieval.sourcesSummary', { count: retrievalSummaryCount })
+  const selectedTextContextEnabledMessage =
+    composer.context?.selectedTextRole === 'reference-only'
+      ? t('ai.context.selectionReference')
+      : composer.outputTarget === 'replace-selection'
+        ? t('ai.context.selectionTarget')
+        : t('ai.context.selectionContext')
+  const selectionContextMessage = useSelectedTextContext
+    ? selectedTextContextEnabledMessage
+    : t('ai.context.promptOnly')
   const composerFrameStyle: CSSProperties = {
     top: `${composerFrameBounds.top}px`,
     bottom: `${composerFrameBounds.bottom}px`,
@@ -334,6 +351,61 @@ export default function AIComposerCoreView({
                   <span className="min-w-0 truncate">{t('ai.setup.open')}</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {showSelectedTextContextToggle && (
+            <div
+              data-ai-selection-context="true"
+              data-ai-context-state={useSelectedTextContext ? 'selection-context' : 'prompt-only'}
+              className="flex min-w-0 flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-xs leading-5"
+              style={{
+                borderColor: 'color-mix(in srgb, var(--border) 86%, transparent)',
+                background: 'color-mix(in srgb, var(--bg-secondary) 70%, transparent)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <AppIcon name="infoCircle" size={13} className="flex-shrink-0" />
+                <p className="m-0 min-w-0 truncate whitespace-nowrap">{selectionContextMessage}</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={useSelectedTextContext}
+                data-ai-action="toggle-selection-context"
+                onClick={() => onToggleSelectedTextContext(!useSelectedTextContext)}
+                disabled={composer.requestState === 'streaming' || !canToggleSelectedTextContext}
+                className="inline-flex min-h-8 max-w-full cursor-pointer items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                style={{
+                  borderColor: useSelectedTextContext
+                    ? 'color-mix(in srgb, var(--accent) 42%, var(--border))'
+                    : 'color-mix(in srgb, var(--border) 86%, transparent)',
+                  background: useSelectedTextContext
+                    ? 'color-mix(in srgb, var(--accent) 12%, var(--bg-primary))'
+                    : 'color-mix(in srgb, var(--bg-primary) 86%, transparent)',
+                  color: useSelectedTextContext ? 'var(--text-primary)' : 'var(--text-secondary)',
+                }}
+              >
+                <span
+                  className="relative inline-flex h-4 w-7 flex-shrink-0 rounded-full transition-colors"
+                  style={{
+                    background: useSelectedTextContext
+                      ? 'var(--accent)'
+                      : 'color-mix(in srgb, var(--border) 88%, transparent)',
+                  }}
+                  aria-hidden="true"
+                >
+                  <span
+                    className="absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform"
+                    style={{
+                      left: '2px',
+                      transform: useSelectedTextContext ? 'translateX(12px)' : 'translateX(0)',
+                    }}
+                  />
+                </span>
+                <span className="min-w-0 truncate">{t('ai.context.useSelectionContext')}</span>
+              </button>
             </div>
           )}
 

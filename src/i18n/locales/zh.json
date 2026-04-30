@@ -401,7 +401,11 @@
       "language": "文档语言",
       "frontMatter": "Front Matter",
       "promptOnly": "未附加上下文。AI 只会收到你输入的指令。",
+      "selectionContext": "正在使用选中文本作为上下文。",
+      "selectionReference": "正在使用选中文本作为参考。",
+      "selectionTarget": "正在使用选中文本作为编辑目标。",
       "slashBefore": "正在使用 / 之前的内容作为上下文。",
+      "useSelectionContext": "使用选区上下文",
       "useSlashBefore": "使用 / 上下文"
     },
     "documentLanguageValue": {

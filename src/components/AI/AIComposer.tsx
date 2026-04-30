@@ -77,6 +77,7 @@ export default function AIComposer() {
     setOutputTarget,
     setPrompt,
     setUseSlashCommandContext,
+    setUseSelectedTextContext,
     resetDraftState,
   } = useAIStore()
   const initialTemplatePromptRef = useRef<string | null>(composer.prompt)
@@ -87,7 +88,10 @@ export default function AIComposer() {
   )
 
   const effectivePrompt = composer.prompt.trim()
-  const hasSelection = !!composer.context?.selectedText
+  const hasSelectionRange =
+    composer.sourceSnapshot !== null && composer.sourceSnapshot.selectionFrom !== composer.sourceSnapshot.selectionTo
+  const hasSelectedTextContext = !!composer.context?.selectedText?.trim()
+  const hasEnabledSelectedTextContext = hasSelectedTextContext && composer.useSelectedTextContext
   const hasCurrentBlock = !!composer.context?.currentBlock
   const effectiveContext = useMemo(
     () =>
@@ -98,6 +102,7 @@ export default function AIComposer() {
         scope: composer.scope,
         outputTarget: composer.outputTarget,
         includeSlashCommandContext: composer.useSlashCommandContext,
+        includeSelectedTextContext: hasEnabledSelectedTextContext,
       }),
     [
       composer.context,
@@ -106,6 +111,7 @@ export default function AIComposer() {
       composer.scope,
       composer.sourceSnapshot,
       composer.useSlashCommandContext,
+      hasEnabledSelectedTextContext,
     ]
   )
   const hasSlashCommandContext =
@@ -113,7 +119,7 @@ export default function AIComposer() {
     !!normalizeAISlashCommandContext(composer.context?.slashCommandContext ?? '')
   const hasEnabledSlashCommandContext = hasSlashCommandContext && composer.useSlashCommandContext
   const replaceActionTarget: Extract<AIInsertTarget, 'replace-selection' | 'replace-current-block'> | null =
-    hasSelection ? 'replace-selection' : hasCurrentBlock ? 'replace-current-block' : null
+    hasSelectionRange ? 'replace-selection' : hasCurrentBlock ? 'replace-current-block' : null
   const canReplaceCurrentTarget = replaceActionTarget !== null && composer.draftFormat !== 'sql'
   const normalizedDraft =
     composer.draftFormat === 'sql'
@@ -373,7 +379,7 @@ export default function AIComposer() {
 
   function applyTemplate(template: AITemplateModel) {
     const resolution = resolveAIComposerTemplateResolution(template, {
-      hasSelection,
+      hasSelection: hasEnabledSelectedTextContext,
       hasSlashCommandContext: hasEnabledSlashCommandContext,
       hasCurrentBlock,
       aiDefaultWriteTarget,
@@ -468,8 +474,11 @@ export default function AIComposer() {
       resultPanelMinHeight={resultPanelMinHeight}
       effectivePrompt={effectivePrompt}
       normalizedDraft={normalizedDraft}
-      hasSelection={hasSelection}
+      hasSelection={hasEnabledSelectedTextContext}
       hasSlashCommandContext={hasEnabledSlashCommandContext}
+      showSelectedTextContextToggle={hasSelectionRange}
+      canToggleSelectedTextContext={hasSelectedTextContext}
+      useSelectedTextContext={hasEnabledSelectedTextContext}
       hasCurrentBlock={hasCurrentBlock}
       aiDefaultWriteTarget={aiDefaultWriteTarget}
       templateModels={templateModels}
@@ -511,6 +520,7 @@ export default function AIComposer() {
       }}
       onPromptChange={setPrompt}
       onToggleSlashCommandContext={setUseSlashCommandContext}
+      onToggleSelectedTextContext={setUseSelectedTextContext}
       onSelectKnowledgeType={handleSelectKnowledgeType}
       onSelectDocsStore={handleSelectDocsStore}
       onSelectDataStore={handleSelectDataStore}
