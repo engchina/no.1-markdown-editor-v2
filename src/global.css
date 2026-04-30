@@ -258,9 +258,12 @@ a:focus-visible {
   }
 }
 
-/* Allow text selection in editor and preview */
+/* Allow text selection in editor, preview, and read-only AI output */
 .cm-editor,
-.markdown-preview {
+.markdown-preview,
+[data-ai-result-body="true"],
+[data-ai-retrieval-peek="true"],
+[data-ai-retrieval-body="true"] {
   user-select: text;
 }
 

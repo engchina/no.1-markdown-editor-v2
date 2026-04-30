@@ -87,9 +87,10 @@ test('AIComposer bounds its modal frame to the source editor surface with vertic
 })
 
 test('AIComposer keeps the answer first while placing retrieval details below the result panel', async () => {
-  const [composer, core] = await Promise.all([
+  const [composer, core, globalCss] = await Promise.all([
     readFile(new URL('../src/components/AI/AIComposer.tsx', import.meta.url), 'utf8'),
     readFile(new URL('../src/components/AI/AIComposerCoreView.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/global.css', import.meta.url), 'utf8'),
   ])
 
   assert.match(core, /data-ai-composer-scroll="form"/)
@@ -137,6 +138,9 @@ test('AIComposer keeps the answer first while placing retrieval details below th
   assert.match(core, /className="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-1\.5 sm:flex-none sm:basis-auto sm:justify-end"/)
   assert.match(core, /className="max-w-full shrink-0 truncate rounded-lg/)
   assert.match(core, /\{showRetrievalPanel && \(/)
+  assert.match(globalCss, /\[data-ai-result-body="true"\]/)
+  assert.match(globalCss, /\[data-ai-retrieval-peek="true"\]/)
+  assert.match(globalCss, /\[data-ai-retrieval-body="true"\]\s*\{\s*user-select:\s*text;/)
   assert.match(composer, /const promptRows = showResultPanel \? 3 : 4/)
   assert.match(composer, /const promptMinHeight = showResultPanel \? '96px' : '124px'/)
   assert.match(composer, /const resultPanelMinHeight = hasWorkspaceExecutionTasks \? '260px' : '220px'/)

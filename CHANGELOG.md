@@ -16,6 +16,8 @@ This changelog focuses on user-visible changes in `No.1 Markdown Editor`.
 
 <!-- User-visible fix affecting Markdown fidelity, files, preview, export, performance, or stability. -->
 
+- AI Composer answers can now be selected directly in the result panel, so partial text can be copied with the system clipboard shortcuts in addition to the full-result Copy button.
+
 ### Internal
 
 <!-- Maintainer-facing refactor, tooling, test, or release-process change worth keeping for project history. -->
